@@ -1,4 +1,4 @@
-# Actual support status and limitations (v0.1.0)
+# Actual support status and limitations (v0.2.x)
 
 ## GRAFIS reading — native, no GRAFIS installation or licence needed
 
@@ -55,6 +55,11 @@ GRAFIS options: "Right-Left" spreading = LEVEL7 open lay with mirrored copies; "
 * ISO other machines: diagnostic preview only (marked NOT FOR PRODUCTION).
 
 ## Windows
+* Online update: every successful build of the default branch publishes GitHub Release `v0.2.<build>`
+  (installer + SHA256SUMS.txt). The app checks `releases/latest` at start-up and every 6 h (can be switched off),
+  notifies, downloads from github.com over HTTPS, verifies SHA-256, asks to save, runs the installer
+  (`/SILENT /CLOSEAPPLICATIONS /LAUNCH=1`) and restarts. Installer is not code-signed (SmartScreen/UAC prompt).
+  Installs of 0.1.0 have no updater: install 0.2.x once by hand.
 The CI workflow builds and tests on `windows-2022` (PyInstaller + Inno Setup Setup.exe, silent install,
 desktop shortcut check). Results are only claimed for runs that actually passed on GitHub Actions.
 

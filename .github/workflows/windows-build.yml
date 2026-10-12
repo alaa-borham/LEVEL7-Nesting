@@ -6,6 +6,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write          # publish the GitHub Release used by the in-app online update
+
 jobs:
   build:
     runs-on: windows-2022
@@ -17,6 +20,10 @@ jobs:
         with:
           python-version: "3.12"
           architecture: x64
+
+      - name: Build number (version 0.2.<run number>)
+        shell: pwsh
+        run: '"BUILD = ${{ github.run_number }}" | Out-File -Encoding ascii level7/_build.py'
 
       - name: Install dependencies
         run: |
@@ -49,6 +56,7 @@ jobs:
           & $exe export frozen.l7n --format plt -o frozen.plt
           if (!(Test-Path frozen.dxf) -or !(Test-Path frozen.plt)) { throw "export failed" }
           $env:QT_QPA_PLATFORM = "offscreen"
+          $env:LEVEL7_NO_UPDATE_CHECK = "1"
           $p = Start-Process "dist\LEVEL7Nesting\LEVEL7Nesting.exe" -ArgumentList '"samples\Neay blue pants-44.scb"' -PassThru
           Start-Sleep -Seconds 15
           if ($p.HasExited) { throw "GUI exited early with code $($p.ExitCode)" }
@@ -92,3 +100,18 @@ jobs:
             frozen.dxf
             frozen.plt
             install.log
+
+      - name: Publish release (in-app online update)
+        if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ver = python -c "import level7; print(level7.__version__)"
+          $setup = Get-ChildItem dist\installer\*-Setup.exe | Select-Object -First 1
+          $hash = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash.ToLower()
+          "$hash  $($setup.Name)" | Out-File -Encoding ascii SHA256SUMS.txt
+          git log -1 --pretty=%B | Where-Object { $_ -notmatch '^(Co-Authored-By|Claude-Session):' } | Out-File -Encoding utf8 notes.txt
+          gh release create "v$ver" $setup.FullName SHA256SUMS.txt --repo $env:GITHUB_REPOSITORY `
+            --title "LEVEL7 Nesting $ver" --notes-file notes.txt --target $env:GITHUB_SHA --latest
+          if ($LASTEXITCODE -ne 0) { throw "release failed" }

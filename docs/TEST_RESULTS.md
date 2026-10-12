@@ -1,11 +1,12 @@
 # Test results
 
-## Automated tests (`python -m pytest -q`) — 49 passed
+## Automated tests (`python -m pytest -q`) — 57 passed
 Linux (Python 3.13, dev container) and Windows (GitHub Actions `windows-2022`, Python 3.12;
 see the `windows-build` workflow runs for the current status).
 
 | Area | Test | Checks |
 |---|---|---|
+| Update | online updater (offline mocks) | version compare, latest release, prerelease/draft ignored, offline → silent error, SHA-256 verified, tampered/foreign-host/http rejected, cancel |
 | Import | container chain, SHA-256, sizes | exact chain, header length, both files |
 | Import | damaged files | non-GRAFIS, truncated, broken marker, bad length, bad record count → diagnosed, no crash |
 | Import | SCB text | WIDTH/LENGTH/EFFCNCY/USDAREA/PIECES/BUNDLES/PCSTOTAL/PCSUNPLC/MODEL/MATERIALO, Arabic names |

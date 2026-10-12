@@ -125,6 +125,27 @@ T = {
     "compare": ("Original vs. selected", "مقارنة الأصلي بالمحدد"),
     "measure_hint": ("Measure: click two points", "القياس: انقر نقطتين"),
     "distance": ("Distance {d:.2f} mm", "المسافة {d:.2f} مم"),
+    "updates": ("Updates", "التحديثات"),
+    "check_updates": ("Check for updates…", "البحث عن تحديثات…"),
+    "auto_updates": ("Check for updates automatically", "البحث عن التحديثات تلقائيًا"),
+    "upd_checking": ("Checking for updates…", "جارٍ البحث عن تحديثات…"),
+    "upd_none": ("You have the latest version ({v}).", "لديك أحدث إصدار ({v})."),
+    "upd_failed": ("Update failed / not reachable:\n{e}", "تعذّر التحديث أو الاتصال بالخادم:\n{e}"),
+    "upd_available": ("Update {v} available", "يوجد تحديث جديد {v}"),
+    "upd_text": ("A new version of LEVEL7 Nesting is available: {v}\n(installed: {cur})",
+                 "يوجد إصدار جديد من LEVEL7 Nesting: {v}\n(الإصدار المثبّت: {cur})"),
+    "upd_info": ("The installer is downloaded from GitHub, its SHA-256 is verified, then LEVEL7 closes, "
+                 "updates and starts again. Your settings are kept.",
+                 "سيتم تحميل ملف التثبيت من GitHub والتحقق من بصمته (SHA-256)، ثم يُغلق البرنامج ويُحدَّث "
+                 "ويعود للعمل تلقائيًا. إعداداتك محفوظة."),
+    "upd_install": ("Download && install", "تحميل وتثبيت"),
+    "upd_later": ("Later", "لاحقًا"),
+    "upd_skip": ("Skip this version", "تخطّي هذا الإصدار"),
+    "upd_auto": ("Check automatically", "البحث تلقائيًا عن التحديثات"),
+    "upd_downloading": ("Downloading update {v}…", "جارٍ تحميل التحديث {v}…"),
+    "upd_save_first": ("The program will close to install the update.\nSave the current project first?",
+                       "سيُغلق البرنامج لتثبيت التحديث.\nهل تريد حفظ المشروع الحالي أولًا؟"),
+    "cancel": ("Cancel", "إلغاء"),
 }
 
 

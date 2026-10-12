@@ -21,6 +21,7 @@ from ..model import FabricSettings, LayType, Marker, NestSettings, Placement, Pr
 from ..validation.checker import marker_stats, validate_marker
 from .i18n import LANG, tr
 from .marker_view import MarkerView
+from .updates import UpdateManager
 
 
 # ---------------------------------------------------------------------------------- undo
@@ -101,7 +102,40 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self.progress_bar)
         self.statusBar().addPermanentWidget(self.grafis_status)
         self.statusBar().addPermanentWidget(self.coord_label)
+        self.updates = None
+        if not os.environ.get("LEVEL7_NO_UPDATE_CHECK"):
+            self.updates = UpdateManager(self, self.settings_store, self._before_update)
+            self.act_auto_upd.setChecked(self.updates.auto_enabled())
+        else:
+            self.act_auto_upd.setEnabled(False)
         self.retranslate()
+
+    def check_updates(self):
+        if self.updates:
+            self.updates.check(True)
+
+    def _set_auto_updates(self, on):
+        if self.updates:
+            self.updates.set_auto(on)
+
+    def _before_update(self) -> bool:
+        if self.worker and self.worker.isRunning():
+            self.stop_nesting()
+            self.worker.wait(15000)
+        if self.project is None:
+            return True
+        r = QMessageBox.question(self, tr("updates"), tr("upd_save_first"),
+                                 QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel)
+        if r == QMessageBox.Cancel:
+            return False
+        if r == QMessageBox.Yes:
+            if self.project_path:
+                self.save()
+            else:
+                self.save_as()
+                if not self.project_path:
+                    return False
+        return True
 
     # -- construction --------------------------------------------------------------------
     def _build_docks(self):
@@ -236,6 +270,10 @@ class MainWindow(QMainWindow):
         self.m_export.addAction(self._act("export_iso", lambda: self.export("iso")))
         self.m_export.addSeparator()
         self.m_export.addAction(self._act("plotter_settings", self.plotter_settings))
+        self.m_help.addAction(self._act("check_updates", self.check_updates))
+        self.act_auto_upd = self._act("auto_updates", self._set_auto_updates, checkable=True, checked=True)
+        self.m_help.addAction(self.act_auto_upd)
+        self.m_help.addSeparator()
         self.m_help.addAction(self._act("about", self.about))
         tb = self.addToolBar("main")
         tb.setObjectName("main")
@@ -785,8 +823,9 @@ class MainWindow(QMainWindow):
             f"LEVEL7 Nesting {__version__}\n\n"
             "GRAFIS MDL/SCB: native reading of block structure, part list, sizes, evaluated geometry per size "
             "and SCB placements (no GRAFIS installation required). See docs/SUPPORT_STATUS.md.\n"
-            "Not supported: writing MDL/SCB; spline definitions; symbol meanings.\n"
-            "ISO: not configured for a specific machine (diagnostic preview only).\n"
+            "Not supported: writing MDL/SCB; spline definitions.\n"
+            "ISO: Bullmer / IECHO profile matched to GRAFIS' Bullmer output; test-cut before production.\n"
+            "Updates: GitHub Releases (alaa-borham/LEVEL7-Nesting), SHA-256 verified.\n"
             "Nesting results are heuristic; no global optimum is claimed."))
 
     def closeEvent(self, ev):

@@ -23,6 +23,7 @@ SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequiredOverridesAllowed=dialog
 ChangesAssociations=yes
+CloseApplications=yes
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -48,3 +49,11 @@ Root: HKA; Subkey: "Software\Classes\LEVEL7.Project\shell\open\command"; ValueTy
 
 [Run]
 Filename: "{app}\LEVEL7Nesting.exe"; Description: "{cm:LaunchProgram,LEVEL7 Nesting}"; Flags: nowait postinstall skipifsilent
+; online update (started by the app with /SILENT /LAUNCH=1): start LEVEL7 again as the normal user
+Filename: "{app}\LEVEL7Nesting.exe"; Flags: nowait runasoriginaluser; Check: LaunchAfterUpdate
+
+[Code]
+function LaunchAfterUpdate: Boolean;
+begin
+  Result := ExpandConstant('{param:LAUNCH|0}') = '1';
+end;
