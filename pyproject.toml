@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "level7-nesting"
+version = "0.1.0"
+description = "LEVEL7 Nesting - GRAFIS MDL/SCB reader, irregular-piece nesting and PLT/DXF export"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+dependencies = [
+    "shapely>=2.0,<3",
+    "pyclipper>=1.3,<2",
+    "ezdxf>=1.1,<2",
+    "PySide6-Essentials>=6.6,<7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pyinstaller>=6.3"]
+
+[project.scripts]
+level7 = "level7.cli:main"
+level7-inspect = "level7.diagnostics.inspector:main"
+
+[project.gui-scripts]
+level7-gui = "level7.ui.app:main"
+
+[tool.setuptools.packages.find]
+include = ["level7*"]
+
+[tool.setuptools.package-data]
+level7 = ["resources/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
