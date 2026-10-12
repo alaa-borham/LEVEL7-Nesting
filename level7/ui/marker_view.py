@@ -225,7 +225,9 @@ class MarkerView(QGraphicsView):
         self.project = None
         self.marker = None
         self.measure_mode = False
-        self._measure_pts: list[QPointF] = []
+        self._m_start = self._m_end = self._m_hover = None   # scene points (mm)
+        self._m_fixed = False
+        self._snap_pts: list[tuple[float, float]] = []
         self._measure_item = None
         self._pan = None
 
@@ -243,6 +245,8 @@ class MarkerView(QGraphicsView):
         sc = self.scene()
         sc.clear()
         self._measure_item = None
+        self._m_start = self._m_end = None
+        self._m_fixed = False
         self.items_by_uid = {}
         if marker is None:
             return
@@ -264,6 +268,12 @@ class MarkerView(QGraphicsView):
             self.items_by_uid[pl.uid] = it
         self._aux_items = []
         self._draw_aux()
+        # snap targets for the measure tool: piece contour vertices and fabric corners
+        snaps = [(0.0, 0.0), (L, 0.0), (0.0, W), (L, W)]
+        for it in self.items_by_uid.values():
+            g = it.piece.sizes[it.placement.size]
+            snaps.extend(placement_points(g.cut, it.placement))
+        self._snap_pts = snaps
         sc.setSceneRect(QRectF(-200, -200, max(L, (self.last_result or (0,))[0]) + 400, W + 400))
 
     def _draw_aux(self):
@@ -329,17 +339,17 @@ class MarkerView(QGraphicsView):
             self._pan = ev.position()
             self.setCursor(Qt.ClosedHandCursor)
             return
+        if self.measure_mode and ev.button() == Qt.RightButton:
+            self.clear_measure()
+            return
         if self.measure_mode and ev.button() == Qt.LeftButton:
-            p = self.mapToScene(ev.position().toPoint())
-            self._measure_pts.append(p)
-            if len(self._measure_pts) == 2:
-                a, b = self._measure_pts
-                d = math.hypot(b.x() - a.x(), b.y() - a.y())
-                if self._measure_item:
-                    self.scene().removeItem(self._measure_item)
-                self._measure_item = self.scene().addLine(a.x(), a.y(), b.x(), b.y(), QPen(QColor(255, 0, 255), 0))
-                self._measure_pts = []
-                self.measured.emit(d)
+            p = self._snap(self.mapToScene(ev.position().toPoint()))
+            if self._m_start is None or self._m_fixed:
+                self._m_start, self._m_end, self._m_fixed = p, p, False
+            else:
+                self._m_end, self._m_fixed = p, True
+                self.measured.emit(math.hypot(p.x() - self._m_start.x(), p.y() - self._m_start.y()))
+            self.viewport().update()
             return
         super().mousePressEvent(ev)
 
@@ -352,7 +362,80 @@ class MarkerView(QGraphicsView):
             return
         p = self.mapToScene(ev.position().toPoint())
         self.cursor_mm.emit(p.x(), p.y())
+        if self.measure_mode:
+            q = self._snap(p)
+            self._m_hover = q
+            if self._m_start is not None and not self._m_fixed:
+                self._m_end = q
+            self.viewport().update()
+            return
         super().mouseMoveEvent(ev)
+
+    # -- measure tool ------------------------------------------------------------------------
+    SNAP_PX = 10
+
+    def set_measure_mode(self, on: bool):
+        self.measure_mode = on
+        self.setDragMode(QGraphicsView.NoDrag if on else QGraphicsView.RubberBandDrag)
+        self.viewport().setCursor(Qt.CrossCursor if on else Qt.ArrowCursor)
+        if not on:
+            self.clear_measure()
+
+    def clear_measure(self):
+        self._m_start = self._m_end = None
+        self._m_fixed = False
+        self.viewport().update()
+
+    def _snap(self, p: QPointF):
+        """Nearest piece vertex / fabric corner within SNAP_PX pixels, else the point itself."""
+        scale = abs(self.transform().m11()) or 1.0
+        r = self.SNAP_PX / scale
+        best, bd = None, r
+        for x, y in self._snap_pts:
+            d = abs(x - p.x()) + abs(y - p.y())
+            if d < bd * 1.5 and math.hypot(x - p.x(), y - p.y()) < bd:
+                best, bd = (x, y), math.hypot(x - p.x(), y - p.y())
+        q = QPointF(*best) if best else p
+        q.snapped = best is not None        # type: ignore[attr-defined]
+        return q
+
+    def keyPressEvent(self, ev):
+        if self.measure_mode and ev.key() == Qt.Key_Escape:
+            self.clear_measure()
+            return
+        super().keyPressEvent(ev)
+
+    def _draw_measure(self, painter: QPainter):
+        accent = QColor(255, 0, 200)
+        if self._m_hover is not None and getattr(self._m_hover, "snapped", False):
+            h = self.mapFromScene(self._m_hover)
+            painter.setPen(QPen(accent, 1.5))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawRect(QRectF(h.x() - 5, h.y() - 5, 10, 10))
+        if self._m_start is None or self._m_end is None:
+            return
+        a, b = self.mapFromScene(self._m_start), self.mapFromScene(self._m_end)
+        dx, dy = self._m_end.x() - self._m_start.x(), self._m_end.y() - self._m_start.y()
+        d = math.hypot(dx, dy)
+        painter.setPen(QPen(accent, 2, Qt.SolidLine if self._m_fixed else Qt.DashLine))
+        painter.drawLine(a, b)
+        painter.setBrush(accent)
+        for pt in (a, b):
+            painter.drawEllipse(QPointF(pt), 3.5, 3.5)
+        txt = f"D = {d:.1f} mm    ΔX = {abs(dx):.1f}    ΔY = {abs(dy):.1f}"
+        f = QFont("Segoe UI", 10)
+        f.setBold(True)
+        painter.setFont(f)
+        fm = painter.fontMetrics()
+        w, h = fm.horizontalAdvance(txt) + 16, fm.height() + 8
+        mx, my = (a.x() + b.x()) / 2 + 12, (a.y() + b.y()) / 2 - h - 6
+        mx = max(44, min(mx, self.viewport().width() - w - 4))
+        my = max(22, min(my, self.viewport().height() - h - 4))
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(30, 30, 30, 225))
+        painter.drawRoundedRect(QRectF(mx, my, w, h), 5, 5)
+        painter.setPen(QColor(255, 255, 255))
+        painter.drawText(QRectF(mx, my, w, h), Qt.AlignCenter, txt)
 
     def mouseReleaseEvent(self, ev):
         if ev.button() == Qt.MiddleButton:
@@ -395,6 +478,9 @@ class MarkerView(QGraphicsView):
             painter.drawText(2, py - 2, f"{v:g}")
             v += step
         painter.drawText(44, 11, "mm")
+        if self.measure_mode:
+            painter.setRenderHint(QPainter.Antialiasing)
+            self._draw_measure(painter)
         painter.restore()
 
 

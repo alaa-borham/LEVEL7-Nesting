@@ -96,3 +96,25 @@ def test_project_roundtrip_without_sources(scb, tmp_path):
     assert [(pl.x, pl.y, pl.rotation, pl.mirrored) for pl in scb.project.markers[0].placements] == \
            [(pl.x, pl.y, pl.rotation, pl.mirrored) for pl in q.markers[0].placements]
     assert os.path.getsize(f) > 0
+
+
+def test_plt_print_items_switch_layers_without_changing_format(scb, tmp_path):
+    from level7.exporters.plt import PRESETS
+    from level7.ui.plot_settings import apply_items, enabled_items
+    sc = marker_scene(scb.project, scb.project.markers[0])
+    base = PRESETS["algotex_grafis"]()
+    full = tmp_path / "full.plt"
+    st_full = write_plt(sc, str(full), base)
+    cut_only = apply_items(PRESETS["algotex_grafis"](), {"CUT": True})
+    assert enabled_items(cut_only) == {k: k == "CUT" for k in enabled_items(cut_only)}
+    f = tmp_path / "cut.plt"
+    st = write_plt(sc, str(f), cut_only)
+    n_cut = sum(1 for p in sc.paths if p.layer == "CUT")
+    assert st["paths"] == n_cut and st["notches_merged"] == 0 and st["text_strokes"] == 0
+    txt = f.read_bytes().decode("ascii")
+    assert txt.startswith("IN\r\nLT1\r\n") and txt.rstrip().endswith("PG") and "SP" not in txt   # same dialect
+    assert st_full["paths"] > st["paths"]
+    # grain + piece names on, seam off: still the GRAFIS dialect, more paths than cut only
+    some = apply_items(PRESETS["algotex_grafis"](), {"CUT": True, "GRAIN": True, "PIECE_NAME": True})
+    st2 = write_plt(sc, str(tmp_path / "some.plt"), some)
+    assert st2["paths"] > n_cut and some.dialect == "grafis" and some.text_layers == ["PIECE_NAME"]

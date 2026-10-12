@@ -120,13 +120,13 @@ def write_plt(scene: Scene, path: str, cfg: PlotterConfig | None = None) -> dict
     if cfg.merge_notches:
         notches: dict = {}
         for p in paths:
-            if p.layer == "NOTCH" and len(p.points) == 2:
+            if p.layer == "NOTCH" and len(p.points) == 2 and cfg.pens.get("NOTCH", 0) > 0:
                 notches.setdefault(p.owner, []).append((p.points[0], p.points[1]))
         # seam notch marks (2-point seam paths touching another seam path of the same piece) -> spikes
         import math as _m
         seam_by_owner: dict = {}
         for p in paths:
-            if p.layer == "SEAM":
+            if p.layer == "SEAM" and cfg.pens.get("SEAM", 0) > 0:
                 seam_by_owner.setdefault(p.owner, []).append(p)
         seam_marks: dict = {}
         mark_ids = set()

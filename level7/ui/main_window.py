@@ -88,7 +88,14 @@ class MainWindow(QMainWindow):
         self.setAcceptDrops(True)
         self.resize(1400, 860)
         self.view = MarkerView(self)
-        self.setCentralWidget(self.view)
+        central = QWidget()
+        cl = QVBoxLayout(central)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.setSpacing(0)
+        cl.addWidget(self.view, 1)
+        self.info_bar = self._make_info_bar()
+        cl.addWidget(self.info_bar)
+        self.setCentralWidget(central)
         self.view.moved.connect(self.on_moved)
         self.view.cursor_mm.connect(lambda x, y: self.coord_label.setText(f"x {x:.1f}  y {y:.1f} mm"))
         self.view.measured.connect(lambda d: self.statusBar().showMessage(tr("distance", d=d)))
@@ -465,6 +472,7 @@ class MainWindow(QMainWindow):
         t = self.pieces_table
         t.setRowCount(0)
         co = p.cut_order
+        all_mats = sorted({pc.material for pc in p.pieces if pc.material} | {"O", "F"})
         for pc in sorted(p.pieces, key=lambda q: (not q.production, q.number or 0)):
             r = t.rowCount()
             t.insertRow(r)
@@ -474,7 +482,14 @@ class MainWindow(QMainWindow):
             use.setData(Qt.UserRole, pc.uid)
             t.setItem(r, 0, use)
             t.setItem(r, 1, QTableWidgetItem(f"{pc.number or ''} {pc.name}"))
-            t.setItem(r, 2, QTableWidgetItem(pc.material or ""))
+            t.setItem(r, 2, QTableWidgetItem(""))
+            mat = QComboBox()                       # material of the part: choose or type a new code
+            mat.setEditable(True)
+            mat.addItems(all_mats)
+            mat.setCurrentText(pc.material or "")
+            mat.setToolTip(tr("material_tip"))
+            mat.currentTextChanged.connect(lambda _t: self._refresh_material_groups())
+            t.setCellWidget(r, 2, mat)
             t.setItem(r, 3, QTableWidgetItem(str(len(pc.sizes))))
             for col, val in ((4, n or pc.default_count), (5, m if (n or m) else pc.default_mirrored)):
                 s = QSpinBox()
@@ -500,12 +515,23 @@ class MainWindow(QMainWindow):
             sp.setRange(0, 999)
             sp.setValue(co.size_quantities.get(s, 0))
             st.setCellWidget(r, 1, sp)
-        mats = sorted({pc.material for pc in p.pieces if pc.material})
+        self._refresh_material_groups(co.material)
+
+    def _refresh_material_groups(self, select=None):
+        """Material-group choice for nesting = the materials currently assigned in the pieces table."""
+        mats = set()
+        for r in range(self.pieces_table.rowCount()):
+            w = self.pieces_table.cellWidget(r, 2)
+            if w is not None and w.currentText().strip():
+                mats.add(w.currentText().strip())
+        cur = select if select is not None else self.f_material.currentText()
+        self.f_material.blockSignals(True)
         self.f_material.clear()
         self.f_material.addItem("*")
-        self.f_material.addItems(mats)
-        if co.material in mats:
-            self.f_material.setCurrentText(co.material)
+        self.f_material.addItems(sorted(mats))
+        if cur in mats:
+            self.f_material.setCurrentText(cur)
+        self.f_material.blockSignals(False)
 
     def read_tables(self):
         p = self.project
@@ -514,6 +540,9 @@ class MainWindow(QMainWindow):
             uid = self.pieces_table.item(r, 0).data(Qt.UserRole)
             pc = p.piece(uid)
             use = self.pieces_table.item(r, 0).checkState() == Qt.Checked
+            mat_w = self.pieces_table.cellWidget(r, 2)
+            if mat_w is not None:
+                pc.material = mat_w.currentText().strip() or None
             n = self.pieces_table.cellWidget(r, 4).value()
             m = self.pieces_table.cellWidget(r, 5).value()
             co.piece_counts[uid] = (n, m) if use else (0, 0)
@@ -715,8 +744,7 @@ class MainWindow(QMainWindow):
             self.undo.push(PlacementStateCommand(self, changes, "pin"))
 
     def toggle_measure(self, on):
-        self.view.measure_mode = on
-        self.view.setDragMode(self.view.NoDrag if on else self.view.RubberBandDrag)
+        self.view.set_measure_mode(on)
         if on:
             self.statusBar().showMessage(tr("measure_hint"))
 
@@ -731,16 +759,48 @@ class MainWindow(QMainWindow):
             self.view.set_options(**opts)
             self.update_status_line()
 
+    INFO_FIELDS = ("L", "E", "U/B", "Wi", "Pc", "Mat")
+
+    def _make_info_bar(self):
+        """GRAFIS-like marker information directly under the marker."""
+        bar = QWidget()
+        bar.setObjectName("infobar")
+        hl = QHBoxLayout(bar)
+        hl.setContentsMargins(8, 4, 8, 4)
+        hl.setSpacing(18)
+        self.info_labels = {}
+        for key in self.INFO_FIELDS:
+            lab = QLabel()
+            lab.setTextFormat(Qt.RichText)
+            f = lab.font()
+            f.setPointSizeF(f.pointSizeF() + 1.5)
+            lab.setFont(f)
+            hl.addWidget(lab)
+            self.info_labels[key] = lab
+        hl.addStretch(1)
+        return bar
+
+    def _set_info(self, values: dict):
+        for key, lab in self.info_labels.items():
+            v = values.get(key)
+            lab.setText(f"{key} = <b>{v}</b>" if v not in (None, "") else "")
+
     def update_status_line(self):
         """GRAFIS-style status: L, E, U/B, Wi (metres, or millimetres if chosen)."""
         if not self.marker or "length_mm" not in (self.marker.stats or {}):
             self.grafis_status.setText("")
+            self._set_info({})
             return
         s = self.marker.stats
         mm = self.view.options.get("status_mm")
         f = (lambda v: f"{v:.1f} mm") if mm else (lambda v: f"{v / 1000:.2f} m")
         self.grafis_status.setText(f"L = {f(s['length_mm'])}   E = {s['efficiency_total_width_pct']:.1f} %   "
                                    f"U/B = {f(s.get('length_per_garment_m', 0) * 1000)}   Wi = {f(s['width_mm'])}")
+        mats = sorted({(self.project.piece(pl.piece_uid).material or "?") for pl in self.marker.placements
+                       if pl.placed and self.project.piece(pl.piece_uid)})
+        self._set_info({"L": f(s["length_mm"]), "E": f"{s['efficiency_total_width_pct']:.1f} %",
+                        "U/B": f(s.get("length_per_garment_m", 0) * 1000), "Wi": f(s["width_mm"]),
+                        "Pc": f"{s['placed']} / {s['placed'] + s['unplaced']}", "Mat": ", ".join(mats)})
 
     # -- nesting ---------------------------------------------------------------------------
     def run_nesting(self):
@@ -864,8 +924,7 @@ class MainWindow(QMainWindow):
                 diagnostic = True
             cfg = prof
         elif fmt == "plt":
-            cfg = PlotterConfig(**self.project.export_configs.get("plt", {})) if self.project.export_configs.get(
-                "plt") else PlotterConfig()
+            cfg = self.plt_config()
         ext = {"plt": "PLT (*.plt)", "dxf": "DXF (*.dxf)", "iso": "ISO (*.iso)"}[fmt]
         name = f"{self.project.name}_{self.marker.fabric.width:g}{'_DIAGNOSTIC' if diagnostic else ''}.{fmt}"
         p, _ = QFileDialog.getSaveFileName(self, tr("export"),
@@ -880,82 +939,22 @@ class MainWindow(QMainWindow):
         self.settings_store.setValue("export_dir", os.path.dirname(p))
         self.statusBar().showMessage(tr("exported", p=p))
 
-    def plotter_settings(self):
-        from dataclasses import asdict
-
+    def plt_config(self):
         from ..exporters.plt import PlotterConfig
-        if not self.project:
-            return
-        cfg = PlotterConfig(**self.project.export_configs.get("plt", {})) if self.project.export_configs.get(
-            "plt") else PlotterConfig()
-        dlg = QDialog(self)
-        dlg.setWindowTitle(tr("plotter_settings"))
-        f = QFormLayout(dlg)
-        from ..exporters.plt import PRESETS
-        preset = QComboBox()
-        preset.addItems(["(current)", "Generic HP-GL", "Algotex (GRAFIS-compatible PLT)"])
-        f.addRow(tr("plt_preset"), preset)
-        dialect = QComboBox()
-        dialect.addItems(["hpgl", "grafis"])
-        dialect.setCurrentText(cfg.dialect)
-        f.addRow(tr("plt_dialect"), dialect)
-        tmode = QComboBox()
-        tmode.addItems(["label", "strokes", "none"])
-        tmode.setCurrentText(cfg.text_mode)
-        f.addRow(tr("plt_text_mode"), tmode)
-        merge = QCheckBox()
-        merge.setChecked(cfg.merge_notches)
-        f.addRow(tr("plt_merge_notches"), merge)
-        upm = self._dspin(1, 1000, cfg.units_per_mm, 3)
-        swap = QCheckBox()
-        swap.setChecked(cfg.swap_xy)
-        fx = QCheckBox()
-        fx.setChecked(cfg.flip_x)
-        fy = QCheckBox()
-        fy.setChecked(cfg.flip_y)
-        txt = QCheckBox()
-        txt.setChecked(cfg.include_text)
-        pens = {}
-        f.addRow("units per mm", upm)
-        f.addRow("swap X/Y", swap)
-        f.addRow("flip X", fx)
-        f.addRow("flip Y", fy)
-        f.addRow("labels (LB)", txt)
-        for layer in ("CUT", "NOTCH", "SEAM", "INTERNAL", "GRAIN", "TEXT", "PIECE_NAME", "MARK", "BORDER"):
-            s = QSpinBox()
-            s.setRange(0, 8)
-            s.setValue(cfg.pens.get(layer, 0))
-            pens[layer] = s
-            f.addRow(f"pen {layer} (0 = off)", s)
-        def apply_preset(i):
-            if i <= 0:
-                return
-            c = PRESETS["generic" if i == 1 else "algotex_grafis"]()
-            dialect.setCurrentText(c.dialect)
-            tmode.setCurrentText(c.text_mode)
-            merge.setChecked(c.merge_notches)
-            upm.setValue(c.units_per_mm)
-            swap.setChecked(c.swap_xy)
-            fx.setChecked(c.flip_x)
-            fy.setChecked(c.flip_y)
-            txt.setChecked(c.include_text)
-            for k, sp in pens.items():
-                sp.setValue(c.pens.get(k, 0))
-            dlg._preset = c
-        dlg._preset = None
-        preset.currentIndexChanged.connect(apply_preset)
-        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        bb.accepted.connect(dlg.accept)
-        bb.rejected.connect(dlg.reject)
-        f.addRow(bb)
+        from .plot_settings import default_config
+        raw = self.project.export_configs.get("plt") if self.project else None
+        return PlotterConfig(**raw) if raw else default_config(self.settings_store)
+
+    def plotter_settings(self):
+        import json
+        from dataclasses import asdict
+        from .plot_settings import SETTINGS_KEY, PlotSettingsDialog
+        dlg = PlotSettingsDialog(self, self.plt_config())
         if dlg.exec() == QDialog.Accepted:
-            if dlg._preset is not None:
-                cfg = dlg._preset
-            cfg.units_per_mm, cfg.swap_xy, cfg.flip_x, cfg.flip_y = upm.value(), swap.isChecked(), fx.isChecked(), fy.isChecked()
-            cfg.include_text = txt.isChecked()
-            cfg.dialect, cfg.text_mode, cfg.merge_notches = dialect.currentText(), tmode.currentText(), merge.isChecked()
-            cfg.pens = {k: s.value() for k, s in pens.items()}
-            self.project.export_configs["plt"] = asdict(cfg)
+            cfg = asdict(dlg.result_config())
+            self.settings_store.setValue(SETTINGS_KEY, json.dumps(cfg))     # default for every project
+            if self.project:
+                self.project.export_configs["plt"] = cfg
 
     def open_logs(self):
         from PySide6.QtCore import QUrl
