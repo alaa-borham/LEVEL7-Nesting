@@ -277,6 +277,17 @@ class MainWindow(QMainWindow):
         self.m_edit.addAction(self.act_measure)
         self.m_view.addAction(self._act("zoom_fit", self.view.zoom_fit, "F"))
         self.m_view.addAction(self._act("display_options", self.display_options, "Ctrl+D"))
+        self.m_theme = self.m_view.addMenu("")
+        from PySide6.QtGui import QActionGroup
+        grp = QActionGroup(self)
+        self.theme_actions = {}
+        cur = str(self.settings_store.value("theme", "dark"))
+        for key in ("light", "dark", "gray"):
+            a = self._act("theme_" + key, lambda checked=False, k=key: self.set_theme(k), checkable=True,
+                          checked=(key == cur))
+            grp.addAction(a)
+            self.m_theme.addAction(a)
+            self.theme_actions[key] = a
         self.m_view.addSeparator()
         self.act_table = self.dock_left.toggleViewAction()
         self.m_view.addAction(self.act_table)
@@ -327,6 +338,19 @@ class MainWindow(QMainWindow):
             self.toolbar_items.append((a, key))
         self.toolbar = tb
 
+    def set_theme(self, name):
+        from .icons import icon
+        from .themes import apply_theme
+        apply_theme(name)
+        self.settings_store.setValue("theme", name)
+        for a, key in self.toolbar_items:
+            a.setIcon(icon(dict((k, i) for k, i in (x for x in self.TOOLBAR if x)).get(key) or key))
+        self.toolbar.setStyleSheet(self.toolbar.styleSheet())   # re-polish with the new palette
+        for w in QApplication.instance().allWidgets():
+            w.update()
+        self.view.apply_theme()
+        self.strip.update()
+
     def _retranslate_toolbar(self):
         for a, key in self.toolbar_items:
             a.setIconText(tr("tb_" + key))
@@ -343,6 +367,7 @@ class MainWindow(QMainWindow):
         self.undo_actions[1].setText(tr("redo"))
         self.act_table.setText(tr("pieces_table"))
         self._retranslate_toolbar()
+        self.m_theme.setTitle(tr("theme"))
         for m, k in self.menus_tr:
             m.setTitle(tr(k))
         for lab, k in self.form_rows:

@@ -25,8 +25,9 @@ def _path(points, closed=True) -> QPainterPath:
 
 
 def color_for(key: str) -> QColor:
-    h = (abs(hash(key)) % 997) / 997.0
-    r, g, b = colorsys.hsv_to_rgb(h, 0.35, 0.95)
+    import zlib
+    h = (zlib.crc32(key.encode("utf-8")) % 997) / 997.0      # stable between runs (hash() is salted)
+    r, g, b = colorsys.hsv_to_rgb(h, 0.55, 0.95)
     return QColor(int(r * 255), int(g * 255), int(b * 255), 210)
 
 
@@ -148,7 +149,9 @@ class PieceItem(QGraphicsPathItem):
             t = QGraphicsSimpleTextItem("\n".join(lines), self)
             t.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
             t.setFont(QFont("Segoe UI", 8))
-            t.setBrush(QBrush(QColor(255, 255, 255) if o["white_marking"] else QColor(0, 0, 0)))
+            from .themes import CURRENT
+            white = o["white_marking"] and CURRENT["name"] != "light"     # dark text on the light theme
+            t.setBrush(QBrush(QColor(255, 255, 255) if white else QColor(20, 20, 20)))
             br = t.boundingRect()
             t.setPos(c.x, c.y)
             t.setTransform(QTransform.fromTranslate(-br.width() / 2, -br.height() / 2))
@@ -170,15 +173,25 @@ class PieceItem(QGraphicsPathItem):
             col = color_for(self.placement.size if o["color_by"] == "size" else self.piece.uid)
         if self.placement.uid in self.view.bad:
             col = QColor(255, 60, 60)
-        col.setAlpha(int(255 * (1 - 0.6 * o["piece_transparency"] / 100.0)))
-        self.setBrush(QBrush(col) if o["fill"] in ("solid", "solid_outline") else QBrush(Qt.NoBrush))
+        # pieces are always clearly coloured against the fabric: transparency never goes below 60 % opacity,
+        # and "outline only" draws the outline in the piece colour over a light tint of it
+        base = QColor(col)
+        col.setAlpha(int(255 * (1 - 0.4 * o["piece_transparency"] / 100.0)))
+        if o["fill"] == "outline":
+            tint = QColor(base)
+            tint.setAlpha(60)
+            self.setBrush(QBrush(tint))
+        else:
+            self.setBrush(QBrush(col))
         if self.placement.pinned:
             pen = QPen(QColor(30, 30, 160), 0, Qt.DashDotLine)
         elif o["fill"] == "solid":
             pen = QPen(Qt.NoPen)
+        elif o["fill"] == "outline":
+            pen = QPen(base, 2)
+            pen.setCosmetic(True)
         else:
-            pen = QPen(QColor(255, 255, 255) if o["white_marking"] and o["fill"] == "solid_outline"
-                       else QColor(0, 0, 0), 0)
+            pen = QPen(QColor(255, 255, 255) if o["white_marking"] else QColor(0, 0, 0), 0)
         self.setPen(pen)
 
     def mouseReleaseEvent(self, ev):
@@ -203,7 +216,7 @@ class MarkerView(QGraphicsView):
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
         self.setMouseTracking(True)
         self.setTransform(QTransform.fromScale(0.3, -0.3))
-        self.setBackgroundBrush(QBrush(QColor(45, 45, 45)))
+        self.apply_theme()
         self.options = dict(DEFAULT_OPTIONS)
         self.last_result = None       # (length_mm, efficiency_pct) of the previous marker, for "last efficiency"
         self.efficiency = None
@@ -216,6 +229,14 @@ class MarkerView(QGraphicsView):
         self._measure_item = None
         self._pan = None
 
+    def apply_theme(self):
+        from .themes import colours
+        self.theme = colours()
+        self.setBackgroundBrush(QBrush(self.theme["canvas"]))
+        if getattr(self, "marker", None) is not None:
+            self.show_marker(self.project, self.marker, self.bad)
+        self.viewport().update()
+
     def show_marker(self, project, marker, bad=None):
         self.project, self.marker = project, marker
         self.bad = set(bad or [])
@@ -227,9 +248,9 @@ class MarkerView(QGraphicsView):
             return
         L = max(marker.length, 100.0)
         W = marker.fabric.width
-        bg = QColor(250, 250, 245)
-        bg.setAlpha(int(255 * self.options["bg_opacity"] / 100.0))
-        sc.addRect(QRectF(0, 0, L, W), QPen(QColor(160, 160, 160), 0), QBrush(bg))
+        bg = QColor(self.theme["fabric"])
+        bg.setAlpha(int(255 * max(self.options["bg_opacity"], 35) / 100.0))
+        sc.addRect(QRectF(0, 0, L, W), QPen(self.theme["fabric_line"], 0), QBrush(bg))
         f = marker.fabric
         if f.margin_left or f.margin_right or f.lay_type.value == "folded":
             r = QRectF(f.margin_start, f.margin_left, L - f.margin_start, f.usable_width)
@@ -345,9 +366,11 @@ class MarkerView(QGraphicsView):
         painter.save()
         painter.resetTransform()
         vw, vh = self.viewport().width(), self.viewport().height()
-        painter.fillRect(0, 0, vw, 18, QColor(240, 240, 240, 230))
-        painter.fillRect(0, 0, 40, vh, QColor(240, 240, 240, 230))
-        painter.setPen(QColor(60, 60, 60))
+        rb = QColor(self.theme["ruler"])
+        rb.setAlpha(235)
+        painter.fillRect(0, 0, vw, 18, rb)
+        painter.fillRect(0, 0, 40, vh, rb)
+        painter.setPen(self.theme["ruler_text"])
         painter.setFont(QFont("Segoe UI", 7))
         scale = abs(self.transform().m11())
         step = 10.0

@@ -131,3 +131,22 @@ def test_symbols_are_measurement_annotations_not_drill_holes():
     assert all(re.fullmatch(r"([A-Z]=)?\d+(\.\d+)?( \(\d+\*\))?", t) for t in ms)
     # measures are never turned into drill holes
     assert all(not g.drills for p in proj.pieces for g in p.sizes.values())
+
+
+def test_size_referencing_base_uses_base_geometry(monkeypatch):
+    """GRAFIS may store only the base block for the size whose GRDTAB ref is the base entry (user model 52-S)."""
+    import level7.readers.grafis as rg
+    orig = rg.read_container
+
+    def without_size_28(path):
+        c = orig(path)
+        c.blocks = [b for b in c.blocks if not (b.bid[0] == 3 and b.bid[2] == 7 and b.bid[3] == 2)]
+        return c
+    full = rg.read_grafis(MDL).project
+    monkeypatch.setattr(rg, "read_container", without_size_28)
+    proj = rg.read_grafis(MDL).project
+    for a, b in zip(full.pieces, proj.pieces):
+        if "28" in a.sizes:
+            assert "28" in b.sizes                                 # size 28 -> ref __HN40_0 = base
+            assert b.sizes["28"].cut == a.sizes["base:__HN40_0"].cut
+            assert any("GRDTAB reference" in n for n in b.notes)

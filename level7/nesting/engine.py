@@ -26,9 +26,11 @@ from dataclasses import dataclass, field
 
 from ..geometry import bbox, search_polygon, transform_points
 from ..model import FabricSettings, LayType, NestSettings, Piece, Placement, Project
-from .nfp import SCALE, feasible_region, nfp, to_int, translate
+from .nfp import NFP_SHRINK, SCALE, feasible_region, nfp, shrink, to_int, translate
 
 MODE_TIME = {"fast": 5.0, "balanced": 30.0, "long": 120.0}
+CONTACT_MM = NFP_SHRINK / SCALE    # search polygons grow by this, NFPs shrink by it (see nfp.NFP_SHRINK)
+
 
 
 @dataclass
@@ -162,7 +164,8 @@ class NestEngine:
         total = sum(max(bbox(it.cut)[2] - bbox(it.cut)[0], bbox(it.cut)[3] - bbox(it.cut)[1]) for it in items)
         self.xmax = (fabric.max_length - fabric.margin_end) if fabric.max_length else self.x0 + total * 1.2 + 1000.0
         for it in items:
-            it.search, it.deviation = search_polygon(it.cut, fabric.spacing, settings.curve_tolerance)
+            it.search, it.deviation = search_polygon(it.cut, fabric.spacing + 2 * CONTACT_MM,
+                                                     settings.curve_tolerance)
 
     key_mode = "length_x_y"
 
@@ -190,7 +193,7 @@ class NestEngine:
         key = (a.shape_key, ra, b.shape_key, rb)
         r = self._nfp_cache.get(key)
         if r is None:
-            r = nfp(self.oriented(a, ra)[0], self.oriented(b, rb)[0])
+            r = shrink(nfp(self.oriented(a, ra)[0], self.oriented(b, rb)[0]))
             self._nfp_cache[key] = r
         return r
 

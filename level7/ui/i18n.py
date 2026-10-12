@@ -161,6 +161,8 @@ T = {
     "missing_sizes_left": ("Still without geometry (not in this MDL): {s}", "ما زالت بدون أشكال (غير موجودة في هذا الـ MDL): {s}"),
     "sizes_loaded": ("{n} piece sizes loaded from {p}", "تم تحميل {n} قطعة/مقاس من {p}"),
     "open_logs": ("Open log folder (send hang.log / errors.log to support)", "فتح مجلد السجلات (أرسل hang.log / errors.log للدعم)"),
+    "theme": ("Theme", "المظهر"),
+    "theme_light": ("Light", "فاتح"), "theme_dark": ("Dark", "داكن"), "theme_gray": ("Gray", "رمادي"),
     "cancel": ("Cancel", "إلغاء"),
 }
 

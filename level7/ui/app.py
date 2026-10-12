@@ -60,7 +60,9 @@ def main(argv=None):
     app = QApplication(argv)
     app.setApplicationName("LEVEL7 Nesting")
     app.setOrganizationName("LEVEL7")
-    app.setStyle("Fusion")
+    from PySide6.QtCore import QSettings
+    from .themes import apply_theme
+    apply_theme(str(QSettings("LEVEL7", "Nesting").value("theme", "dark")))
     icon = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "level7.ico")
     if os.path.exists(icon):
         app.setWindowIcon(QIcon(icon))

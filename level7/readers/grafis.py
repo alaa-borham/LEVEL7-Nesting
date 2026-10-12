@@ -180,6 +180,16 @@ def read_grafis(path: str, encoding: str = DEFAULT_ENCODING, include_constructio
             if g is not None:
                 key = sizes[idx] if idx != 1 else f"base:{sizes[idx]}"
                 piece.sizes[key] = g
+        # A size whose #GRDTAB reference is the base entry (index 1) IS the base size: GRAFIS may store only the
+        # base block for it (sample: size 28 -> ref "__HN40_0" = base). Use the base geometry for that size.
+        base_entry = next((e for e in ts.sizes if e.index == 1), None)
+        base_key = f"base:{base_entry.name}" if base_entry else None
+        if base_key in piece.sizes:
+            for e in ts.sizes:
+                if e.index != 1 and e.name not in piece.sizes and e.ref and e.ref == base_entry.name:
+                    piece.sizes[e.name] = piece.sizes[base_key]
+                    piece.notes.append(f"size {e.name}: geometry of the base entry {base_entry.name} "
+                                       f"(GRDTAB reference), no separate block stored")
         if not piece.sizes:
             piece.notes.append("no extractable geometry")
         angles = {grain_angle(g.grain.points) for g in piece.sizes.values() if g.grain}

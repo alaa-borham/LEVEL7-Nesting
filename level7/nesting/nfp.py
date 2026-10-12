@@ -14,6 +14,10 @@ from __future__ import annotations
 import pyclipper
 
 SCALE = 100  # 0.01 mm resolution
+# Exact-fit slots (a piece touching two neighbours at once) are zero-width in the feasible region and would be
+# dropped by the clipping. Every NFP is therefore shrunk by NFP_SHRINK units, and the search polygons are grown
+# by the same amount in mm (engine: CONTACT_MM) beforehand, so real cut contours always keep >= 0.01 mm apart.
+NFP_SHRINK = 1
 
 
 def to_int(pts, scale=SCALE):
@@ -27,7 +31,18 @@ def nfp(fixed, orbiting):
     areas = [pyclipper.Area(p) for p in paths]
     big = max(range(len(paths)), key=lambda i: abs(areas[i]))
     sign = areas[big] > 0
-    return [p for p, a in zip(paths, areas) if (a > 0) == sign]
+    keep = [p for p, a in zip(paths, areas) if (a > 0) == sign]
+    # one orientation for every NFP: with the non-zero fill rule, NFPs of opposite winding would cancel where
+    # they overlap and make that area look free (mirrored copies reverse the input orientation)
+    return keep if sign else [p[::-1] for p in keep]
+
+
+def shrink(paths, d=NFP_SHRINK):
+    if not paths or d <= 0:
+        return paths
+    po = pyclipper.PyclipperOffset(2.0, 0.25)
+    po.AddPaths(paths, pyclipper.JT_MITER, pyclipper.ET_CLOSEDPOLYGON)
+    return po.Execute(-d)
 
 
 def translate(paths, dx, dy):
