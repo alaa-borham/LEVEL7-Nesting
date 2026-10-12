@@ -52,6 +52,8 @@ T = {
     "opt_grain": ("Grain line", "خط اتجاه النسيج"),
     "opt_internal": ("Show all internal lines", "إظهار كل الخطوط الداخلية"),
     "opt_piece_names": ("Piece names", "أسماء القطع"),
+    "opt_direction": ("Lay direction arrow (→ / ← = turned 180°)", "سهم الاتجاه (→ / ← = مقلوبة 180°)"),
+    "turned_180": ("Direction: {n} of {t} copies turned 180° (←)", "الاتجاه: {n} من {t} قطعة مقلوبة 180° (←)"),
     "opt_aux": ("Display auxiliary objects", "عناصر مساعدة"),
     "opt_eff_mark": ("Efficiency marking", "علامة الكفاءة"),
     "opt_last_eff": ("Last efficiency", "الكفاءة السابقة"),

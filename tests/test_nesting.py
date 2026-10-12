@@ -86,3 +86,19 @@ def test_face_to_face_lay_pairs(scb):
     assert info["validation"].ok
     assert all(not pl.mirrored for pl in marker.placements)
     assert any("produces" in w for w in info["warnings"])  # 1+0 parts get an extra mirrored copy -> warned
+
+
+def test_lay_direction_marks_180_turned_copies():
+    from level7.geometry import lay_direction
+    from level7.model import NestSettings, Piece, Placement
+    from level7.nesting.engine import grain_rotations
+    for ga in (0.0, 12.5, 170.0):
+        base = (-ga) % 360.0
+        assert lay_direction(ga, Placement("a", "p", "44", rotation=base)) == 1
+        assert lay_direction(ga, Placement("a", "p", "44", rotation=(base + 180) % 360)) == -1
+        mb = (ga - 180.0) % 360.0                       # base rotation of a mirrored copy
+        piece = Piece(uid="p", source_id="", number=1, name="x", grain_angle=ga)
+        assert grain_rotations(piece, True, NestSettings(allow_rotation_180=False))[0] == [round(mb, 6) % 360.0]
+        assert lay_direction(ga, Placement("a", "p", "44", rotation=mb, mirrored=True)) == 1
+        assert lay_direction(ga, Placement("a", "p", "44", rotation=(mb + 180) % 360, mirrored=True)) == -1
+    assert lay_direction(None, Placement("a", "p", "44")) is None

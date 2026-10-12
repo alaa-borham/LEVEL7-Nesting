@@ -16,11 +16,12 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComb
                                QVBoxLayout, QWidget)
 
 from .. import __version__
-from ..geometry import bbox, placement_points
+from ..geometry import bbox, lay_direction, placement_points
 from ..model import FabricSettings, LayType, Marker, NestSettings, Placement, Project
 from ..validation.checker import marker_stats, validate_marker
 from .i18n import LANG, tr
 from .marker_view import MarkerView
+from .piece_strip import make_strip_area
 from .updates import UpdateManager
 
 
@@ -151,6 +152,19 @@ class MainWindow(QMainWindow):
         self.dock_left = QDockWidget(self)
         self.dock_left.setWidget(left)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.dock_left)
+        self.dock_left.setObjectName("pieces_table")
+        self.dock_left.hide()            # replaced by the GRAFIS-like strip on top (View menu / double-click)
+
+        # GRAFIS-like piece strip above the marker
+        self.strip_area, self.strip = make_strip_area(self)
+        self.strip_area.setMinimumHeight(70)
+        self.strip.open_table.connect(lambda: (self.dock_left.show(), self.dock_left.raise_()))
+        self.dock_strip = QDockWidget(self)
+        self.dock_strip.setObjectName("piece_strip")
+        self.dock_strip.setWidget(self.strip_area)
+        self.dock_strip.setTitleBarWidget(QWidget())
+        self.dock_strip.setFeatures(QDockWidget.NoDockWidgetFeatures)
+        self.addDockWidget(Qt.TopDockWidgetArea, self.dock_strip)
 
         # fabric / nesting form
         w = QWidget()
@@ -263,6 +277,9 @@ class MainWindow(QMainWindow):
         self.m_edit.addAction(self.act_measure)
         self.m_view.addAction(self._act("zoom_fit", self.view.zoom_fit, "F"))
         self.m_view.addAction(self._act("display_options", self.display_options, "Ctrl+D"))
+        self.m_view.addSeparator()
+        self.act_table = self.dock_left.toggleViewAction()
+        self.m_view.addAction(self.act_table)
         self.m_nest.addAction(self._act("run", self.run_nesting, "F5"))
         self.m_nest.addAction(self._act("stop", self.stop_nesting, "Esc"))
         self.m_export.addAction(self._act("export_plt", lambda: self.export("plt")))
@@ -544,10 +561,17 @@ class MainWindow(QMainWindow):
         if fit:
             self.view.zoom_fit()
 
+    def _refresh_strip(self):
+        self.strip.set_data(self.project, self.marker)
+        rows = max(1, len(self.strip.rows))
+        self.strip_area.setFixedHeight(min(18 + rows * 82 + 22, 18 + 3 * 82 + 22))
+
     def update_results(self, v=None):
         if not self.marker or not self.project:
             self.results_text.setPlainText("")
+            self._refresh_strip()
             return
+        self._refresh_strip()
         s = self.marker.stats or marker_stats(self.project, self.marker)
         lines = [f"{tr('width')}: {s['width_mm']:.1f}  ({s['usable_width_mm']:.1f} usable)",
                  f"Length: {s['length_mm']:.1f} mm", f"Placed / unplaced: {s['placed']} / {s['unplaced']}",
@@ -558,6 +582,16 @@ class MainWindow(QMainWindow):
                  f"Consumption: {s['consumption_m']:.3f} m = {s['consumption_yd']:.3f} yd",
                  f"Per garment (U/B): {s.get('length_per_garment_m', 0):.3f} m ({s.get('garments', 0)} garments)",
                  "By size: " + ", ".join(f"{k}: {n}" for k, n in sorted(s["by_size"].items()))]
+        turned = total = 0
+        pieces = {p.uid: p for p in self.project.pieces}
+        for pl in self.marker.placements:
+            pc = pieces.get(pl.piece_uid)
+            d = lay_direction(pc.grain_angle, pl) if pc and pl.placed else None
+            if d is not None:
+                total += 1
+                turned += d < 0
+        if total:
+            lines.append(tr("turned_180", n=turned, t=total))
         if self.marker.compute_time:
             lines.append(f"Compute time: {self.marker.compute_time:.1f} s, seed {self.marker.seed}")
         if v is not None:

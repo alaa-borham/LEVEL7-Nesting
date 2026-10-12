@@ -10,7 +10,7 @@ import os
 from dataclasses import dataclass, field
 
 from ..formats.grafis.container import Container, read_container
-from ..formats.grafis.contour import chain_elements, outer_cycle
+from ..formats.grafis.contour import _simple as _simple_ring, chain_elements, outer_cycle
 from ..formats.grafis.elements import KIND_POLYLINE, KIND_SYMBOL, KIND_TEXT, decode_geometry, symbol_position, text_anchor, text_angle
 from ..formats.grafis.placements import decode_marker
 from ..formats.grafis.textsections import DEFAULT_ENCODING, TextSections, parse_text
@@ -35,7 +35,8 @@ def _size_names(ts: TextSections) -> dict[int, str]:
     return {s.index: s.name for s in ts.sizes}
 
 
-def _build_piece_geometry(payload: bytes, size_name: str, src: str, issues: list[str]) -> PieceGeometry | None:
+def _build_piece_geometry(payload: bytes, size_name: str, src: str, issues: list[str],
+                          hint: dict | None = None) -> PieceGeometry | None:
     gb = decode_geometry(payload)
     for e in gb.errors:
         issues.append(f"{src}: {e}")
@@ -54,7 +55,15 @@ def _build_piece_geometry(payload: bytes, size_name: str, src: str, issues: list
             issues.append(f"{src}: style-0 cut elements do not close; falling back to outer cycle")
     if contour is None:
         cand = [(e.oid, e.points) for e in polys if e.flag == 0 and e.style != -3]
-        contour = outer_cycle(cand)
+        if hint and hint.get("oids"):
+            # GRAFIS keeps the same cut elements in every size of a part (verified: all 15 grading entries,
+            # and against the AAMA export), so the element set found in another size is tried first; the
+            # exhaustive search runs only if those elements do not form a simple closed ring here.
+            contour = chain_elements([c for c in cand if c[0] in hint["oids"]])
+            if contour is not None and (len(contour.points) < 3 or not _simple_ring(contour.points)):
+                contour = None
+        if contour is None:
+            contour = outer_cycle(cand)
     if contour is None:
         issues.append(f"{src}: no closed cut contour found")
         return None
@@ -62,6 +71,8 @@ def _build_piece_geometry(payload: bytes, size_name: str, src: str, issues: list
     if ring_area(ring) < 0:
         ring = ring[::-1]
     cut_ids = set(contour.oids)
+    if hint is not None:
+        hint["oids"] = cut_ids
     g = PieceGeometry(size=size_name, cut=ring, source=src)
     by_oid = {e.oid: e for e in polys}
     for oid in contour.oids:
@@ -159,12 +170,13 @@ def read_grafis(path: str, encoding: str = DEFAULT_ENCODING, include_constructio
                       material=t.material, production=t.production,
                       default_count=t.count if t.count is not None else 1,
                       default_mirrored=t.mirrored if t.mirrored is not None else 0)
+        hint: dict = {}
         for idx in sorted(sizes):
             b = blocks.get((3, t.number, 7, idx))
             if b is None:
                 continue
             src = f"{kind.upper()} block (3,{t.number},7,{idx})"
-            g = _build_piece_geometry(b.payload, sizes[idx], src, issues)
+            g = _build_piece_geometry(b.payload, sizes[idx], src, issues, hint)
             if g is not None:
                 key = sizes[idx] if idx != 1 else f"base:{sizes[idx]}"
                 piece.sizes[key] = g

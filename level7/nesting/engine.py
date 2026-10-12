@@ -76,9 +76,10 @@ def grain_rotations(piece: Piece, mirrored: bool, settings: NestSettings) -> tup
     ga = piece.grain_angle
     if ga is None:
         return [], "grain direction unknown - define it for this piece"
-    if mirrored:
-        ga = (180.0 - ga) % 180.0
-    base = (-ga) % 360.0
+    # base: the copy's grain (pattern top end) points along +x. A mirrored copy (x -> -x) has its grain at
+    # 180 - ga; taking that modulo 180 lost the direction for ga = 0 (mirrored copies ended up turned 180°,
+    # wrong for one-way fabric).
+    base = ((ga - 180.0) if mirrored else -ga) % 360.0
     rots = [base]
     if settings.allow_rotation_180 and 180.0 in piece.allowed_rotations:
         rots.append((base + 180.0) % 360.0)

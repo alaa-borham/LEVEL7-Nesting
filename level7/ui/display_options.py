@@ -11,7 +11,7 @@ from .i18n import tr
 class DisplayOptionsDialog(QDialog):
     CHECKS_PIECES = (("symbols", "opt_symbols"), ("size_bundle", "opt_size_bundle"), ("buffer", "opt_buffer"),
                      ("marking", "opt_marking"), ("grain", "opt_grain"), ("internal", "opt_internal"),
-                     ("piece_names", "opt_piece_names"))
+                     ("piece_names", "opt_piece_names"), ("direction", "opt_direction"))
     CHECKS_AUX = (("efficiency_mark", "opt_eff_mark"), ("last_efficiency", "opt_last_eff"),
                   ("white_marking", "opt_white"))
 

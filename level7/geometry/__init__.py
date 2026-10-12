@@ -89,3 +89,13 @@ def search_polygon(pts: list[Point], spacing: float, tolerance: float) -> tuple[
     ext = list(poly.exterior.coords)[:-1]
     dev = poly.exterior.hausdorff_distance(LineString(list(target.exterior.coords)))
     return ext, dev
+
+
+def lay_direction(grain_angle_deg: float | None, pl: Placement) -> int | None:
+    """+1 if the placed copy's grain points along +x (marker length), -1 if turned 180° against it, None if
+    unknown or across the length. Mirrored copies in their base orientation also give +1 (see grain_rotations)."""
+    if grain_angle_deg is None:
+        return None
+    a = math.radians(grain_angle_deg)
+    (vx, _), = transform_points([(math.cos(a), math.sin(a))], pl.rotation, pl.mirrored)
+    return 1 if vx > 1e-6 else -1 if vx < -1e-6 else None

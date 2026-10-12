@@ -9,7 +9,7 @@ from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen, QPolygonF, QTransform
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsPathItem, QGraphicsScene, QGraphicsSimpleTextItem, QGraphicsView
 
-from ..geometry import placement_points
+from ..geometry import lay_direction, placement_points, transform_points
 
 
 def _path(points, closed=True) -> QPainterPath:
@@ -33,7 +33,7 @@ def color_for(key: str) -> QColor:
 DEFAULT_OPTIONS = {
     # "Display in the pieces" (GRAFIS: Marker display options)
     "symbols": False, "size_bundle": True, "buffer": True, "marking": False, "grain": False, "internal": False,
-    "piece_names": False,
+    "piece_names": False, "direction": True,     # direction arrow (→ / ← = turned 180°) next to the label
     # "Display auxiliary objects"
     "efficiency_mark": True, "last_efficiency": True, "white_marking": True,
     # "Show pieces to be placed"
@@ -97,7 +97,21 @@ class PieceItem(QGraphicsPathItem):
                 pts = [n.position, (n.position[0] + d[0] * n.length, n.position[1] + d[1] * n.length)]
                 self._child(placement_points(pts, pl), False, QPen(QColor(200, 0, 0), 0))
         if o["grain"] and g.grain is not None:
-            self._child(placement_points(g.grain.points, pl), False, QPen(self._inner_colour(QColor(0, 0, 200)), 0))
+            gp = placement_points(g.grain.points, pl)
+            pen = QPen(self._inner_colour(QColor(0, 0, 200)), 0)
+            self._child(gp, False, pen)
+            (ax, ay), (bx, by) = gp[0], gp[-1]
+            if self.piece.grain_angle is not None:      # head on the same side as the label arrow (→ / ←)
+                r = math.radians(self.piece.grain_angle)
+                (ux, uy), = transform_points([(math.cos(r), math.sin(r))], pl.rotation, pl.mirrored)
+                if (bx - ax) * ux + (by - ay) * uy < 0:
+                    (ax, ay), (bx, by) = (bx, by), (ax, ay)
+            L = math.hypot(bx - ax, by - ay)
+            if L > 0:                      # arrowhead at the end of the grain line shows the lay direction
+                ux, uy, h = (bx - ax) / L, (by - ay) / L, min(25.0, L / 4)
+                for sgn in (1, -1):
+                    self._child([(bx, by), (bx - h * ux + sgn * 0.4 * h * uy, by - h * uy - sgn * 0.4 * h * ux)],
+                                False, pen)
         if o["symbols"]:
             for ms in g.measures:
                 x, y = placement_points([ms.position], pl)[0]
@@ -122,7 +136,10 @@ class PieceItem(QGraphicsPathItem):
                 self.children_items.append(it)
         lines = []
         if o["size_bundle"]:
-            lines.append(f"{pl.size}/{bundle_letter(pl.bundle)}")
+            arrow = ""
+            d = lay_direction(self.piece.grain_angle, pl) if o.get("direction", True) else None
+            arrow = {1: " →", -1: " ←"}.get(d, "")
+            lines.append(f"{pl.size}/{bundle_letter(pl.bundle)}{arrow}")
         if o["piece_names"]:
             lines.append(f"{self.piece.name}{' (M)' if pl.mirrored else ''}")
         if lines:
