@@ -53,11 +53,17 @@ pool: per record in order: [16 B aux if flag==2] + count × 8 B
 ```
 
 * kind 2: `count` points (f32 x, f32 y). **4155/4155** polylines per file match their stored bbox (C).
-* kind 4: two corner points, heights, text (e.g. size "44") (P).
+* kind 4: text. Words: (x0,y0),(x1,y1) frame; (w, height); (0, 0.4); f32 angle in **radians** at +32;
+  text string at +48. GRAFIS' DXF inserts the text at (x0+5, min y+5) with that height; on mirrored
+  copies at (x0+5, max y−5) turned 180° (C for axis-aligned texts; ±2 mm for the one 1.1° text).
 * kind 6: position = degenerate bbox (C), code text (e.g. "221"), sub-lines (cross/square) — meaning U.
 * style: `0` = cut line — written by GRAFIS into the SCB for the nested size only (C);
-  `-7/-6` seam/net contour (P); `-3` grain arrow (P); `1` other lines; flag-2, 2-point, ~5 mm style-1
-  elements = notches (P).
+  `-7` seam line (C, = GRAFIS DXF layer 8); `-6` net contour lying on the cut line, not exported as
+  seam (C); `-3` grain arrow (P); `1` other lines.
+* notches: flag-2, 2-point, 5 mm style-1 elements. If one end lies on the cut contour it is a cut
+  notch (base on the contour, pointing inward) — 44/44 identical to the notch slits in GRAFIS' DXF;
+  if it lies on the seam line it is a seam notch (GRAFIS layer 8) — 24/24 identical (C, size 44).
+  GRAFIS additionally writes a 6.7 mm slit at the hem notch of the two bundle-2 front copies only (U).
 * Coordinates are millimetres (P, strong): `#TFLIST` units mm; front hem line at y = −1040 =
   T2M4/T5M4 (size 44); SCB WIDTH equals max Y of the reconstructed marker.
 * Curves are stored as evaluated polylines; spline parameters are not read (unsupported).
@@ -85,6 +91,11 @@ efficiency 82.197 % (EFFCNCY 82.19), area 3.51 m², U/B 1.42 m, and identical to
 (`docs/evidence/grafis_new_1500.png` vs `level7_reconstruction_1500.png`). It contains rotation/mirror
 combinations absent from the first marker. Computed length 2849.86 vs stored 2849.93 mm (0.065 mm).
 Flag 0x40 occurs with and without rotation → still U.
+
+Reference DXF (`samples/reference/44-150.dxf`, GRAFIS export of the 1500 marker, R12, one block per
+piece, layer 1 = cut with notch spikes, layer 8 = seam + texts): all 28 cut contours equal LEVEL7's
+reconstruction from the SCB within 0.0008 mm; notches, seam lines and texts as described above
+(`tests/test_grafis_reference_dxf.py`).
 
 `EFFCNCY` = Σ placed cut areas / (WIDTH × LENGTH) (C).
 

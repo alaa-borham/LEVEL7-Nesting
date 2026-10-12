@@ -12,6 +12,8 @@
    "waste_pct": 16.135918995782617,
    "consumption_m": 2.9299304285049437,
    "consumption_yd": 3.2042108798173055,
+   "garments": 2,
+   "length_per_garment_m": 1.4649652142524718,
    "placed": 28,
    "unplaced": 0,
    "by_size": {
@@ -21,7 +23,7 @@
   },
   "nested_1400": {
    "validation": "valid: 28 placements, no overlap/out-of-bounds/orientation issues",
-   "evaluations": 19422,
+   "evaluations": 19677,
    "seed": 1,
    "time_limit_s": 60.0,
    "length_mm": 3042.214548034668,
@@ -33,6 +35,8 @@
    "waste_pct": 17.500472095992365,
    "consumption_m": 3.042214548034668,
    "consumption_yd": 3.3270062861271525,
+   "garments": 2,
+   "length_per_garment_m": 1.521107274017334,
    "placed": 28,
    "unplaced": 0,
    "by_size": {
@@ -42,7 +46,7 @@
   },
   "nested_1430": {
    "validation": "valid: 28 placements, no overlap/out-of-bounds/orientation issues",
-   "evaluations": 20034,
+   "evaluations": 18342,
    "seed": 1,
    "time_limit_s": 60.0,
    "length_mm": 2960.504417724609,
@@ -54,6 +58,8 @@
    "waste_pct": 17.00200772484817,
    "consumption_m": 2.960504417724609,
    "consumption_yd": 3.237647001011165,
+   "garments": 2,
+   "length_per_garment_m": 1.4802522088623045,
    "placed": 28,
    "unplaced": 0,
    "by_size": {
@@ -63,7 +69,7 @@
   },
   "nested_1500": {
    "validation": "valid: 28 placements, no overlap/out-of-bounds/orientation issues",
-   "evaluations": 19931,
+   "evaluations": 19143,
    "seed": 1,
    "time_limit_s": 60.0,
    "length_mm": 2840.2080408109077,
@@ -75,6 +81,8 @@
    "waste_pct": 17.523936147187058,
    "consumption_m": 2.8402080408109076,
    "consumption_yd": 3.106089283476496,
+   "garments": 2,
+   "length_per_garment_m": 1.4201040204054538,
    "placed": 28,
    "unplaced": 0,
    "by_size": {
@@ -89,8 +97,8 @@
    "plt": {
     "cut_paths": 28,
     "max_dev_mm": 0.017174841882347167,
-    "labels_as_LB": 28,
-    "non_cut_pens_paths": 192
+    "labels_as_LB": 44,
+    "non_cut_pens_paths": 204
    },
    "dxf": {
     "cut_paths": 28,
@@ -114,8 +122,8 @@
    "plt": {
     "cut_paths": 28,
     "max_dev_mm": 0.017381475792797557,
-    "labels_as_LB": 28,
-    "non_cut_pens_paths": 192
+    "labels_as_LB": 44,
+    "non_cut_pens_paths": 204
    },
    "dxf": {
     "cut_paths": 28,
@@ -139,8 +147,8 @@
    "plt": {
     "cut_paths": 28,
     "max_dev_mm": 0.017417547133983184,
-    "labels_as_LB": 28,
-    "non_cut_pens_paths": 192
+    "labels_as_LB": 44,
+    "non_cut_pens_paths": 204
    },
    "dxf": {
     "cut_paths": 28,
@@ -164,8 +172,8 @@
    "plt": {
     "cut_paths": 28,
     "max_dev_mm": 0.017196572562025947,
-    "labels_as_LB": 28,
-    "non_cut_pens_paths": 192
+    "labels_as_LB": 44,
+    "non_cut_pens_paths": 204
    },
    "dxf": {
     "cut_paths": 28,

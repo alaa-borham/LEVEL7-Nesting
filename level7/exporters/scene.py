@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from ..geometry import bbox, placement_points
 from ..model import Marker, Project
 
-LAYERS = ("CUT", "SEAM", "INTERNAL", "NOTCH", "MARK", "GRAIN", "TEXT", "BORDER")
+LAYERS = ("CUT", "SEAM", "INTERNAL", "NOTCH", "MARK", "GRAIN", "TEXT", "PIECE_NAME", "BORDER")
 
 
 @dataclass
@@ -27,6 +27,7 @@ class Text:
     position: tuple[float, float]
     height: float
     owner: str | None = None
+    rotation: float = 0.0
 
 
 @dataclass
@@ -74,12 +75,22 @@ def marker_scene(project: Project, marker: Marker, include_labels: bool = True, 
             sc.points.append(Point("MARK", placement_points([dr.position], pl)[0], dr.code, pl.uid))
         if g.grain is not None:
             sc.paths.append(Path("GRAIN", placement_points(g.grain.points, pl), False, pl.uid))
+        for lb in g.labels:
+            # GRAFIS keeps texts readable on mirrored copies: anchor at the top of the frame, turned 180 deg
+            ang = getattr(lb, "angle", 0.0)
+            if pl.mirrored and lb.box:
+                anchor = (lb.position[0], lb.box[3] - (lb.position[1] - lb.box[1]))
+                rot = pl.rotation + 180.0 - ang
+            else:
+                anchor, rot = lb.position, pl.rotation + ang
+            sc.texts.append(Text("TEXT", lb.text, placement_points([anchor], pl)[0], lb.height, pl.uid,
+                                 rot % 360.0))
         if include_labels:
             c = placement_points([_inner_point(g.cut)], pl)[0]
             txt = f"{piece.name} {pl.size}" if label_size else piece.name
             if pl.mirrored:
                 txt += " (M)"
-            sc.texts.append(Text("TEXT", txt, c, 12.0, pl.uid))
+            sc.texts.append(Text("PIECE_NAME", txt, c, 12.0, pl.uid))
     if include_border:
         L, W = marker.length, marker.fabric.width
         sc.paths.append(Path("BORDER", [(0, 0), (L, 0), (L, W), (0, W)], True, None))

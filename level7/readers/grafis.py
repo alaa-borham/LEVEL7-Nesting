@@ -11,12 +11,15 @@ from dataclasses import dataclass, field
 
 from ..formats.grafis.container import Container, read_container
 from ..formats.grafis.contour import chain_elements, outer_cycle
-from ..formats.grafis.elements import KIND_POLYLINE, KIND_SYMBOL, KIND_TEXT, decode_geometry, symbol_position, text_anchor
+from ..formats.grafis.elements import KIND_POLYLINE, KIND_SYMBOL, KIND_TEXT, decode_geometry, symbol_position, text_anchor, text_angle
 from ..formats.grafis.placements import decode_marker
 from ..formats.grafis.textsections import DEFAULT_ENCODING, TextSections, parse_text
 from ..geometry import bbox, grain_angle, ring_area, transform_points
 from ..model import (CutOrder, Drill, FabricSettings, Label, Marker, Notch, Piece, PieceGeometry, Placement,
                      Polyline, Project, SourceInfo, Status)
+
+
+NOTCH_ON_CUT_TOL = 0.01  # mm
 
 
 @dataclass
@@ -61,7 +64,9 @@ def _build_piece_geometry(payload: bytes, size_name: str, src: str, issues: list
     cut_ids = set(contour.oids)
     g = PieceGeometry(size=size_name, cut=ring, source=src)
     g.completeness = {"cut": cut_status, "cut_method": cut_source}
-    seam_parts = [e for e in polys if e.style in (-7, -6) and e.oid not in cut_ids]
+    # style -7 = seam line; style -6 = net contour lying ON the cut line (no allowance, e.g. hem):
+    # GRAFIS does not export -6 as seam (verified against its DXF), so it is not a separate seam line.
+    seam_parts = [e for e in polys if e.style == -7 and e.oid not in cut_ids]
     if seam_parts:
         seam = chain_elements([(e.oid, e.points) for e in seam_parts])
         if seam is not None:
@@ -78,22 +83,39 @@ def _build_piece_geometry(payload: bytes, size_name: str, src: str, issues: list
         g.completeness["grain"] = Status.PROBABLE.value
     else:
         g.completeness["grain"] = Status.UNKNOWN.value
+    from shapely.geometry import LinearRing, LineString, Point
+    cut_ring = LinearRing(ring)
     for e in polys:
         if e.oid in cut_ids or e.style in (-7, -6, -3, 0):
             continue
         if e.role == "notch":
+            # cut notch = notch element with one end ON the cut line; base on the line, pointing inward.
+            # Verified against GRAFIS' own DXF export (44/1500 marker): 44 of 46 notch slits identical.
             a, b = e.points[0], e.points[-1]
-            ln = math.dist(a, b) or 1.0
-            g.notches.append(Notch(a, ((b[0] - a[0]) / ln, (b[1] - a[1]) / ln), ln, str(e.oid)))
-        else:
-            g.internal.append(Polyline(list(e.points), False, str(e.oid)))
+            da, db = cut_ring.distance(Point(a)), cut_ring.distance(Point(b))
+            if min(da, db) <= NOTCH_ON_CUT_TOL:
+                if db < da:
+                    a, b = b, a
+                ln = math.dist(a, b) or 1.0
+                g.notches.append(Notch(a, ((b[0] - a[0]) / ln, (b[1] - a[1]) / ln), ln, str(e.oid)))
+                continue
+            # notch mark on the seam line: GRAFIS exports it with the seam (layer 8), never as a cut
+            seam_lines = [LineString(s.points + ([s.points[0]] if s.closed else [])) for s in g.seam
+                          if len(s.points) >= 2]
+            sa = min((ln.distance(Point(a)) for ln in seam_lines), default=1.0)
+            sb = min((ln.distance(Point(b)) for ln in seam_lines), default=1.0)
+            if min(sa, sb) <= NOTCH_ON_CUT_TOL:
+                g.seam.append(Polyline([a, b] if sa <= sb else [b, a], False, str(e.oid)))
+                continue
+            # other notch-type marks (e.g. fold line): drawn as internal lines, never cut
+        g.internal.append(Polyline(list(e.points), False, str(e.oid)))
     g.completeness["notches"] = Status.PROBABLE.value if g.notches else Status.UNKNOWN.value
     g.completeness["internal"] = Status.PROBABLE.value
     for e in gb.elements:
         if e.kind == KIND_TEXT:
             anc = text_anchor(e)
             if anc and e.text:
-                g.labels.append(Label(e.text, anc[0], anc[1]))
+                g.labels.append(Label(e.text, anc[0], anc[1], anc[2], text_angle(e)))
         elif e.kind == KIND_SYMBOL:
             pos = symbol_position(e)
             if pos:

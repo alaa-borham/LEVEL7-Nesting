@@ -49,10 +49,14 @@ def run_nesting(proj: Project, fabric: FabricSettings, settings: NestSettings, c
     co = cut_order or proj.cut_order
     items, unplaced, warnings = build_items(proj, co.size_quantities, co.piece_counts, fabric, settings, pinned,
                                            co.material)
-    if not items:
+    if not items and not unplaced:
         raise ValueError("nothing to nest: set size quantities and piece counts")
     t0 = time.monotonic()
-    res = run_parallel(items, fabric, settings, workers=workers, progress=progress, stop_event=stop_event)
+    if items:
+        res = run_parallel(items, fabric, settings, workers=workers, progress=progress, stop_event=stop_event)
+    else:   # every requested copy was rejected (e.g. unknown grain): report them, do not fail
+        from .nesting.engine import NestResult
+        res = NestResult([], [], fabric.margin_start + fabric.margin_end)
     marker = Marker(name=name or f"{proj.name} {fabric.width:g}mm", fabric=fabric, placements=res.placements,
                     origin="nested", seed=settings.seed, compute_time=time.monotonic() - t0)
     from .model import Placement

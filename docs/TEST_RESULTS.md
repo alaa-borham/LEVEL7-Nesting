@@ -1,6 +1,6 @@
 # Test results
 
-## Automated tests (`python -m pytest -q`) — 27 passed
+## Automated tests (`python -m pytest -q`) — 34 passed
 Linux (Python 3.13, dev container) and Windows (GitHub Actions `windows-2022`, Python 3.12;
 see the `windows-build` workflow runs for the current status).
 
@@ -29,6 +29,8 @@ see the `windows-build` workflow runs for the current status).
 | Export | ISO | refused without verified profile; diagnostic preview simulated back ≤ 0.0071 mm |
 | Storage | .l7n | round trip without sources |
 | CLI | non-UTF-8 console | regression for Windows cp1252 crash |
+| GRAFIS DXF | `test_grafis_reference_dxf.py` | 28 cut contours < 0.01 mm (max 0.0008), 44/44 cut notches, seam + 24 seam notches, 16 texts |
+| DXF import | `test_dxf_import.py` | GRAFIS DXF → 28 pieces, 46 notches; unknown grain refused with reason; nest after defining grain |
 | GUI | `tests/ui_smoke.py` (offscreen) | open SCB, nest 1500, manual move flagged, undo, language switch |
 
 ## Nesting benchmark (examples/VERIFICATION.json; 60 s, seed 1, 4 processes)

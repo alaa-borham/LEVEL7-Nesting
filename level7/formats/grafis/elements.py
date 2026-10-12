@@ -121,12 +121,26 @@ def _extract_ascii(b: bytes) -> str:
     return s
 
 
-def text_anchor(e: Element) -> tuple[tuple[float, float], float] | None:
-    """Text elements: first two f32 pairs are box corners, then (height?, width?) [probable]."""
+TEXT_PADDING = 5.0  # mm between text frame and insertion point (GRAFIS DXF export, 44/1500 marker)
+
+
+def text_angle(e: Element) -> float:
+    """Word 4 (f32 at +32) = text angle in radians (0.01925 rad = 1.10 deg vs 1.11 deg in GRAFIS' DXF)."""
+    import math
+    if e.kind != KIND_TEXT or len(e.raw) < 36:
+        return 0.0
+    return math.degrees(struct.unpack_from("<f", e.raw, 32)[0])
+
+
+def text_anchor(e: Element) -> tuple[tuple[float, float], float, tuple] | None:
+    """Text elements: words 0-1 = frame corners (x0,y0),(x1,y1); word 2 = (width?, height).
+    GRAFIS' own DXF export inserts the text at (x0 + 5, min(y) + 5) with height = word 2[1]
+    (verified on all size labels of the 44/1500 marker)."""
     if e.kind != KIND_TEXT or len(e.raw) < 24:
         return None
-    x0, y0, x1, y1, h1, h2 = struct.unpack_from("<6f", e.raw, 0)
-    return ((min(x0, x1), min(y0, y1)), h1)
+    x0, y0, x1, y1, _w, h = struct.unpack_from("<6f", e.raw, 0)
+    box = (min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1))
+    return ((box[0] + TEXT_PADDING, box[1] + TEXT_PADDING), h, box)
 
 
 def symbol_position(e: Element) -> tuple[float, float] | None:

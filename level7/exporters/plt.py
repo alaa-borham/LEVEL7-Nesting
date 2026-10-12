@@ -27,7 +27,7 @@ class PlotterConfig:
     flip_x: bool = False
     flip_y: bool = False
     pens: dict = field(default_factory=lambda: {"CUT": 1, "NOTCH": 4, "SEAM": 2, "INTERNAL": 2, "GRAIN": 3,
-                                                 "TEXT": 3, "MARK": 3, "BORDER": 0})
+                                                 "TEXT": 3, "PIECE_NAME": 3, "MARK": 3, "BORDER": 0})
     include_text: bool = True
     text_height_mm: float = 10.0
     max_abs_coord: int = 2 ** 30

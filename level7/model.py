@@ -50,8 +50,10 @@ class Drill:
 @dataclass
 class Label:
     text: str
-    position: Point
+    position: Point                      # insertion point (lower-left of the text)
     height: float = 10.0
+    box: tuple | None = None             # (x0, y0, x1, y1) text frame as stored by GRAFIS
+    angle: float = 0.0                   # degrees, CCW in pattern coordinates
 
 
 @dataclass

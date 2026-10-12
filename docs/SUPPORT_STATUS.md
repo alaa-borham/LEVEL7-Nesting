@@ -8,7 +8,8 @@
 | Text sections, sizes, parts, IDs, Arabic names (cp1256) | done, tested |
 | Cut contour per part and size (MDL, all 14 sizes + base) | probable method, verified against GRAFIS cut flags for size 44 |
 | Cut contour of nested size (SCB) | confirmed (GRAFIS flags) |
-| Seam line, internal lines, notches, grain line, text | read; roles are probable interpretations |
+| Cut contour, notches, seam line, size texts | identical to GRAFIS' own DXF export for size 44 (cut < 0.001 mm) |
+| Internal lines, grain line | read; roles are probable (not contained in the GRAFIS DXF received) |
 | Symbols (kind 6) | position + code read; meaning unknown → layer MARK only, never drilled/cut |
 | SCB placements: position, rotation, mirror, bundle, copies | reproduced exactly (efficiency/area/length = GRAFIS) |
 | Spline definitions, construction program | not read (GRAFIS stores evaluated polylines, which are used) |
@@ -33,6 +34,8 @@ GRAFIS options: "Right-Left" spreading = LEVEL7 open lay with mirrored copies; "
 * PLT/HP-GL: 1:1 (40 units/mm default, configurable), pens per layer, labels via `LB`, closure and
   range checks; verified by re-reading. Not yet verified on the user's plotter → `verified_with_device=false`.
 * DXF: generic R2000, mm, separate layers; vertex-exact. Not labelled AAMA/ASTM.
+* DXF import: generic + GRAFIS DXF exports (blocks exploded, layer 1 cut with notch spikes, layer 8
+  seam). GRAFIS' marker DXF has no grain lines → grain must be set per piece before nesting.
 * ISO: **not configured** — only a diagnostic preview (marked NOT FOR PRODUCTION).
 
 ## Windows
@@ -41,9 +44,9 @@ desktop shortcut check). Results are only claimed for runs that actually passed 
 
 ## Information still needed (what each item settles)
 1. ~~Screenshot of the marker in GRAFIS~~ — received; orientation confirmed.
-2. **DXF (or AAMA/ASTM) export from GRAFIS of the same MDL, all sizes** → independent vertex-level
-   check of contours, notches, grain lines and text positions in every size (now verified only for
-   size 44 by GRAFIS' own cut flags).
+2. Size 44 verified against GRAFIS' DXF of the 1500 marker. Still useful: **a GRAFIS DXF of the
+   pattern pieces in all sizes, with grain lines and internal lines switched on** → vertex-level check
+   of the other 13 sizes, grain and internal lines.
 3. ~~The 1500 mm GRAFIS marker as SCB~~ — received; decoded with the same rules and identical to GRAFIS.
 4. **A PLT file produced by GRAFIS for your plotter + plotter model** → units, origin, axis direction,
    pen numbers for the plotter configuration.
