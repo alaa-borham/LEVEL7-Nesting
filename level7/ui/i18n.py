@@ -30,6 +30,14 @@ T = {
     "color_size": ("size", "المقاس"),
     "color_piece": ("piece", "القطعة"),
     "color_bundle": ("bundle (A/B…)", "المجموعة (A/B…)"),
+    "iso_machine": ("Cutting machine", "ماكينة القص"),
+    "iso_bullmer": ("Bullmer-Cutter (GRAFIS 'typical' compatible)", "Bullmer (متوافق مع GRAFIS typical)"),
+    "iso_diagnostic": ("Diagnostic preview (NOT for production)", "معاينة تشخيصية (ليست للإنتاج)"),
+    "iso_not_device_tested": (
+        "The Bullmer file is identical to GRAFIS' own Bullmer output for the reference marker, but it has not "
+        "yet been test-cut on your machine.\nCut a test piece before production. Continue?",
+        "ملف Bullmer مطابق لملف GRAFIS نفسه للماركر المرجعي، لكنه لم يُجرَّب بعد على ماكينتك.\n"
+        "اقطع قطعة تجريبية قبل الإنتاج. متابعة؟"),
     "plt_preset": ("Plotter profile", "ملف إعداد البلوتر"),
     "plt_dialect": ("File dialect", "صيغة الملف"),
     "plt_text_mode": ("Texts", "النصوص"),

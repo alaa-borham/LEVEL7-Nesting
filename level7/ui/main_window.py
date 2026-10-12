@@ -668,9 +668,20 @@ class MainWindow(QMainWindow):
         diagnostic = False
         cfg = None
         if fmt == "iso":
-            prof = MachineProfile(**self.project.export_configs.get("iso", {})) if self.project.export_configs.get(
-                "iso") else MachineProfile()
-            if not prof.verified:
+            from PySide6.QtWidgets import QInputDialog
+
+            from ..exporters.iso import bullmer_grafis_profile
+            choices = [tr("iso_bullmer"), tr("iso_diagnostic")]
+            choice, ok = QInputDialog.getItem(self, tr("export_iso"), tr("iso_machine"), choices, 0, False)
+            if not ok:
+                return
+            if choice == choices[0]:
+                prof = bullmer_grafis_profile()
+                if not prof.device_tested and QMessageBox.question(
+                        self, tr("export_iso"), tr("iso_not_device_tested")) != QMessageBox.Yes:
+                    return
+            else:
+                prof = MachineProfile()
                 if QMessageBox.question(self, tr("export_iso"), tr("not_configured_iso")) != QMessageBox.Yes:
                     return
                 diagnostic = True

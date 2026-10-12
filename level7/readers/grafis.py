@@ -63,6 +63,14 @@ def _build_piece_geometry(payload: bytes, size_name: str, src: str, issues: list
         ring = ring[::-1]
     cut_ids = set(contour.oids)
     g = PieceGeometry(size=size_name, cut=ring, source=src)
+    by_oid = {e.oid: e for e in polys}
+    for oid in contour.oids:
+        e = by_oid.get(oid)
+        if e is None:
+            continue
+        for q in (e.points[0], e.points[-1]):
+            if all(math.dist(q, c) > 0.01 for c in g.corners):
+                g.corners.append(tuple(q))
     g.completeness = {"cut": cut_status, "cut_method": cut_source}
     # style -7 = seam line; style -6 = net contour lying ON the cut line (no allowance, e.g. hem):
     # GRAFIS does not export -6 as seam (verified against its DXF), so it is not a separate seam line.

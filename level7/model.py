@@ -61,6 +61,7 @@ class PieceGeometry:
     """Geometry of one piece in one size."""
     size: str
     cut: list[Point]                                       # outer cut contour (closed, no repeated point)
+    corners: list[Point] = field(default_factory=list)      # junctions between cut-line elements (corners)
     holes: list[list[Point]] = field(default_factory=list)  # internal cut-outs
     seam: list[Polyline] = field(default_factory=list)
     internal: list[Polyline] = field(default_factory=list)

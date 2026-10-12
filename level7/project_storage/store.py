@@ -56,7 +56,7 @@ def _poly(d):
 
 def _geom(d) -> PieceGeometry:
     return PieceGeometry(
-        size=d["size"], cut=_pts(d["cut"]), holes=[_pts(h) for h in d.get("holes", [])],
+        size=d["size"], cut=_pts(d["cut"]), corners=_pts(d.get("corners", [])), holes=[_pts(h) for h in d.get("holes", [])],
         seam=[_poly(s) for s in d.get("seam", [])], internal=[_poly(s) for s in d.get("internal", [])],
         notches=[Notch(tuple(n["position"]), tuple(n["direction"]) if n.get("direction") else None,
                        n.get("length", 5.0), n.get("source_id")) for n in d.get("notches", [])],

@@ -98,6 +98,9 @@ def cmd_export(a):
     proj = load_project(a.project)
     m = proj.markers[a.marker]
     cfg = None
+    if a.format == "iso" and a.iso_preset:
+        from .exporters.iso import ISO_PRESETS
+        cfg = ISO_PRESETS[a.iso_preset]()
     if a.format == "plt" and a.plt_preset:
         from .exporters.plt import PRESETS
         cfg = PRESETS[a.plt_preset]()
@@ -139,6 +142,7 @@ def main(argv=None):
     s.add_argument("--config")
     s.add_argument("--diagnostic", action="store_true")
     s.add_argument("--plt-preset", choices=("generic", "algotex_grafis"))
+    s.add_argument("--iso-preset", choices=("unconfigured", "bullmer_grafis"))
     s.add_argument("-o", "--output", required=True)
     s.set_defaults(fn=cmd_export)
     a = ap.parse_args(argv)

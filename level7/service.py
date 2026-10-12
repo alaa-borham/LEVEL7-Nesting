@@ -88,7 +88,8 @@ def allowed_rotation_map(proj: Project, settings: NestSettings) -> dict:
     return out
 
 
-def export_marker(proj: Project, marker: Marker, fmt: str, path: str, config=None, diagnostic_iso: bool = False):
+def export_marker(proj: Project, marker: Marker, fmt: str, path: str, config=None, diagnostic_iso: bool = False,
+                  job_name: str | None = None):
     from .exporters.scene import marker_scene
     sc = marker_scene(proj, marker)
     if fmt == "plt":
@@ -99,5 +100,6 @@ def export_marker(proj: Project, marker: Marker, fmt: str, path: str, config=Non
         return write_dxf(sc, path)
     if fmt == "iso":
         from .exporters.iso import write_iso
-        return write_iso(sc, path, config, diagnostic=diagnostic_iso)
+        name = job_name or os.path.splitext(os.path.basename(path))[0]
+        return write_iso(sc, path, config, diagnostic=diagnostic_iso, job_name=name)
     raise ValueError(fmt)

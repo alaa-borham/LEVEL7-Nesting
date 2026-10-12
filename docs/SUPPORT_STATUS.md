@@ -42,7 +42,10 @@ GRAFIS options: "Right-Left" spreading = LEVEL7 open lay with mirrored copies; "
 * DXF: generic R2000, mm, separate layers; vertex-exact. Not labelled AAMA/ASTM.
 * DXF import: generic + GRAFIS DXF exports (blocks exploded, layer 1 cut with notch spikes, layer 8
   seam). GRAFIS' marker DXF has no grain lines → grain must be set per piece before nesting.
-* ISO: **not configured** — only a diagnostic preview (marked NOT FOR PRODUCTION).
+* ISO **Bullmer** (GRAFIS "Bullmer-Cutter (typical)" compatible): reproduces GRAFIS' cut file for the
+  reference marker line for line (1308/1318 coordinates identical, rest ±0.1 mm; same starts, direction,
+  notch plunges) — only the piece order differs. See docs/BULLMER_ISO.md. Not yet test-cut on the machine.
+* ISO other machines: diagnostic preview only (marked NOT FOR PRODUCTION).
 
 ## Windows
 The CI workflow builds and tests on `windows-2022` (PyInstaller + Inno Setup Setup.exe, silent install,
@@ -56,10 +59,8 @@ desktop shortcut check). Results are only claimed for runs that actually passed 
 3. ~~The 1500 mm GRAFIS marker as SCB~~ — received; decoded with the same rules and identical to GRAFIS.
 4. ~~GRAFIS PLT for the plotter~~ — received (Algotex); profile implemented and compared. Still needed:
    **cut/plot `examples/calibration_1000mm_square_algotex.plt` on the Algotex and measure it.**
-5. Cutting machine: **Bullmer (Germany)** — received. No public specification of the Bullmer cut-file
-   dialect was found, so nothing is assumed. Still needed: **the exact model / control software version
-   and the cut file GRAFIS writes for the Bullmer for the same 44/1500 marker** (any extension: .iso, .cut,
-   .nc …) → the ISO post-processor is built and tested against it exactly like the Algotex PLT profile.
+5. ~~Bullmer reference cut file~~ — received (GRAFIS "Bullmer-Cutter (typical)"); profile implemented and
+   matched. Still needed: **a test cut of `examples/nested_1500_bullmer.iso` (or any marker) on the Bullmer.**
    Second cutter: **IECHO (China)** — its control software (CutterServer) is reported to import common CAD
    formats, but no official format list was found. Needed: model + the file GRAFIS writes for the IECHO
    (or the format chosen in CutterServer). If it accepts PLT or DXF, the existing verified exports may

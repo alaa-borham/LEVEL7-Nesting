@@ -83,6 +83,9 @@ def main():
     for m in proj.markers:
         tag = "original_1430" if m.origin == "original" else f"nested_{m.fabric.width:g}"
         write_plt(marker_scene(proj, m), os.path.join(ex, f"{tag}_algotex.plt"), algotex_grafis_config())
+        from level7.exporters.iso import bullmer_grafis_profile, write_iso as _wi
+        _wi(marker_scene(proj, m), os.path.join(ex, f"{tag}_bullmer.iso"), bullmer_grafis_profile(),
+            job_name=f"{proj.name}-{tag}")
     sq = Scene(paths=[Path("CUT", [(0, 0), (1000, 0), (1000, 1000), (0, 1000)], True)])
     write_plt(sq, os.path.join(ex, "calibration_1000mm_square.plt"))
     pts = read_plt(os.path.join(ex, "calibration_1000mm_square.plt"))[0][0].points

@@ -18,6 +18,7 @@ class Path:
     points: list[tuple[float, float]]
     closed: bool = False
     owner: str | None = None   # placement uid
+    corners: list = field(default_factory=list)   # CUT only: element junctions (preferred cut start points)
 
 
 @dataclass
@@ -59,7 +60,8 @@ def marker_scene(project: Project, marker: Marker, include_labels: bool = True, 
             continue
         piece = project.piece(pl.piece_uid)
         g = piece.sizes[pl.size]
-        sc.paths.append(Path("CUT", placement_points(g.cut, pl), True, pl.uid))
+        sc.paths.append(Path("CUT", placement_points(g.cut, pl), True, pl.uid,
+                             placement_points(g.corners, pl) if g.corners else []))
         for h in g.holes:
             sc.paths.append(Path("CUT", placement_points(h, pl), True, pl.uid))
         for s in g.seam:
