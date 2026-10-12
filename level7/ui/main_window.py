@@ -7,7 +7,7 @@ import os
 import threading
 import traceback
 
-from PySide6.QtCore import QSettings, Qt, QThread, Signal
+from PySide6.QtCore import QSettings, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QAction, QKeySequence, QUndoCommand, QUndoStack
 from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
                                QDockWidget, QDoubleSpinBox, QFileDialog, QFormLayout, QHBoxLayout, QHeaderView,
@@ -290,6 +290,7 @@ class MainWindow(QMainWindow):
         self.m_help.addAction(self._act("check_updates", self.check_updates))
         self.act_auto_upd = self._act("auto_updates", self._set_auto_updates, checkable=True, checked=True)
         self.m_help.addAction(self.act_auto_upd)
+        self.m_help.addAction(self._act("open_logs", self.open_logs))
         self.m_help.addSeparator()
         self.m_help.addAction(self._act("about", self.about))
         self._build_toolbar(undo, redo)
@@ -721,6 +722,8 @@ class MainWindow(QMainWindow):
         if not self.project or (self.worker and self.worker.isRunning()):
             return
         self.read_tables()
+        if not self._ensure_geometry():
+            return
         fabric = self.fabric_from_form()
         st = self.nest_settings_from_form()
         self.project.nest_settings = st
@@ -733,6 +736,38 @@ class MainWindow(QMainWindow):
         self._nest_ui(True)
         self.worker.start()
 
+    def _ensure_geometry(self) -> bool:
+        """Selected sizes without geometry (an SCB holds only some sizes): offer to load them from the MDL."""
+        from ..service import missing_geometry, supplement_from_model
+        co = self.project.cut_order
+        sizes = [s for s, q in co.size_quantities.items() if q > 0]
+        used = {u for u, (n, m) in co.piece_counts.items() if n + m > 0}
+        miss = {s: [p.name for p in self.project.pieces if p.uid in used and s not in p.sizes] for s in sizes}
+        miss = {s: v for s, v in miss.items() if v}
+        if not miss:
+            return True
+        r = QMessageBox.question(self, tr("run"), tr("missing_sizes", s=", ".join(sorted(miss))),
+                                 QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel)
+        if r == QMessageBox.Cancel:
+            return False
+        if r == QMessageBox.Yes:
+            start = os.path.dirname(self.project.sources[0].path) if self.project.sources else ""
+            path, _ = QFileDialog.getOpenFileName(self, tr("open"), start, "GRAFIS model (*.mdl *.MDL)")
+            if not path:
+                return False
+            try:
+                n = supplement_from_model(self.project, path)
+            except Exception as exc:
+                QMessageBox.warning(self, tr("run"), str(exc))
+                return False
+            self.statusBar().showMessage(tr("sizes_loaded", n=n, p=os.path.basename(path)))
+            self.load_tables()
+            self.read_tables()
+            left = {s for s in sizes for p in self.project.pieces if p.uid in used and s not in p.sizes}
+            if left:
+                QMessageBox.warning(self, tr("run"), tr("missing_sizes_left", s=", ".join(sorted(left))))
+        return True
+
     def _nest_ui(self, running):
         self.btn_run.setEnabled(not running)
         self.btn_stop.setEnabled(running)
@@ -743,12 +778,23 @@ class MainWindow(QMainWindow):
         if self.worker and self.worker.isRunning():
             self.worker.stop_event.set()
 
+    PREVIEW_INTERVAL_MS = 600
+
     def on_progress(self, d):
+        """Live preview, coalesced: at most one redraw per PREVIEW_INTERVAL_MS however fast results arrive."""
         self.statusBar().showMessage(tr("running", len=d["length"], ev=d["evaluations"], t=d["elapsed"]))
-        r = d.get("result")
-        if r is not None and not d.get("final"):
-            tmp = Marker(name="(running)", fabric=self.fabric_from_form(), placements=r.placements, length=r.length)
-            self.view.show_marker(self.project, tmp)
+        if d.get("result") is not None and not d.get("final"):
+            first = getattr(self, "_pending_preview", None) is None
+            self._pending_preview = d["result"]
+            if first:
+                QTimer.singleShot(self.PREVIEW_INTERVAL_MS, self._draw_preview)
+
+    def _draw_preview(self):
+        r, self._pending_preview = getattr(self, "_pending_preview", None), None
+        if r is None or not (self.worker and self.worker.isRunning()):
+            return
+        tmp = Marker(name="(running)", fabric=self.fabric_from_form(), placements=r.placements, length=r.length)
+        self.view.show_marker(self.project, tmp)
 
     def on_finished(self, marker, info):
         self._nest_ui(False)
@@ -885,6 +931,12 @@ class MainWindow(QMainWindow):
             cfg.dialect, cfg.text_mode, cfg.merge_notches = dialect.currentText(), tmode.currentText(), merge.isChecked()
             cfg.pens = {k: s.value() for k, s in pens.items()}
             self.project.export_configs["plt"] = asdict(cfg)
+
+    def open_logs(self):
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        from .app import log_dir
+        QDesktopServices.openUrl(QUrl.fromLocalFile(log_dir()))
 
     def about(self):
         QMessageBox.information(self, tr("about"), (

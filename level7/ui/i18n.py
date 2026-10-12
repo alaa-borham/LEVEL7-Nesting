@@ -154,6 +154,13 @@ T = {
     "tb_pieces_table": ("Pieces", "القطع"), "tb_run": ("Nest", "تعشيق"), "tb_stop": ("Stop", "إيقاف"),
     "tb_export_plt": ("PLT", "PLT"), "tb_export_dxf": ("DXF", "DXF"), "tb_export_iso": ("ISO", "ISO"),
     "tb_language": ("العربية", "English"),
+    "missing_sizes": ("These sizes have no geometry in the opened file (a GRAFIS marker file stores only some "
+                      "sizes): {s}\n\nLoad them from the model file (MDL)?\nYes = choose the MDL, No = nest without them",
+                      "هذه المقاسات ليس لها أشكال في الملف المفتوح (ملف الماركر SCB يحفظ بعض المقاسات فقط): {s}\n\n"
+                      "هل تريد تحميلها من ملف الموديل (MDL)؟\nنعم = اختيار ملف MDL، لا = التعشيق بدونها"),
+    "missing_sizes_left": ("Still without geometry (not in this MDL): {s}", "ما زالت بدون أشكال (غير موجودة في هذا الـ MDL): {s}"),
+    "sizes_loaded": ("{n} piece sizes loaded from {p}", "تم تحميل {n} قطعة/مقاس من {p}"),
+    "open_logs": ("Open log folder (send hang.log / errors.log to support)", "فتح مجلد السجلات (أرسل hang.log / errors.log للدعم)"),
     "cancel": ("Cancel", "إلغاء"),
 }
 

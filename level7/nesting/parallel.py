@@ -17,7 +17,22 @@ from ..model import FabricSettings, NestSettings
 from .engine import NestEngine, NestItem, NestResult
 
 
+def _lower_priority():
+    """Search processes run below normal priority so the desktop and the LEVEL7 window stay responsive."""
+    try:
+        if os.name == "nt":
+            import ctypes
+            BELOW_NORMAL_PRIORITY_CLASS = 0x00004000
+            ctypes.windll.kernel32.SetPriorityClass(ctypes.windll.kernel32.GetCurrentProcess(),
+                                                    BELOW_NORMAL_PRIORITY_CLASS)
+        else:
+            os.nice(5)
+    except Exception:
+        pass
+
+
 def _worker(items, fabric, settings, stop, q, wid):
+    _lower_priority()
     def prog(d):
         try:
             q.put(("progress", wid, {k: v for k, v in d.items() if k != "final"}))
@@ -52,7 +67,8 @@ def _better(a: NestResult | None, b: NestResult) -> bool:
 
 def run_parallel(items: list[NestItem], fabric: FabricSettings, settings: NestSettings, workers: int | None = None,
                  progress=None, stop_event: threading.Event | None = None) -> NestResult:
-    workers = workers or max(1, min(4, (os.cpu_count() or 2)))
+    # one core is left free for the user interface
+    workers = workers or max(1, min(4, (os.cpu_count() or 2) - 1))
     if workers == 1:
         return NestEngine(items, fabric, settings, progress=progress, stop_event=stop_event).run()
     ctx = mp.get_context("spawn")

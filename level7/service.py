@@ -19,7 +19,13 @@ def open_any(path: str) -> tuple[Project, list[str]]:
         proj = res.project
         if ext == ".mdl" or not proj.cut_order.piece_counts:
             proj.cut_order = default_cut_order(proj)
-        return proj, res.issues
+        issues = list(res.issues)
+        if ext == ".scb" and missing_geometry(proj):
+            mdl = find_model_file(path, proj)
+            if mdl:
+                n = supplement_from_model(proj, mdl)
+                issues.append(f"{n} piece sizes missing in the SCB were loaded from the model file {mdl}")
+        return proj, issues
     if ext == ".dxf":
         if _is_aama(path):
             from .readers.aama import read_aama
@@ -30,6 +36,72 @@ def open_any(path: str) -> tuple[Project, list[str]]:
         from .project_storage.store import load_project
         return load_project(path), []
     raise ValueError(f"unsupported file type: {ext}")
+
+
+def missing_geometry(proj: Project, sizes=None) -> dict[str, list[str]]:
+    """{size: [piece names]} for production pieces that have no geometry in a size (requested or known)."""
+    sizes = list(sizes) if sizes is not None else list(proj.size_names)
+    out: dict[str, list[str]] = {}
+    for p in proj.pieces:
+        if not p.production:
+            continue
+        for s in sizes:
+            if s not in p.sizes:
+                out.setdefault(s, []).append(p.name)
+    return out
+
+
+def find_model_file(scb_path: str, proj: Project) -> str | None:
+    """The GRAFIS model (MDL) belonging to an SCB: the MODEL name stored in the SCB, else an MDL in the same
+    folder that contains the same part IDs."""
+    folder = os.path.dirname(os.path.abspath(scb_path))
+    model = (proj.sbinfo or {}).get("MODEL", "")
+    if model:
+        cand = os.path.join(folder, os.path.basename(model.replace("\\", "/")))
+        if os.path.isfile(cand):
+            return cand
+    ids = {p.source_id for p in proj.pieces if p.source_id}
+    try:
+        names = sorted(f for f in os.listdir(folder) if f.lower().endswith(".mdl"))
+    except OSError:
+        return None
+    from .formats.grafis.container import read_container
+    from .formats.grafis.textsections import parse_text
+    for f in names:
+        full = os.path.join(folder, f)
+        try:
+            cont = read_container(full)
+            tb = cont.by_id().get((2, 1, 0, 0))
+            if tb is not None and ids & {t.piece_id for t in parse_text(tb.payload).tlist}:
+                return full
+        except Exception:
+            continue
+    return None
+
+
+def supplement_from_model(proj: Project, mdl_path: str) -> int:
+    """Copy sizes that are missing in the project's pieces from the model file (matched by GRAFIS part ID,
+    else part number). Returns the number of piece sizes added."""
+    from .readers.grafis import read_grafis
+    model = read_grafis(mdl_path).project
+    by_id = {p.source_id: p for p in model.pieces if p.source_id}
+    by_num = {p.number: p for p in model.pieces if p.number is not None}
+    added = 0
+    for p in proj.pieces:
+        src = by_id.get(p.source_id) or by_num.get(p.number)
+        if src is None:
+            continue
+        for s, g in src.sizes.items():
+            if s not in p.sizes:
+                p.sizes[s] = g
+                added += 1
+        if p.grain_angle is None:
+            p.grain_angle = src.grain_angle
+    for s in model.size_names:
+        if s not in proj.size_names:
+            proj.size_names.append(s)
+    proj.sources.extend(src for src in model.sources if src.path not in {x.path for x in proj.sources})
+    return added
 
 
 def _is_aama(path: str) -> bool:

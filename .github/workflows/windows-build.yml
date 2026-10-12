@@ -23,7 +23,15 @@ jobs:
 
       - name: Build number (version 0.2.<run number>)
         shell: pwsh
-        run: '"BUILD = ${{ github.run_number }}" | Out-File -Encoding ascii level7/_build.py'
+        env:
+          PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
+        run: |
+          "BUILD = ${{ github.run_number }}" | Out-File -Encoding ascii level7/_build.py
+          if ($env:PUBLIC_URL) {
+            $u = $env:PUBLIC_URL.TrimEnd('/')
+            "UPDATE_URL = `"$u/latest.json`"" | Out-File -Append -Encoding ascii level7/_build.py
+          }
+          Get-Content level7/_build.py
 
       - name: Install dependencies
         run: |
@@ -115,3 +123,34 @@ jobs:
           gh release create "v$ver" $setup.FullName SHA256SUMS.txt --repo $env:GITHUB_REPOSITORY `
             --title "LEVEL7 Nesting $ver" --notes-file notes.txt --target $env:GITHUB_SHA --latest
           if ($LASTEXITCODE -ne 0) { throw "release failed" }
+
+      - name: Publish to own download host (Cloudflare R2)
+        if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && vars.R2_BUCKET != ''
+        shell: pwsh
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: WHEN_REQUIRED
+          AWS_RESPONSE_CHECKSUM_VALIDATION: WHEN_REQUIRED
+          R2_ENDPOINT: https://${{ vars.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
+          PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
+        run: |
+          $setup = Get-ChildItem dist\installer\*-Setup.exe | Select-Object -First 1
+          python tools/make_download_site.py $setup.FullName $env:PUBLIC_URL site --notes notes.txt
+          if ($LASTEXITCODE -ne 0) { throw "site generation failed" }
+          function Put($file, $key, $type, $cache) {
+            aws s3 cp $file "s3://$env:R2_BUCKET/$key" --endpoint-url $env:R2_ENDPOINT --content-type $type --cache-control $cache --only-show-errors
+            if ($LASTEXITCODE -ne 0) { throw "upload of $key failed" }
+          }
+          # installer first, manifest last: the manifest never points to a file that is not there yet
+          Put $setup.FullName $setup.Name "application/octet-stream" "public, max-age=31536000, immutable"
+          Put $setup.FullName "LEVEL7Nesting-Setup.exe" "application/octet-stream" "no-cache"
+          Put "site\index.html" "index.html" "text/html; charset=utf-8" "no-cache"
+          Put "site\latest.json" "latest.json" "application/json; charset=utf-8" "no-cache"
+          $u = $env:PUBLIC_URL.TrimEnd('/')
+          try {
+            $m = Invoke-RestMethod "$u/latest.json" -Headers @{ "Cache-Control" = "no-cache" }
+            Write-Host "published $($m.version) -> $u/index.html"
+          } catch { Write-Warning "uploaded, but $u/latest.json is not readable yet: $_" }
