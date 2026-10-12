@@ -60,4 +60,8 @@ desktop shortcut check). Results are only claimed for runs that actually passed 
    dialect was found, so nothing is assumed. Still needed: **the exact model / control software version
    and the cut file GRAFIS writes for the Bullmer for the same 44/1500 marker** (any extension: .iso, .cut,
    .nc …) → the ISO post-processor is built and tested against it exactly like the Algotex PLT profile.
+   Second cutter: **IECHO (China)** — its control software (CutterServer) is reported to import common CAD
+   formats, but no official format list was found. Needed: model + the file GRAFIS writes for the IECHO
+   (or the format chosen in CutterServer). If it accepts PLT or DXF, the existing verified exports may
+   suffice; this is NOT assumed until a test cut confirms it.
 6. **What the symbol codes (e.g. 221, 311) mean in your GRAFIS setup** → drill holes vs. reference marks.
