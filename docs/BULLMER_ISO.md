@@ -23,8 +23,8 @@ Rules confirmed against all 28 pieces of the reference:
   bounding box (28/28);
 * vertices closer than **2.0 mm** to the previous kept vertex are omitted (kept ≥ 2.3 mm, dropped ≤ 1.73 mm in
   the reference); a notch on an omitted vertex is cut from the last kept vertex;
-* no drill commands occur in the reference although "set drill holes" was on → the symbols in these
-  pieces are not exported as drill holes by GRAFIS.
+* no drill commands occur in the reference although "set drill holes" was on → consistent with the symbols
+  being measurement annotations (values = #TFLIST), not drill holes.
 
 ## Verification (`tests/test_grafis_reference_bullmer.py`)
 LEVEL7's file for the same marker (geometry read from the SCB only): same header/job line/end, same block

@@ -99,6 +99,15 @@ class PieceItem(QGraphicsPathItem):
         if o["grain"] and g.grain is not None:
             self._child(placement_points(g.grain.points, pl), False, QPen(self._inner_colour(QColor(0, 0, 200)), 0))
         if o["symbols"]:
+            for ms in g.measures:
+                x, y = placement_points([ms.position], pl)[0]
+                t = QGraphicsSimpleTextItem(ms.text, self)
+                t.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
+                t.setFont(QFont("Segoe UI", 7))
+                t.setBrush(QBrush(QColor(160, 0, 160)))
+                t.setPos(x, y)
+                t.setAcceptedMouseButtons(Qt.NoButton)
+                self.children_items.append(t)
             for dr in g.drills:
                 x, y = placement_points([dr.position], pl)[0]
                 p = QPainterPath()

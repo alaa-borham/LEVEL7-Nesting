@@ -12,7 +12,7 @@
 | Grain line, size texts — all 15 sizes | identical to GRAFIS piece DXF exports (parts 007, 009, 010, 011, 012) |
 | Cut contours of all 14 sizes + base | **confirmed** against GRAFIS' AAMA export (DXF + RUL): all 165 grade points × 14 sizes lie on LEVEL7's MDL contours within 0.007 mm (RUL precision); base identical (< 0.001 mm) |
 | Internal lines | read; not yet compared with a GRAFIS export |
-| Symbols (kind 6) | position + code read; meaning unknown → layer MARK only, never drilled/cut |
+| Symbols (kind 6) | **confirmed: measurement annotations** — all 615 values equal the #TFLIST measurement of the same size (e.g. "414", "I=342", "300 (2*)"); layer MEASURE (screen/DXF only), never plotted, drilled or cut. GRAFIS exports no drill holes for them (Bullmer ISO, AAMA) |
 | SCB placements: position, rotation, mirror, bundle, copies | reproduced exactly (efficiency/area/length = GRAFIS) |
 | Spline definitions, construction program | not read (GRAFIS stores evaluated polylines, which are used) |
 | Writing MDL/SCB | not supported (format not proven) |
@@ -69,4 +69,5 @@ desktop shortcut check). Results are only claimed for runs that actually passed 
    matched. Still needed: **a test cut of `examples/nested_1500_bullmer.iso` (or any marker) on the Bullmer.**
    Second cutter: **IECHO (China)** — the user feeds it the same file GRAFIS writes for the Bullmer, so
    LEVEL7 offers an "IECHO" profile that writes exactly the Bullmer file. Needs its own test cut on the IECHO.
-6. **What the symbol codes (e.g. 221, 311) mean in your GRAFIS setup** → drill holes vs. reference marks.
+6. ~~Meaning of the symbol codes (e.g. 221, 311)~~ — resolved from the data: they are measurement values
+   (equal to the GRAFIS measurement table, 615/615), not drill holes.

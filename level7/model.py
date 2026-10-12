@@ -66,7 +66,8 @@ class PieceGeometry:
     seam: list[Polyline] = field(default_factory=list)
     internal: list[Polyline] = field(default_factory=list)
     notches: list[Notch] = field(default_factory=list)
-    drills: list[Drill] = field(default_factory=list)
+    drills: list[Drill] = field(default_factory=list)      # drill holes (none in the GRAFIS samples)
+    measures: list[Label] = field(default_factory=list)    # GRAFIS measurement annotations (symbol kind 6)
     grain: Polyline | None = None                           # grain line as read (None = unknown)
     labels: list[Label] = field(default_factory=list)
     source_unit: str = "mm"

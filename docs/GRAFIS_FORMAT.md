@@ -57,7 +57,8 @@ pool: per record in order: [16 B aux if flag==2] + count × 8 B
   (0, 0.4); f32 angle in **radians** at +32; text string at +48. GRAFIS inserts the text at
   origin + R(angle)·(5, −(h+5)) (frame = h + 2×5 mm); on mirrored copies at origin + R(angle)·(5, −5) turned
   180° (C: identical in all 15 sizes of the piece DXF exports and in the 44/1500 marker DXF).
-* kind 6: position = degenerate bbox (C), code text (e.g. "221"), sub-lines (cross/square) — meaning U.
+* kind 6: position = degenerate bbox (C), value text (e.g. "221", "I=342", "300 (2*)"), sub-lines (cross/square) — **measurement annotation (C)**:
+  every value equals the #TFLIST measurement of the same size (615/615 in the sample MDL).
 * style: `0` = cut line — written by GRAFIS into the SCB for the nested size only (C);
   `-7` seam line (C, = GRAFIS DXF layer 8); `-6` net contour lying on the cut line, not exported as
   seam (C); `-3` grain arrow (C: identical to GRAFIS' piece DXF exports in all 15 grading entries); `1` other lines.

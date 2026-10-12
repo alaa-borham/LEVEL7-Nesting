@@ -39,7 +39,8 @@ def test_plt_marker_roundtrip_and_tool_separation(scb, tmp_path):
     assert max(_maxdev(a, b) for a, b in zip(cut_src, cut_out)) <= math.sqrt(2) * 0.5 / cfg.units_per_mm + 1e-9  # x/y quantisation
     # seam / internal / text never on the cutting pen
     assert cfg.pens["SEAM"] != cfg.pens["CUT"] and cfg.pens["TEXT"] != cfg.pens["CUT"]
-    assert len(labels) == len(sc.texts) and all(pen == cfg.pens["TEXT"] for pen, _ in labels)
+    plotted = [t for t in sc.texts if t.layer in cfg.text_layers]      # MEASURE is not plotted by default
+    assert len(labels) == len(plotted) and all(pen == cfg.pens["TEXT"] for pen, _ in labels)
     n_seam = sum(1 for p in sc.paths if p.layer in ("SEAM", "INTERNAL"))
     assert sum(1 for p in paths if p.pen == cfg.pens["SEAM"]) == n_seam
 
@@ -56,7 +57,7 @@ def test_dxf_roundtrip_exact(scb, tmp_path):
     for p, (pts, closed) in zip(src, got["CUT"]):
         assert closed and _maxdev(p.points, pts) < 1e-9
     assert {"SEAM", "NOTCH", "GRAIN", "INTERNAL"} <= set(got)
-    assert all(t.dxf.layer in ("TEXT", "PIECE_NAME") for t in doc.modelspace().query("TEXT"))
+    assert all(t.dxf.layer in ("TEXT", "PIECE_NAME", "MEASURE") for t in doc.modelspace().query("TEXT"))
 
 
 def test_dxf_1000mm(tmp_path):

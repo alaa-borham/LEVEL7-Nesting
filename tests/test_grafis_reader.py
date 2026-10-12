@@ -120,3 +120,14 @@ def test_units_millimetres_evidence(mdl):
     d = next(r for r in t2.rows if r[0] == "T2M4")
     assert d[1] == "mm" and d[3][9] == "1040"
     _ = math
+
+
+def test_symbols_are_measurement_annotations_not_drill_holes():
+    import re
+    from level7.readers.grafis import read_grafis
+    proj = read_grafis(MDL).project
+    ms = [m.text for p in proj.pieces for g in p.sizes.values() for m in g.measures]
+    assert len(ms) == 615
+    assert all(re.fullmatch(r"([A-Z]=)?\d+(\.\d+)?( \(\d+\*\))?", t) for t in ms)
+    # measures are never turned into drill holes
+    assert all(not g.drills for p in proj.pieces for g in p.sizes.values())

@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from ..geometry import bbox, placement_points
 from ..model import Marker, Project
 
-LAYERS = ("CUT", "SEAM", "INTERNAL", "NOTCH", "MARK", "GRAIN", "TEXT", "PIECE_NAME", "BORDER")
+LAYERS = ("CUT", "SEAM", "INTERNAL", "NOTCH", "MARK", "GRAIN", "TEXT", "PIECE_NAME", "MEASURE", "BORDER")
 
 
 @dataclass
@@ -48,12 +48,15 @@ class Scene:
     length: float = 0.0
 
     def extent(self):
-        pts = [p for path in self.paths for p in path.points] + [t.position for t in self.texts]
+        # measurement annotations may lie outside the piece (GRAFIS places them freely); they are never
+        # plotted or cut by default, so they do not define the marker extent
+        pts = [p for path in self.paths for p in path.points] + \
+              [t.position for t in self.texts if t.layer != "MEASURE"]
         return bbox(pts) if pts else (0.0, 0.0, 0.0, 0.0)
 
 
 def marker_scene(project: Project, marker: Marker, include_labels: bool = True, include_border: bool = True,
-                 label_size: bool = True) -> Scene:
+                 label_size: bool = True, include_measures: bool = True) -> Scene:
     sc = Scene(width=marker.fabric.width, length=marker.length)
     for pl in marker.placements:
         if not pl.placed:
@@ -75,6 +78,10 @@ def marker_scene(project: Project, marker: Marker, include_labels: bool = True, 
             sc.paths.append(Path("NOTCH", placement_points([a, b], pl), False, pl.uid))
         for dr in g.drills:
             sc.points.append(Point("MARK", placement_points([dr.position], pl)[0], dr.code, pl.uid))
+        if include_measures:
+            for ms in g.measures:     # drawing/DXF information only; never cut, drilled or plotted by default
+                sc.texts.append(Text("MEASURE", ms.text, placement_points([ms.position], pl)[0], 8.0, pl.uid,
+                                     pl.rotation % 360.0))
         if g.grain is not None:
             sc.paths.append(Path("GRAIN", placement_points(g.grain.points, pl), False, pl.uid))
         for lb in g.labels:

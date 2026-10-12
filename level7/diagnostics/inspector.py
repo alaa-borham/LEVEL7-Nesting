@@ -98,8 +98,9 @@ def inspect_file(path: str, encoding: str = "cp1256") -> dict:
                                     "line at y=-1040 and T2M4/T5M4 = 1040 for size 44; SCB WIDTH 1430 equals the "
                                     "max Y of the reconstructed marker; front length ~1135 is realistic only in mm")
         findings["probable"].append("style -7/-6 = seam (net) line, -3 = grain line, 2-point flagged style 1 = notch")
-        findings["unknown"].append("symbol elements (kind 6): position and code text read; meaning (drill hole, "
-                                   "reference mark, ...) unknown -> exported only on layer MARK")
+        findings["confirmed"].append("symbol elements (kind 6) are measurement annotations: their value equals the "
+                                     "#TFLIST measurement of the same part and size (615/615); GRAFIS exports no "
+                                     "drill holes for them (Bullmer ISO, AAMA layer 13)")
         findings["unknown"].append("construction data blocks (3,k,2..6) are not interpreted; only evaluated geometry")
         findings["unsupported"].append("writing MDL/SCB files")
         findings["unsupported"].append("curve definitions: GRAFIS stores evaluated polylines; original spline "

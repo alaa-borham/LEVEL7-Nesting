@@ -1,6 +1,6 @@
 # Test results
 
-## Automated tests (`python -m pytest -q`) — 48 passed
+## Automated tests (`python -m pytest -q`) — 49 passed
 Linux (Python 3.13, dev container) and Windows (GitHub Actions `windows-2022`, Python 3.12;
 see the `windows-build` workflow runs for the current status).
 
@@ -13,6 +13,7 @@ see the `windows-build` workflow runs for the current status).
 | Geometry | 4155 polylines | points == stored bbox (both files) |
 | Geometry | MDL vs GRAFIS cut flags | identical contours for 9/9 placed parts (size 44) |
 | Geometry | grading | per-size areas increase; non-uniform scaling |
+| Geometry | kind-6 symbols | 615 measurement annotations (values = GRAFIS measurement table); no drill holes |
 | Geometry | grain, units | grain read for all production parts; mm evidence |
 | Marker | original reconstruction | valid, eff 83.86 %, 3.51 m², 2929.93 mm |
 | Marker | types vs copies | 9 types, 28 copies, mirrored = bundles × mirror column (independent of #SBTLIST) |

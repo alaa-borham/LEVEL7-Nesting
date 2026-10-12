@@ -11,7 +11,7 @@ import ezdxf
 
 from .scene import LAYERS, Scene
 
-LAYER_COLORS = {"CUT": 7, "SEAM": 3, "INTERNAL": 8, "NOTCH": 1, "MARK": 6, "GRAIN": 5, "TEXT": 2, "PIECE_NAME": 2, "BORDER": 4}
+LAYER_COLORS = {"CUT": 7, "SEAM": 3, "INTERNAL": 8, "NOTCH": 1, "MARK": 6, "GRAIN": 5, "TEXT": 2, "PIECE_NAME": 2, "MEASURE": 8, "BORDER": 4}
 
 
 def write_dxf(scene: Scene, path: str, dxfversion: str = "R2000") -> dict:

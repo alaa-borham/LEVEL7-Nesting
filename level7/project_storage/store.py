@@ -61,6 +61,7 @@ def _geom(d) -> PieceGeometry:
         notches=[Notch(tuple(n["position"]), tuple(n["direction"]) if n.get("direction") else None,
                        n.get("length", 5.0), n.get("source_id")) for n in d.get("notches", [])],
         drills=[Drill(tuple(x["position"]), x.get("code"), x.get("source_id")) for x in d.get("drills", [])],
+        measures=[Label(x["text"], tuple(x["position"]), x.get("height", 0.0)) for x in d.get("measures", [])],
         grain=_poly(d["grain"]) if d.get("grain") else None,
         labels=[Label(x["text"], tuple(x["position"]), x.get("height", 10.0),
                       tuple(x["box"]) if x.get("box") else None, x.get("angle", 0.0))

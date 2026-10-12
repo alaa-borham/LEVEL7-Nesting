@@ -127,9 +127,11 @@ def _build_piece_geometry(payload: bytes, size_name: str, src: str, issues: list
         elif e.kind == KIND_SYMBOL:
             pos = symbol_position(e)
             if pos:
-                g.drills.append(Drill(pos, e.text or None, str(e.oid)))
+                # kind 6 = measurement annotation: its value equals the #TFLIST measurement of the same
+                # size (615/615 in the sample MDL); GRAFIS exports no drill holes for them (Bullmer, AAMA)
+                g.measures.append(Label(e.text or "", pos, 0.0))
     g.completeness["labels"] = Status.PROBABLE.value if g.labels else Status.UNKNOWN.value
-    g.completeness["symbols"] = "position read; symbol meaning unknown" if g.drills else Status.UNKNOWN.value
+    g.completeness["measures"] = Status.CONFIRMED.value if g.measures else Status.UNKNOWN.value
     return g
 
 
