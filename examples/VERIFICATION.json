@@ -1,0 +1,196 @@
+{
+ "read_issues": [],
+ "markers": {
+  "original_scb": {
+   "validation": "valid: 28 placements, no overlap/out-of-bounds/orientation issues",
+   "length_mm": 2929.930428504944,
+   "width_mm": 1430.0,
+   "usable_width_mm": 1430.0,
+   "pieces_area_m2": 3.5137376959378974,
+   "efficiency_total_width_pct": 83.86408100421738,
+   "efficiency_usable_width_pct": 83.86408100421738,
+   "waste_pct": 16.135918995782617,
+   "consumption_m": 2.9299304285049437,
+   "consumption_yd": 3.2042108798173055,
+   "placed": 28,
+   "unplaced": 0,
+   "by_size": {
+    "44": 28
+   },
+   "definition": "union(placed cut areas) / (fabric width x marker length); width = total and usable"
+  },
+  "nested_1400": {
+   "validation": "valid: 28 placements, no overlap/out-of-bounds/orientation issues",
+   "evaluations": 19422,
+   "seed": 1,
+   "time_limit_s": 60.0,
+   "length_mm": 3042.214548034668,
+   "width_mm": 1400,
+   "usable_width_mm": 1400.0,
+   "pieces_area_m2": 3.513737695937897,
+   "efficiency_total_width_pct": 82.49952790400764,
+   "efficiency_usable_width_pct": 82.49952790400764,
+   "waste_pct": 17.500472095992365,
+   "consumption_m": 3.042214548034668,
+   "consumption_yd": 3.3270062861271525,
+   "placed": 28,
+   "unplaced": 0,
+   "by_size": {
+    "44": 28
+   },
+   "definition": "union(placed cut areas) / (fabric width x marker length); width = total and usable"
+  },
+  "nested_1430": {
+   "validation": "valid: 28 placements, no overlap/out-of-bounds/orientation issues",
+   "evaluations": 20034,
+   "seed": 1,
+   "time_limit_s": 60.0,
+   "length_mm": 2960.504417724609,
+   "width_mm": 1430,
+   "usable_width_mm": 1430.0,
+   "pieces_area_m2": 3.5137376959378974,
+   "efficiency_total_width_pct": 82.99799227515183,
+   "efficiency_usable_width_pct": 82.99799227515183,
+   "waste_pct": 17.00200772484817,
+   "consumption_m": 2.960504417724609,
+   "consumption_yd": 3.237647001011165,
+   "placed": 28,
+   "unplaced": 0,
+   "by_size": {
+    "44": 28
+   },
+   "definition": "union(placed cut areas) / (fabric width x marker length); width = total and usable"
+  },
+  "nested_1500": {
+   "validation": "valid: 28 placements, no overlap/out-of-bounds/orientation issues",
+   "evaluations": 19931,
+   "seed": 1,
+   "time_limit_s": 60.0,
+   "length_mm": 2840.2080408109077,
+   "width_mm": 1500,
+   "usable_width_mm": 1500.0,
+   "pieces_area_m2": 3.5137376959378974,
+   "efficiency_total_width_pct": 82.47606385281294,
+   "efficiency_usable_width_pct": 82.47606385281294,
+   "waste_pct": 17.523936147187058,
+   "consumption_m": 2.8402080408109076,
+   "consumption_yd": 3.106089283476496,
+   "placed": 28,
+   "unplaced": 0,
+   "by_size": {
+    "44": 28
+   },
+   "definition": "union(placed cut areas) / (fabric width x marker length); width = total and usable"
+  }
+ },
+ "exports": {
+  "original_1430": {
+   "cut_paths": 28,
+   "plt": {
+    "cut_paths": 28,
+    "max_dev_mm": 0.017174841882347167,
+    "labels_as_LB": 28,
+    "non_cut_pens_paths": 192
+   },
+   "dxf": {
+    "cut_paths": 28,
+    "max_dev_mm": 0.0,
+    "layers": [
+     "BORDER",
+     "CUT",
+     "GRAIN",
+     "INTERNAL",
+     "NOTCH",
+     "SEAM"
+    ]
+   },
+   "iso_diagnostic": {
+    "cut_paths": 28,
+    "max_dev_mm": 0.007016809287605945
+   }
+  },
+  "nested_1400": {
+   "cut_paths": 28,
+   "plt": {
+    "cut_paths": 28,
+    "max_dev_mm": 0.017381475792797557,
+    "labels_as_LB": 28,
+    "non_cut_pens_paths": 192
+   },
+   "dxf": {
+    "cut_paths": 28,
+    "max_dev_mm": 0.0,
+    "layers": [
+     "BORDER",
+     "CUT",
+     "GRAIN",
+     "INTERNAL",
+     "NOTCH",
+     "SEAM"
+    ]
+   },
+   "iso_diagnostic": {
+    "cut_paths": 28,
+    "max_dev_mm": 0.006877508664869361
+   }
+  },
+  "nested_1430": {
+   "cut_paths": 28,
+   "plt": {
+    "cut_paths": 28,
+    "max_dev_mm": 0.017417547133983184,
+    "labels_as_LB": 28,
+    "non_cut_pens_paths": 192
+   },
+   "dxf": {
+    "cut_paths": 28,
+    "max_dev_mm": 0.0,
+    "layers": [
+     "BORDER",
+     "CUT",
+     "GRAIN",
+     "INTERNAL",
+     "NOTCH",
+     "SEAM"
+    ]
+   },
+   "iso_diagnostic": {
+    "cut_paths": 28,
+    "max_dev_mm": 0.006877508664951983
+   }
+  },
+  "nested_1500": {
+   "cut_paths": 28,
+   "plt": {
+    "cut_paths": 28,
+    "max_dev_mm": 0.017196572562025947,
+    "labels_as_LB": 28,
+    "non_cut_pens_paths": 192
+   },
+   "dxf": {
+    "cut_paths": 28,
+    "max_dev_mm": 0.0,
+    "layers": [
+     "BORDER",
+     "CUT",
+     "GRAIN",
+     "INTERNAL",
+     "NOTCH",
+     "SEAM"
+    ]
+   },
+   "iso_diagnostic": {
+    "cut_paths": 28,
+    "max_dev_mm": 0.0068775086650300745
+   }
+  }
+ },
+ "calibration_square": {
+  "side_lengths_mm": [
+   1000.0,
+   1000.0,
+   1000.0,
+   1000.0
+  ]
+ }
+}

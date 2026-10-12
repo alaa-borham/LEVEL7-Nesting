@@ -171,6 +171,11 @@ def to_markdown(rep: dict) -> str:
 
 
 def main(argv=None):
+    for stream in (sys.stdout, sys.stderr):
+        try:  # Windows consoles default to cp1252/cp1256: never crash on Arabic names
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
     ap = argparse.ArgumentParser(description="Inspect GRAFIS MDL/SCB files")
     ap.add_argument("files", nargs="+")
     ap.add_argument("-o", "--outdir", default=".")

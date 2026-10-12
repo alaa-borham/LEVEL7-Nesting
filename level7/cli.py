@@ -106,6 +106,11 @@ def cmd_export(a):
 
 
 def main(argv=None):
+    for stream in (sys.stdout, sys.stderr):
+        try:  # Windows consoles default to cp1252/cp1256: never crash on Arabic names
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
     ap = argparse.ArgumentParser(prog="level7")
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("info")
