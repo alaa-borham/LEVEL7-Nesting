@@ -1,7 +1,9 @@
 # GRAFIS model / marker file format — what is understood
 
-Evidence base: `samples/Neay blue pants.mdl` (2,003,864 B, SHA-256 `0b729b22…fc51`) and
-`samples/Neay blue pants-44.scb` (1,097,872 B, SHA-256 `a96d5513…0f4c`). Everything below was
+Evidence base: `samples/Neay blue pants.mdl` (2,003,864 B, SHA-256 `0b729b22…fc51`),
+`samples/Neay blue pants-44.scb` (1,097,872 B, SHA-256 `a96d5513…0f4c`, 1430 mm) and
+`samples/Neay blue pants-44-1500.scb` (1,111,088 B, 1500 mm, signature variant `VD`), plus GRAFIS
+screenshots of both markers (`docs/evidence/`). Everything below was
 derived from these two files only; statuses: **C** = confirmed by an independent check,
 **P** = probable interpretation, **U** = unknown.
 
@@ -15,7 +17,7 @@ derived from these two files only; statuses: **C** = confirmed by an independent
 |---|---|---|---|
 | 0 | u32 | unknown (not byte-sum / CRC32 / Adler32) | U |
 | 4 | u32 | (file size − 8) / 8 | C (both files) |
-| 8 | bytes | `GRAFIS-ModelldateiVB\n\0\n\0`, zero padding to 80 | C |
+| 8 | bytes | `GRAFIS-Modelldatei` + 2-letter variant (`VB` in the first two files, `VD` in the 1500 marker) + `\n\0\n\0`, zero padding to 80; the variant's meaning is U, the structure is identical | C |
 | 80… | blocks | block chain | C |
 | end−8 | bytes | `mdlEND_5` | C |
 
@@ -77,6 +79,12 @@ positions, orientation, left/right and bundle A/B — to the GRAFIS screen view,
 `docs/evidence/grafis_original_1430.png` vs `docs/evidence/level7_reconstruction_1430.png`):
 `rotation = base(+36) + extra(+84) + 180·(flags@40 & 0x80)`, `mirror = byte@41`, mirror = x→−x before
 rotation, then translate so that the bbox lower-left equals (X,Y)@20.
+
+Second layout (1500 mm marker): the same rules reproduce it unchanged — zero overlap, grain parallel,
+efficiency 82.197 % (EFFCNCY 82.19), area 3.51 m², U/B 1.42 m, and identical to the GRAFIS screen view
+(`docs/evidence/grafis_new_1500.png` vs `level7_reconstruction_1500.png`). It contains rotation/mirror
+combinations absent from the first marker. Computed length 2849.86 vs stored 2849.93 mm (0.065 mm).
+Flag 0x40 occurs with and without rotation → still U.
 
 `EFFCNCY` = Σ placed cut areas / (WIDTH × LENGTH) (C).
 

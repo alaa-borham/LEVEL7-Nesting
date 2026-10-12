@@ -35,7 +35,7 @@ def inspect_file(path: str, encoding: str = "cp1256") -> dict:
         findings["unsupported"].append(f"not a GRAFIS container: {e}")
         return rep
     rep.update(size=cont.size, sha256=cont.sha256, header_u32=list(cont.header_u32),
-               signature=SIGNATURE.decode(), block_count=len(cont.blocks), structural_errors=cont.errors)
+               signature=SIGNATURE.decode() + cont.variant, block_count=len(cont.blocks), structural_errors=cont.errors)
     if not cont.errors:
         findings["confirmed"].append(
             f"block chain: {len(cont.blocks)} blocks follow each other exactly via the length field "

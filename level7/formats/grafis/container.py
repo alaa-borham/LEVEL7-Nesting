@@ -4,7 +4,7 @@ Structure established from the sample files (see docs/GRAFIS_FORMAT.md):
 
     offset 0   u32  unknown (varies per file; not a simple sum/CRC32/Adler32)
     offset 4   u32  (file_size - 8) / 8           -> verified on both samples
-    offset 8   b"GRAFIS-ModelldateiVB\\n\\0\\n\\0" then zero padding up to offset 80
+    offset 8   b"GRAFIS-Modelldatei" + 2-letter variant ("VB", "VD" seen) + b"\\n\\0\\n\\0", zero padding to 80
     offset 80  block chain, each block:
                    u32  unknown (per-block check value, algorithm unknown)
                    u32  block length in 8-byte units, measured from the block start
@@ -22,10 +22,11 @@ import hashlib
 import struct
 from dataclasses import dataclass, field
 
-SIGNATURE = b"GRAFIS-ModelldateiVB"
+SIGNATURE = b"GRAFIS-Modelldatei"   # followed by a 2-letter variant, e.g. "VB", "VD"
 BLOCK_MARK = b"BLO5kenn"
 TRAILER = b"mdlEND_5"
 CHAIN_START = 80
+KNOWN_VARIANTS = ("VB", "VD")
 
 
 class GrafisFormatError(Exception):
@@ -52,6 +53,7 @@ class Container:
     sha256: str
     header_u32: tuple[int, int]
     blocks: list[Block]
+    variant: str = ""
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -76,10 +78,14 @@ def sha256_bytes(data: bytes) -> str:
 def parse_container(data: bytes, path: str = "<memory>", strict: bool = False) -> Container:
     """Parse the block chain. Never raises for damaged chains unless ``strict``;
     problems are collected in ``Container.errors``."""
-    if len(data) < CHAIN_START + 8 or SIGNATURE not in data[:64]:
-        raise GrafisFormatError("signature GRAFIS-ModelldateiVB not found in file header")
+    if len(data) < CHAIN_START + 8 or data[8:8 + len(SIGNATURE)] != SIGNATURE:
+        raise GrafisFormatError("signature GRAFIS-Modelldatei.. not found at offset 8")
     h0, h1 = struct.unpack_from("<II", data, 0)
-    cont = Container(path=path, size=len(data), sha256=sha256_bytes(data), header_u32=(h0, h1), blocks=[])
+    variant = data[8 + len(SIGNATURE):8 + len(SIGNATURE) + 2].decode("latin-1")
+    cont = Container(path=path, size=len(data), sha256=sha256_bytes(data), header_u32=(h0, h1), blocks=[],
+                     variant=variant)
+    if variant not in KNOWN_VARIANTS:
+        cont.warnings.append(f"signature variant {variant!r} not seen before; structure is checked block by block")
     if h1 * 8 + 8 != len(data):
         cont.errors.append(f"header length field {h1}*8+8={h1 * 8 + 8} != file size {len(data)} (truncated or padded file)")
     end = len(data) - 8 if data[-8:] == TRAILER else len(data)

@@ -25,7 +25,7 @@ Lay types: open; face-to-face and folded produce pairs (folded halves the width)
 pieces are not supported** (fold edges are not identified in the source).
 Nesting inside piece holes: disabled. No optimality is claimed. Measured: at 1430 mm the original
 GRAFIS marker is 2929.9 mm; LEVEL7 reaches 2960.5 mm in 60 s (≈1 % longer). At 1500 mm GRAFIS
-nested 2.85 m / 82.2 % (screenshot) and LEVEL7 2.840 m / 82.48 % in 60 s.
+nested 2849.9 mm / 82.19 % (`Neay blue pants-44-1500.scb`) and LEVEL7 2840.2 mm / 82.48 % in 60 s.
 GRAFIS options: "Right-Left" spreading = LEVEL7 open lay with mirrored copies; "Two way" = 180° allowed;
 "One way" = untick 180°; "Same sizes – same direction" is **not implemented yet**.
 
@@ -44,8 +44,7 @@ desktop shortcut check). Results are only claimed for runs that actually passed 
 2. **DXF (or AAMA/ASTM) export from GRAFIS of the same MDL, all sizes** → independent vertex-level
    check of contours, notches, grain lines and text positions in every size (now verified only for
    size 44 by GRAFIS' own cut flags).
-3. **The 1500 mm GRAFIS marker saved as SCB** (screenshot received; the file itself) → confirms placement-field semantics
-   (rotation/flag bits) on a second layout.
+3. ~~The 1500 mm GRAFIS marker as SCB~~ — received; decoded with the same rules and identical to GRAFIS.
 4. **A PLT file produced by GRAFIS for your plotter + plotter model** → units, origin, axis direction,
    pen numbers for the plotter configuration.
 5. **Cutting machine brand/model + a reference ISO file or its programming manual** → enables a
