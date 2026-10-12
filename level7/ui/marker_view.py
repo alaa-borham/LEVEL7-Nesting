@@ -30,6 +30,31 @@ def color_for(key: str) -> QColor:
     return QColor(int(r * 255), int(g * 255), int(b * 255), 210)
 
 
+DEFAULT_OPTIONS = {
+    # "Display in the pieces" (GRAFIS: Marker display options)
+    "symbols": False, "size_bundle": True, "buffer": True, "marking": False, "grain": False, "internal": False,
+    "piece_names": False,
+    # "Display auxiliary objects"
+    "efficiency_mark": True, "last_efficiency": True, "white_marking": True,
+    # "Show pieces to be placed"
+    "fill": "solid_outline",          # outline | solid | solid_outline
+    "bg_opacity": 25, "piece_transparency": 50, "inverse_inner": False,
+    "status_mm": False, "color_by": "bundle",   # bundle | size | piece
+}
+
+BUNDLE_COLOURS = [QColor(248, 190, 90), QColor(240, 160, 10), QColor(120, 190, 240), QColor(60, 140, 210),
+                  QColor(150, 220, 140), QColor(80, 170, 90)]
+
+
+def bundle_letter(n: int) -> str:
+    s = ""
+    n = max(1, n)
+    while n:
+        n, r = divmod(n - 1, 26)
+        s = chr(65 + r) + s
+    return s
+
+
 class PieceItem(QGraphicsPathItem):
     def __init__(self, view, placement, piece):
         super().__init__()
@@ -40,8 +65,11 @@ class PieceItem(QGraphicsPathItem):
         self.setFlag(QGraphicsItem.ItemIsMovable, not placement.pinned)
         self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
         self.children_items = []
-        self.label = None
         self.rebuild()
+
+    def _inner_colour(self, base: QColor) -> QColor:
+        return QColor(255 - base.red(), 255 - base.green(), 255 - base.blue()) if self.view.options["inverse_inner"] \
+            else base
 
     def rebuild(self):
         for c in self.children_items:
@@ -49,27 +77,56 @@ class PieceItem(QGraphicsPathItem):
         self.children_items = []
         pl, g = self.placement, self.piece.sizes[self.placement.size]
         self.setPos(0, 0)
-        self.setPath(_path(placement_points(g.cut, pl)))
-        opts = self.view.options
-        if opts["seam"]:
+        cut = placement_points(g.cut, pl)
+        self.setPath(_path(cut))
+        o = self.view.options
+        dark = QColor(40, 40, 40)
+        if o["buffer"] and self.view.marker is not None and self.view.marker.fabric.spacing > 0:
+            from shapely.geometry import Polygon
+            buf = Polygon(cut).buffer(self.view.marker.fabric.spacing / 2.0, join_style=2)
+            self._child(list(buf.exterior.coords), True, QPen(QColor(150, 150, 150), 0, Qt.DotLine))
+        if o["internal"]:
             for s in g.seam:
-                self._child(placement_points(s.points, pl), s.closed, QPen(QColor(0, 110, 0), 0, Qt.DashLine))
-        if opts["internal"]:
+                self._child(placement_points(s.points, pl), s.closed, QPen(self._inner_colour(QColor(0, 110, 0)), 0,
+                                                                            Qt.DashLine))
             for s in g.internal:
-                self._child(placement_points(s.points, pl), False, QPen(QColor(120, 120, 120), 0))
+                self._child(placement_points(s.points, pl), False, QPen(self._inner_colour(dark), 0))
+        if o["marking"]:
             for n in g.notches:
                 d = n.direction or (0, 0)
                 pts = [n.position, (n.position[0] + d[0] * n.length, n.position[1] + d[1] * n.length)]
                 self._child(placement_points(pts, pl), False, QPen(QColor(200, 0, 0), 0))
-        if opts["grain"] and g.grain is not None:
-            self._child(placement_points(g.grain.points, pl), False, QPen(QColor(0, 0, 200), 0))
-        if opts["labels"]:
+        if o["grain"] and g.grain is not None:
+            self._child(placement_points(g.grain.points, pl), False, QPen(self._inner_colour(QColor(0, 0, 200)), 0))
+        if o["symbols"]:
+            for dr in g.drills:
+                x, y = placement_points([dr.position], pl)[0]
+                p = QPainterPath()
+                p.moveTo(x - 4, y)
+                p.lineTo(x + 4, y)
+                p.moveTo(x, y - 4)
+                p.lineTo(x, y + 4)
+                p.addEllipse(QPointF(x, y), 3, 3)
+                it = QGraphicsPathItem(p, self)
+                it.setPen(QPen(QColor(160, 0, 160), 0))
+                it.setAcceptedMouseButtons(Qt.NoButton)
+                self.children_items.append(it)
+        lines = []
+        if o["size_bundle"]:
+            lines.append(f"{pl.size}/{bundle_letter(pl.bundle)}")
+        if o["piece_names"]:
+            lines.append(f"{self.piece.name}{' (M)' if pl.mirrored else ''}")
+        if lines:
             from shapely.geometry import Polygon
-            c = Polygon(placement_points(g.cut, pl)).representative_point()
-            t = QGraphicsSimpleTextItem(f"{self.piece.name} {pl.size}{' M' if pl.mirrored else ''}", self)
+            c = Polygon(cut).representative_point()
+            t = QGraphicsSimpleTextItem("\n".join(lines), self)
             t.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
             t.setFont(QFont("Segoe UI", 8))
+            t.setBrush(QBrush(QColor(255, 255, 255) if o["white_marking"] else QColor(0, 0, 0)))
+            br = t.boundingRect()
             t.setPos(c.x, c.y)
+            t.setTransform(QTransform.fromTranslate(-br.width() / 2, -br.height() / 2))
+            t.setAcceptedMouseButtons(Qt.NoButton)
             self.children_items.append(t)
         self.restyle()
 
@@ -80,15 +137,22 @@ class PieceItem(QGraphicsPathItem):
         self.children_items.append(it)
 
     def restyle(self):
-        key = self.placement.size if self.view.options["color_by"] == "size" else self.piece.uid
-        col = color_for(key)
-        bad = self.placement.uid in self.view.bad
-        if bad:
-            col = QColor(255, 60, 60, 200)
-        self.setBrush(QBrush(col))
-        pen = QPen(QColor(0, 0, 0), 0)
+        o = self.view.options
+        if o["color_by"] == "bundle":
+            col = QColor(BUNDLE_COLOURS[(self.placement.bundle - 1) % len(BUNDLE_COLOURS)])
+        else:
+            col = color_for(self.placement.size if o["color_by"] == "size" else self.piece.uid)
+        if self.placement.uid in self.view.bad:
+            col = QColor(255, 60, 60)
+        col.setAlpha(int(255 * (1 - 0.6 * o["piece_transparency"] / 100.0)))
+        self.setBrush(QBrush(col) if o["fill"] in ("solid", "solid_outline") else QBrush(Qt.NoBrush))
         if self.placement.pinned:
             pen = QPen(QColor(30, 30, 160), 0, Qt.DashDotLine)
+        elif o["fill"] == "solid":
+            pen = QPen(Qt.NoPen)
+        else:
+            pen = QPen(QColor(255, 255, 255) if o["white_marking"] and o["fill"] == "solid_outline"
+                       else QColor(0, 0, 0), 0)
         self.setPen(pen)
 
     def mouseReleaseEvent(self, ev):
@@ -113,7 +177,10 @@ class MarkerView(QGraphicsView):
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
         self.setMouseTracking(True)
         self.setTransform(QTransform.fromScale(0.3, -0.3))
-        self.options = {"seam": False, "internal": False, "grain": True, "labels": True, "color_by": "size"}
+        self.setBackgroundBrush(QBrush(QColor(45, 45, 45)))
+        self.options = dict(DEFAULT_OPTIONS)
+        self.last_result = None       # (length_mm, efficiency_pct) of the previous marker, for "last efficiency"
+        self.efficiency = None
         self.bad: set[str] = set()
         self.items_by_uid: dict[str, PieceItem] = {}
         self.project = None
@@ -128,12 +195,15 @@ class MarkerView(QGraphicsView):
         self.bad = set(bad or [])
         sc = self.scene()
         sc.clear()
+        self._measure_item = None
         self.items_by_uid = {}
         if marker is None:
             return
         L = max(marker.length, 100.0)
         W = marker.fabric.width
-        sc.addRect(QRectF(0, 0, L, W), QPen(QColor(60, 60, 60), 0), QBrush(QColor(250, 250, 245)))
+        bg = QColor(250, 250, 245)
+        bg.setAlpha(int(255 * self.options["bg_opacity"] / 100.0))
+        sc.addRect(QRectF(0, 0, L, W), QPen(QColor(160, 160, 160), 0), QBrush(bg))
         f = marker.fabric
         if f.margin_left or f.margin_right or f.lay_type.value == "folded":
             r = QRectF(f.margin_start, f.margin_left, L - f.margin_start, f.usable_width)
@@ -145,7 +215,43 @@ class MarkerView(QGraphicsView):
             sc.addItem(it)
             it.rebuild()
             self.items_by_uid[pl.uid] = it
-        sc.setSceneRect(QRectF(-200, -200, L + 400, W + 400))
+        self._aux_items = []
+        self._draw_aux()
+        sc.setSceneRect(QRectF(-200, -200, max(L, (self.last_result or (0,))[0]) + 400, W + 400))
+
+    def _draw_aux(self):
+        sc = self.scene()
+        for it in getattr(self, "_aux_items", []):
+            if it.scene():
+                sc.removeItem(it)
+        self._aux_items = []
+        if self.marker is None:
+            return
+        W = self.marker.fabric.width
+        o = self.options
+
+        def vline(x, pen, label):
+            ln = sc.addLine(x, -30, x, W + 30, pen)
+            t = QGraphicsSimpleTextItem(label)
+            t.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
+            t.setBrush(QBrush(pen.color()))
+            t.setFont(QFont("Segoe UI", 8))
+            t.setPos(x, W + 60)
+            sc.addItem(t)
+            self._aux_items += [ln, t]
+        if o["efficiency_mark"]:
+            eff = self.efficiency
+            vline(self.marker.length, QPen(QColor(230, 30, 30), 0),
+                  f"L {self.marker.length / 1000:.2f} m" + (f"  E {eff:.1f} %" if eff is not None else ""))
+        if o["last_efficiency"] and self.last_result:
+            ll, le = self.last_result
+            pen = QPen(QColor(255, 255, 255) if o["white_marking"] else QColor(0, 0, 0), 0, Qt.DashLine)
+            vline(ll, pen, f"{ll / 1000:.2f} m  {le:.1f} %")
+
+    def set_options(self, **kw):
+        self.options.update(kw)
+        if self.marker is not None:
+            self.show_marker(self.project, self.marker, self.bad)
 
     def refresh(self, bad=None):
         if bad is not None:
@@ -153,6 +259,7 @@ class MarkerView(QGraphicsView):
         for it in self.items_by_uid.values():
             it.setFlag(QGraphicsItem.ItemIsMovable, not it.placement.pinned)
             it.rebuild()
+        self._draw_aux()
 
     def zoom_fit(self):
         if self.marker:

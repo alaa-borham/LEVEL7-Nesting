@@ -82,6 +82,7 @@ class MainWindow(QMainWindow):
         self.marker: Marker | None = None
         self.worker: NestWorker | None = None
         self.undo = QUndoStack(self)
+        self.undo.setUndoLimit(500)
         self.setAcceptDrops(True)
         self.resize(1400, 860)
         self.view = MarkerView(self)
@@ -92,10 +93,13 @@ class MainWindow(QMainWindow):
         self._build_docks()
         self._build_actions()
         self.coord_label = QLabel()
+        self.grafis_status = QLabel()
+        self._load_display_options()
         self.progress_bar = QProgressBar()
         self.progress_bar.setMaximumWidth(220)
         self.progress_bar.hide()
         self.statusBar().addPermanentWidget(self.progress_bar)
+        self.statusBar().addPermanentWidget(self.grafis_status)
         self.statusBar().addPermanentWidget(self.coord_label)
         self.retranslate()
 
@@ -224,13 +228,7 @@ class MainWindow(QMainWindow):
         self.act_measure = self._act("measure", self.toggle_measure, "M", checkable=True)
         self.m_edit.addAction(self.act_measure)
         self.m_view.addAction(self._act("zoom_fit", self.view.zoom_fit, "F"))
-        self.act_seam = self._act("show_seam", self.view_opts, checkable=True)
-        self.act_int = self._act("show_internal", self.view_opts, checkable=True)
-        self.act_grain = self._act("show_grain", self.view_opts, checkable=True, checked=True)
-        self.act_labels = self._act("show_labels", self.view_opts, checkable=True, checked=True)
-        self.act_color = self._act("color_by", self.view_opts, checkable=True, checked=True)
-        for a in (self.act_seam, self.act_int, self.act_grain, self.act_labels, self.act_color):
-            self.m_view.addAction(a)
+        self.m_view.addAction(self._act("display_options", self.display_options, "Ctrl+D"))
         self.m_nest.addAction(self._act("run", self.run_nesting, "F5"))
         self.m_nest.addAction(self._act("stop", self.stop_nesting, "Esc"))
         self.m_export.addAction(self._act("export_plt", lambda: self.export("plt")))
@@ -253,10 +251,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{tr('app_title')} {__version__}" + (f" — {self.project.name}" if self.project else ""))
         for a, k in self.actions_tr:
             a.setText(tr(k))
-        self.undo.setUndoLimit(500)
         self.undo_actions[0].setText(tr("undo"))
         self.undo_actions[1].setText(tr("redo"))
-        self.act_color.setText(f"{tr('color_by')}: {tr('color_size')} / {tr('color_piece')}")
         for m, k in self.menus_tr:
             m.setTitle(tr(k))
         for lab, k in self.form_rows:
@@ -287,6 +283,14 @@ class MainWindow(QMainWindow):
         if not self.project:
             self.statusBar().showMessage(tr("ready"))
         self.update_results()
+
+    def _load_display_options(self):
+        import json
+        try:
+            saved = json.loads(self.settings_store.value("display_options", "{}") or "{}")
+            self.view.options.update({k: v for k, v in saved.items() if k in self.view.options})
+        except (ValueError, TypeError):
+            pass
 
     def toggle_language(self):
         LANG["current"] = "en" if LANG["current"] == "ar" else "ar"
@@ -457,8 +461,14 @@ class MainWindow(QMainWindow):
     def select_marker(self, i):
         if not self.project or i < 0 or i >= len(self.project.markers):
             return
+        prev = self.marker
+        if prev is not None and prev is not self.project.markers[i] and "length_mm" in (prev.stats or {}):
+            self.view.last_result = (prev.stats["length_mm"], prev.stats["efficiency_total_width_pct"])
         self.marker = self.project.markers[i]
         self.undo.clear()
+        if "efficiency_total_width_pct" not in (self.marker.stats or {}):
+            self.marker.stats = {**(self.marker.stats or {}), **marker_stats(self.project, self.marker)}
+        self.view.efficiency = self.marker.stats["efficiency_total_width_pct"]
         self.view.show_marker(self.project, self.marker)
         self.after_edit(fit=True)
 
@@ -480,7 +490,7 @@ class MainWindow(QMainWindow):
         v = self.validate_current()
         bad = {u for i in v.issues for u in i.placements}
         self.view.refresh(bad)
-        self.marker.stats = marker_stats(self.project, self.marker)
+        self.marker.stats = {**(self.marker.stats or {}), **marker_stats(self.project, self.marker)}
         self.marker.length = self.marker.stats["length_mm"]
         self.issues_list.clear()
         self.issues_list.addItems([i.message for i in v.issues][:500] or [v.summary()])
@@ -489,7 +499,10 @@ class MainWindow(QMainWindow):
             if not pl.placed:
                 self.unplaced_list.addItem(f"{self.project.piece(pl.piece_uid).name} {pl.size}"
                                            f"{' (M)' if pl.mirrored else ''}: {pl.reason}")
+        self.view.efficiency = self.marker.stats["efficiency_total_width_pct"]
+        self.view.refresh()
         self.update_results(v)
+        self.update_status_line()
         if fit:
             self.view.zoom_fit()
 
@@ -575,11 +588,27 @@ class MainWindow(QMainWindow):
         if on:
             self.statusBar().showMessage(tr("measure_hint"))
 
-    def view_opts(self):
-        self.view.options.update(seam=self.act_seam.isChecked(), internal=self.act_int.isChecked(),
-                                 grain=self.act_grain.isChecked(), labels=self.act_labels.isChecked(),
-                                 color_by="size" if self.act_color.isChecked() else "piece")
-        self.view.refresh()
+    def display_options(self):
+        import json
+
+        from .display_options import DisplayOptionsDialog
+        dlg = DisplayOptionsDialog(self.view.options, self)
+        if dlg.exec() == QDialog.Accepted:
+            opts = dlg.result_options()
+            self.settings_store.setValue("display_options", json.dumps(opts))
+            self.view.set_options(**opts)
+            self.update_status_line()
+
+    def update_status_line(self):
+        """GRAFIS-style status: L, E, U/B, Wi (metres, or millimetres if chosen)."""
+        if not self.marker or "length_mm" not in (self.marker.stats or {}):
+            self.grafis_status.setText("")
+            return
+        s = self.marker.stats
+        mm = self.view.options.get("status_mm")
+        f = (lambda v: f"{v:.1f} mm") if mm else (lambda v: f"{v / 1000:.2f} m")
+        self.grafis_status.setText(f"L = {f(s['length_mm'])}   E = {s['efficiency_total_width_pct']:.1f} %   "
+                                   f"U/B = {f(s.get('length_per_garment_m', 0) * 1000)}   Wi = {f(s['width_mm'])}")
 
     # -- nesting ---------------------------------------------------------------------------
     def run_nesting(self):
