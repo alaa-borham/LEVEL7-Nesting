@@ -63,7 +63,15 @@ def bullmer_grafis_profile() -> MachineProfile:
                           layers_cut=["CUT"], layers_notch=["NOTCH"], layers_drill=[])
 
 
-ISO_PRESETS = {"unconfigured": MachineProfile, "bullmer_grafis": bullmer_grafis_profile}
+def iecho_profile() -> MachineProfile:
+    """IECHO cutter: the user feeds it the same file that GRAFIS writes for the Bullmer (user statement).
+    Same writer as bullmer_grafis_profile(); needs its own test cut on the IECHO."""
+    p = bullmer_grafis_profile()
+    p.name = "IECHO (same file as Bullmer - GRAFIS 'typical')"
+    return p
+
+
+ISO_PRESETS = {"unconfigured": MachineProfile, "bullmer_grafis": bullmer_grafis_profile, "iecho": iecho_profile}
 
 
 def _cut_sequence(path, notches, corners, min_segment=0.0):

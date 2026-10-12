@@ -32,6 +32,7 @@ T = {
     "color_bundle": ("bundle (A/B…)", "المجموعة (A/B…)"),
     "iso_machine": ("Cutting machine", "ماكينة القص"),
     "iso_bullmer": ("Bullmer-Cutter (GRAFIS 'typical' compatible)", "Bullmer (متوافق مع GRAFIS typical)"),
+    "iso_iecho": ("IECHO (same file as Bullmer)", "IECHO (نفس ملف Bullmer)"),
     "iso_diagnostic": ("Diagnostic preview (NOT for production)", "معاينة تشخيصية (ليست للإنتاج)"),
     "iso_not_device_tested": (
         "The Bullmer file is identical to GRAFIS' own Bullmer output for the reference marker, but it has not "

@@ -61,8 +61,6 @@ desktop shortcut check). Results are only claimed for runs that actually passed 
    **cut/plot `examples/calibration_1000mm_square_algotex.plt` on the Algotex and measure it.**
 5. ~~Bullmer reference cut file~~ — received (GRAFIS "Bullmer-Cutter (typical)"); profile implemented and
    matched. Still needed: **a test cut of `examples/nested_1500_bullmer.iso` (or any marker) on the Bullmer.**
-   Second cutter: **IECHO (China)** — its control software (CutterServer) is reported to import common CAD
-   formats, but no official format list was found. Needed: model + the file GRAFIS writes for the IECHO
-   (or the format chosen in CutterServer). If it accepts PLT or DXF, the existing verified exports may
-   suffice; this is NOT assumed until a test cut confirms it.
+   Second cutter: **IECHO (China)** — the user feeds it the same file GRAFIS writes for the Bullmer, so
+   LEVEL7 offers an "IECHO" profile that writes exactly the Bullmer file. Needs its own test cut on the IECHO.
 6. **What the symbol codes (e.g. 221, 311) mean in your GRAFIS setup** → drill holes vs. reference marks.

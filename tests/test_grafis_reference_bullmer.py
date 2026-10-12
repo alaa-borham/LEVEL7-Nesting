@@ -72,3 +72,14 @@ def test_each_piece_identical_cut_sequence(files):
         for a, b in zip(pc["strokes"], ours):                       # same start, direction and points
             assert len(a) == len(b)
             assert max(math.dist(p, q) for p, q in zip(a, b)) <= TOL
+
+
+def test_iecho_profile_writes_the_bullmer_file(tmp_path):
+    """User: the IECHO cutter is fed the same file as the Bullmer."""
+    from level7.exporters.iso import iecho_profile
+    r = read_grafis(SCB1500)
+    sc = marker_scene(r.project, r.project.markers[0])
+    a, b = tmp_path / "b.iso", tmp_path / "i.iso"
+    write_iso(sc, str(a), bullmer_grafis_profile(), job_name="x")
+    write_iso(sc, str(b), iecho_profile(), job_name="x")
+    assert a.read_bytes() == b.read_bytes()

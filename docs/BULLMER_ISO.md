@@ -34,4 +34,7 @@ number of points; 1308 of 1318 coordinates identical, the other 10 differ by one
 **Not reproduced:** GRAFIS' piece order (heuristic unknown). LEVEL7 orders pieces in 400 mm bands along the
 length, bottom to top. Piece order changes the sequence of cutting, not what is cut.
 
+**IECHO:** the user sends this same file to the IECHO cutter; LEVEL7's "IECHO" profile writes the identical
+file (`--iso-preset iecho`).
+
 **Before production:** cut one marker on the Bullmer and compare; then set `device_tested`.
