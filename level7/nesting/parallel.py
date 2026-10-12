@@ -101,7 +101,9 @@ def run_parallel(items: list[NestItem], fabric: FabricSettings, settings: NestSe
     for p in procs:
         p.join(timeout=5)
     if best is None:
-        raise RuntimeError("nesting failed: " + "; ".join(errors))
+        # worker processes could not run (e.g. restricted environment): fall back to in-process search
+        best = NestEngine(items, fabric, settings, progress=progress, stop_event=stop_event).run()
+        return best
     best.evaluations = sum(evals.values())
     best.elapsed = time.monotonic() - t0
     best.stopped = stop.is_set() and (stop_event is not None and stop_event.is_set())

@@ -196,7 +196,9 @@ def _read_marker(res: ReadResult, blocks) -> None:
     q: dict[str, int] = {}
     for _n, s in ts.sbgrlst:
         q[s] = q.get(s, 0) + 1
-    co = CutOrder(size_quantities=q, material=sb.get("MATERIALO"))
+    # "MATERIALO upper fabric": key suffix = material code used in #TLIST ("O"), value = material name
+    mat_code = next((k[len("MATERIAL"):] for k in sb if k.startswith("MATERIAL") and len(k) > len("MATERIAL")), None)
+    co = CutOrder(size_quantities=q, material=mat_code)
     by_num_uid = {p.number: p.uid for p in proj.pieces}
     for e in ts.sbtlist:
         if e.number in by_num_uid:
