@@ -78,6 +78,11 @@ def main():
         verify_exports(proj, m, os.path.join(ex, f"nested_{w}"), ver["exports"])
         print(w, round(m.length, 1), info["validation"].summary(), flush=True)
     save_project(proj, os.path.join(ex, "Neay_blue_pants_44.l7n"))
+    from level7.exporters.plt import algotex_grafis_config
+    from level7.exporters.scene import marker_scene
+    for m in proj.markers:
+        tag = "original_1430" if m.origin == "original" else f"nested_{m.fabric.width:g}"
+        write_plt(marker_scene(proj, m), os.path.join(ex, f"{tag}_algotex.plt"), algotex_grafis_config())
     sq = Scene(paths=[Path("CUT", [(0, 0), (1000, 0), (1000, 1000), (0, 1000)], True)])
     write_plt(sq, os.path.join(ex, "calibration_1000mm_square.plt"))
     pts = read_plt(os.path.join(ex, "calibration_1000mm_square.plt"))[0][0].points

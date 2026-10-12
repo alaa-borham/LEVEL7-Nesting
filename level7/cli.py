@@ -98,6 +98,9 @@ def cmd_export(a):
     proj = load_project(a.project)
     m = proj.markers[a.marker]
     cfg = None
+    if a.format == "plt" and a.plt_preset:
+        from .exporters.plt import PRESETS
+        cfg = PRESETS[a.plt_preset]()
     if a.config:
         cfg = (PlotterConfig if a.format == "plt" else MachineProfile).load(a.config)
     st = export_marker(proj, m, a.format, a.output, cfg, diagnostic_iso=a.diagnostic)
@@ -135,6 +138,7 @@ def main(argv=None):
     s.add_argument("--format", choices=("plt", "dxf", "iso"), required=True)
     s.add_argument("--config")
     s.add_argument("--diagnostic", action="store_true")
+    s.add_argument("--plt-preset", choices=("generic", "algotex_grafis"))
     s.add_argument("-o", "--output", required=True)
     s.set_defaults(fn=cmd_export)
     a = ap.parse_args(argv)

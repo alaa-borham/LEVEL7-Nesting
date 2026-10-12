@@ -33,6 +33,10 @@ class PlotterConfig:
     max_abs_coord: int = 2 ** 30
     terminator: str = "\x03"
     verified_with_device: bool = False  # set True only after a 1:1 test cut on the real plotter
+    dialect: str = "hpgl"               # "hpgl": SP/PU/PD with ';'   "grafis": one command per CRLF line, PA/PD/PU
+    text_mode: str = "label"            # "label" (HP-GL LB) | "strokes" (vector font) | "none"
+    text_layers: list = field(default_factory=lambda: ["TEXT", "PIECE_NAME"])
+    merge_notches: bool = False         # put notch slits into the cut contour as there-and-back spikes
 
     def save(self, path):
         with open(path, "w", encoding="utf-8") as fh:
@@ -58,15 +62,115 @@ def _dev(cfg: PlotterConfig, x: float, y: float, extent) -> tuple[int, int]:
     return int(round(x * cfg.units_per_mm)), int(round(y * cfg.units_per_mm))
 
 
+def algotex_grafis_config() -> PlotterConfig:
+    """Profile reproducing GRAFIS' PLT output for the Algotex device (reference file
+    samples/reference/Neay blue pants-44-1500.plt, GRAFIS plot options: 1:1, piece annotation,
+    other text, seam lines, all symbols; grain line off). File-level equivalence is tested; a
+    physical test cut is still required before setting ``verified_with_device``."""
+    return PlotterConfig(name="Algotex (GRAFIS-compatible PLT)", dialect="grafis", text_mode="strokes",
+                         text_layers=["TEXT"], merge_notches=True,
+                         pens={"CUT": 1, "NOTCH": 1, "SEAM": 1, "TEXT": 1, "INTERNAL": 0, "GRAIN": 0,
+                               "PIECE_NAME": 0, "MARK": 0, "BORDER": 0})
+
+
+PRESETS = {"generic": PlotterConfig, "algotex_grafis": algotex_grafis_config}
+
+
+def merge_spikes(points, spikes, closed=True, tol=0.01):
+    """Insert (base, tip) spikes into a polyline at the base point: ... base, tip, base ..."""
+    import math
+    pts = list(points)
+    for base, tip in spikes:
+        best = None
+        n = len(pts)
+        segs = range(n if closed else n - 1)
+        for i in segs:
+            a, b = pts[i], pts[(i + 1) % n]
+            dx, dy = b[0] - a[0], b[1] - a[1]
+            L2 = dx * dx + dy * dy
+            t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((base[0] - a[0]) * dx + (base[1] - a[1]) * dy) / L2))
+            q = (a[0] + t * dx, a[1] + t * dy)
+            d = math.dist(q, base)
+            if best is None or d < best[0]:
+                best = (d, i, t)
+        if best is None or best[0] > tol:
+            continue
+        _, i, t = best
+        if t <= 1e-9:
+            pts[i:i + 1] = [pts[i], tip, pts[i]]
+        elif t >= 1 - 1e-9:
+            j = (i + 1) % n
+            pts[j:j + 1] = [pts[j], tip, pts[j]]
+        else:
+            pts[i + 1:i + 1] = [base, tip, base]
+    return pts
+
+
 def write_plt(scene: Scene, path: str, cfg: PlotterConfig | None = None) -> dict:
+    from .strokefont import text_strokes, unsupported_chars
     cfg = cfg or PlotterConfig()
     ext = scene.extent()
     if ext[0] < -1e-6 or ext[1] < -1e-6:
         raise ExportError(f"negative marker coordinates {ext[:2]}; expected origin at lower-left")
-    out = ["IN;", "PA;"]
+    grafis = cfg.dialect == "grafis"
+    out = ["IN", "LT1"] if grafis else ["IN;", "PA;"]
     cur_pen = None
-    stats = {"paths": 0, "labels": 0, "by_pen": {}}
-    order = sorted(scene.paths, key=lambda p: (cfg.pens.get(p.layer, 0) != 1, cfg.pens.get(p.layer, 0)))
+    stats = {"paths": 0, "labels": 0, "text_strokes": 0, "by_pen": {}, "skipped_chars": set(), "notches_merged": 0}
+    paths = list(scene.paths)
+    if cfg.merge_notches:
+        notches: dict = {}
+        for p in paths:
+            if p.layer == "NOTCH" and len(p.points) == 2:
+                notches.setdefault(p.owner, []).append((p.points[0], p.points[1]))
+        # seam notch marks (2-point seam paths touching another seam path of the same piece) -> spikes
+        import math as _m
+        seam_by_owner: dict = {}
+        for p in paths:
+            if p.layer == "SEAM":
+                seam_by_owner.setdefault(p.owner, []).append(p)
+        seam_marks: dict = {}
+        mark_ids = set()
+        for owner, sp in seam_by_owner.items():
+            lines = [q for q in sp if not (len(q.points) == 2 and _m.dist(*q.points) < 10)]
+            for q in sp:
+                if q in lines:
+                    continue
+                for ln in lines:
+                    pts = ln.points + ([ln.points[0]] if ln.closed else [])
+                    from shapely.geometry import LineString as _LS, Point as _P
+                    L = _LS(pts)
+                    a, b = q.points
+                    if L.distance(_P(a)) <= 0.01 or L.distance(_P(b)) <= 0.01:
+                        base, tip = (a, b) if L.distance(_P(a)) <= L.distance(_P(b)) else (b, a)
+                        seam_marks.setdefault(id(ln), []).append((base, tip))
+                        mark_ids.add(id(q))
+                        break
+        merged = []
+        for p in paths:
+            if p.layer == "NOTCH" or id(p) in mark_ids:
+                continue
+            if p.layer == "SEAM" and id(p) in seam_marks:
+                from .scene import Path as SPath
+                p = SPath(p.layer, merge_spikes(p.points, seam_marks[id(p)], closed=p.closed), p.closed, p.owner)
+            if p.layer == "CUT" and p.owner in notches:
+                from .scene import Path as SPath
+                pts = merge_spikes(p.points, notches[p.owner], closed=True)
+                stats["notches_merged"] += len(notches[p.owner])
+                p = SPath(p.layer, pts, True, p.owner)
+            merged.append(p)
+        paths = merged
+    if cfg.text_mode == "strokes":
+        from .scene import Path as SPath
+        tpen = cfg.pens.get("TEXT", 0)
+        for t in scene.texts:
+            if t.layer not in cfg.text_layers or tpen <= 0:
+                continue
+            stats["skipped_chars"] |= unsupported_chars(t.text)
+            for st in text_strokes(t.text, t.position, t.height, t.rotation):
+                if len(st) >= 2:
+                    paths.append(SPath("TEXT", st, False, t.owner))
+                    stats["text_strokes"] += 1
+    order = sorted(paths, key=lambda p: (cfg.pens.get(p.layer, 0) != 1, cfg.pens.get(p.layer, 0)))
     for p in order:
         pen = cfg.pens.get(p.layer, 0)
         if pen <= 0 or len(p.points) < 2:
@@ -80,29 +184,42 @@ def write_plt(scene: Scene, path: str, cfg: PlotterConfig | None = None) -> dict
                 raise ExportError(f"coordinate {dx},{dy} exceeds device range")
         if p.closed and dev[0] != dev[-1]:
             raise ExportError("closed path not closed after quantisation")
-        if pen != cur_pen:
-            out.append(f"SP{pen};")
-            cur_pen = pen
-        out.append(f"PU{dev[0][0]},{dev[0][1]};")
-        out.append("PD" + ",".join(f"{x},{y}" for x, y in dev[1:]) + ";")
-        out.append("PU;")
+        if grafis:
+            out.append(f"PA{dev[0][0]},{dev[0][1]}")
+            out.append("PD")
+            out += [f"PA{x},{y}" for x, y in dev[1:]]
+            out.append("PU")
+        else:
+            if pen != cur_pen:
+                out.append(f"SP{pen};")
+                cur_pen = pen
+            out.append(f"PU{dev[0][0]},{dev[0][1]};")
+            out.append("PD" + ",".join(f"{x},{y}" for x, y in dev[1:]) + ";")
+            out.append("PU;")
         stats["paths"] += 1
         stats["by_pen"][pen] = stats["by_pen"].get(pen, 0) + 1
-    if cfg.include_text:
+    if cfg.include_text and cfg.text_mode == "label":
         tpen = cfg.pens.get("TEXT", 0)
-        if tpen > 0 and scene.texts:
+        texts = [t for t in scene.texts if t.layer in cfg.text_layers]
+        if tpen > 0 and texts:
             out.append(f"SP{tpen};")
             h_cm = cfg.text_height_mm / 10.0
             out.append(f"SI{h_cm * 0.7:.3f},{h_cm:.3f};")
-            for t in scene.texts:
+            for t in texts:
                 x, y = _dev(cfg, t.position[0], t.position[1], ext)
                 safe = t.text.encode("ascii", "replace").decode("ascii").replace(cfg.terminator, "?")
                 out.append(f"PU{x},{y};LB{safe}{cfg.terminator}")
                 stats["labels"] += 1
-    out.append("PU;SP0;")
-    with open(path, "w", encoding="ascii", newline="\n") as fh:
-        fh.write("\n".join(out) + "\n")
+    if grafis:
+        out.append("PG")
+        newline = "\r\n"
+    else:
+        out.append("PU;SP0;")
+        newline = "\n"
+    with open(path, "w", encoding="ascii", newline="") as fh:
+        fh.write(newline.join(out) + newline)
     stats["units_per_mm"] = cfg.units_per_mm
+    stats["skipped_chars"] = sorted(stats["skipped_chars"])
     return stats
 
 
@@ -113,45 +230,61 @@ class PltPath:
 
 
 def read_plt(path: str, cfg: PlotterConfig | None = None) -> tuple[list[PltPath], list[tuple[int, str]]]:
-    """Minimal HP-GL reader (IN, PA, SP, PU, PD, SI, LB) for verification. Returns mm."""
+    """HP-GL reader for verification (IN, PA, SP, PU, PD, SI, LB, LT, PG; ';' or newline separated).
+    Coordinates are returned in mm."""
     cfg = cfg or PlotterConfig()
     data = open(path, encoding="ascii").read()
     paths: list[PltPath] = []
     labels: list[tuple[int, str]] = []
-    pen = 0
-    cur: list[tuple[float, float]] | None = None
-    pos = (0, 0)
-    i = 0
-    term = cfg.terminator
-    while i < len(data):
-        if data[i] in " \r\n;":
+    pen, down, cur, pos = 1, False, None, (0, 0)
+    u = cfg.units_per_mm
+    i, n = 0, len(data)
+
+    def flush():
+        nonlocal cur
+        if cur and len(cur) > 1:
+            paths.append(PltPath(pen, cur))
+        cur = None
+    while i < n:
+        ch = data[i]
+        if not ch.isalpha():
             i += 1
             continue
-        cmd = data[i:i + 2]
+        cmd = data[i:i + 2].upper()
         i += 2
         if cmd == "LB":
-            j = data.index(term, i)
+            j = data.find(cfg.terminator, i)
+            j = n if j < 0 else j
             labels.append((pen, data[i:j]))
             i = j + 1
             continue
-        j = data.find(";", i)
-        j = len(data) if j < 0 else j
-        args = [int(v) for v in re.findall(r"-?\d+", data[i:j])] if cmd in ("PU", "PD", "SP") else []
-        i = j + 1
+        j = i
+        while j < n and not data[j].isalpha():
+            j += 1
+        nums = [int(float(v)) for v in re.findall(r"-?\d+(?:\.\d+)?", data[i:j])]
+        i = j
         if cmd == "SP":
-            pen = args[0] if args else 0
-        elif cmd == "PU":
-            if cur and len(cur) > 1:
-                paths.append(PltPath(pen, cur))
-            cur = None
-            if args:
-                pos = (args[-2], args[-1])
-        elif cmd == "PD":
-            if cur is None:
-                cur = [(pos[0] / cfg.units_per_mm, pos[1] / cfg.units_per_mm)]
-            for k in range(0, len(args) - 1, 2):
-                pos = (args[k], args[k + 1])
-                cur.append((pos[0] / cfg.units_per_mm, pos[1] / cfg.units_per_mm))
-    if cur and len(cur) > 1:
-        paths.append(PltPath(pen, cur))
+            flush()
+            pen = nums[0] if nums else 0
+            down = False
+        elif cmd in ("PU", "PD"):
+            if cmd == "PU":
+                flush()
+                down = False
+            else:
+                down = True
+                cur = cur or [(pos[0] / u, pos[1] / u)]
+            for k in range(0, len(nums) - 1, 2):
+                pos = (nums[k], nums[k + 1])
+                if down:
+                    cur.append((pos[0] / u, pos[1] / u))
+        elif cmd == "PA":
+            for k in range(0, len(nums) - 1, 2):
+                pos = (nums[k], nums[k + 1])
+                if down:
+                    cur.append((pos[0] / u, pos[1] / u))
+        elif cmd in ("IN", "PG"):
+            flush()
+            down = False
+    flush()
     return paths, labels

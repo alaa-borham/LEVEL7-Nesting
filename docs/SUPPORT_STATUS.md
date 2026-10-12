@@ -32,7 +32,13 @@ GRAFIS options: "Right-Left" spreading = LEVEL7 open lay with mirrored copies; "
 
 ## Export
 * PLT/HP-GL: 1:1 (40 units/mm default, configurable), pens per layer, labels via `LB`, closure and
-  range checks; verified by re-reading. Not yet verified on the user's plotter → `verified_with_device=false`.
+  range checks; verified by re-reading.
+* PLT profile **"Algotex (GRAFIS-compatible)"**: same file dialect as GRAFIS' PLT for the user's Algotex
+  (CRLF lines, `IN`/`LT1`/`PA`/`PD`/`PU`/`PG`, 40 units/mm, x = length, y = width, origin lower-left,
+  notches as 5 mm spikes in the cut line, seam notches in the seam line, texts as strokes). Compared with
+  GRAFIS' PLT of the 1500 marker: 28 cut contours and 44/44 notch slits within the 0.025 mm grid, seam
+  lines identical, texts at the same places (glyph shapes differ). Not yet cut on the device →
+  `verified_with_device=false` until a 1:1 test (calibration square) is cut and measured.
 * DXF: generic R2000, mm, separate layers; vertex-exact. Not labelled AAMA/ASTM.
 * DXF import: generic + GRAFIS DXF exports (blocks exploded, layer 1 cut with notch spikes, layer 8
   seam). GRAFIS' marker DXF has no grain lines → grain must be set per piece before nesting.
@@ -48,8 +54,8 @@ desktop shortcut check). Results are only claimed for runs that actually passed 
    pattern pieces in all sizes, with grain lines and internal lines switched on** → vertex-level check
    of the other 13 sizes, grain and internal lines.
 3. ~~The 1500 mm GRAFIS marker as SCB~~ — received; decoded with the same rules and identical to GRAFIS.
-4. **A PLT file produced by GRAFIS for your plotter + plotter model** → units, origin, axis direction,
-   pen numbers for the plotter configuration.
+4. ~~GRAFIS PLT for the plotter~~ — received (Algotex); profile implemented and compared. Still needed:
+   **cut/plot `examples/calibration_1000mm_square_algotex.plt` on the Algotex and measure it.**
 5. **Cutting machine brand/model + a reference ISO file or its programming manual** → enables a
    verified ISO post-processor.
 6. **What the symbol codes (e.g. 221, 311) mean in your GRAFIS setup** → drill holes vs. reference marks.

@@ -703,6 +703,21 @@ class MainWindow(QMainWindow):
         dlg = QDialog(self)
         dlg.setWindowTitle(tr("plotter_settings"))
         f = QFormLayout(dlg)
+        from ..exporters.plt import PRESETS
+        preset = QComboBox()
+        preset.addItems(["(current)", "Generic HP-GL", "Algotex (GRAFIS-compatible PLT)"])
+        f.addRow(tr("plt_preset"), preset)
+        dialect = QComboBox()
+        dialect.addItems(["hpgl", "grafis"])
+        dialect.setCurrentText(cfg.dialect)
+        f.addRow(tr("plt_dialect"), dialect)
+        tmode = QComboBox()
+        tmode.addItems(["label", "strokes", "none"])
+        tmode.setCurrentText(cfg.text_mode)
+        f.addRow(tr("plt_text_mode"), tmode)
+        merge = QCheckBox()
+        merge.setChecked(cfg.merge_notches)
+        f.addRow(tr("plt_merge_notches"), merge)
         upm = self._dspin(1, 1000, cfg.units_per_mm, 3)
         swap = QCheckBox()
         swap.setChecked(cfg.swap_xy)
@@ -718,19 +733,39 @@ class MainWindow(QMainWindow):
         f.addRow("flip X", fx)
         f.addRow("flip Y", fy)
         f.addRow("labels (LB)", txt)
-        for layer in ("CUT", "NOTCH", "SEAM", "INTERNAL", "GRAIN", "TEXT", "MARK", "BORDER"):
+        for layer in ("CUT", "NOTCH", "SEAM", "INTERNAL", "GRAIN", "TEXT", "PIECE_NAME", "MARK", "BORDER"):
             s = QSpinBox()
             s.setRange(0, 8)
             s.setValue(cfg.pens.get(layer, 0))
             pens[layer] = s
             f.addRow(f"pen {layer} (0 = off)", s)
+        def apply_preset(i):
+            if i <= 0:
+                return
+            c = PRESETS["generic" if i == 1 else "algotex_grafis"]()
+            dialect.setCurrentText(c.dialect)
+            tmode.setCurrentText(c.text_mode)
+            merge.setChecked(c.merge_notches)
+            upm.setValue(c.units_per_mm)
+            swap.setChecked(c.swap_xy)
+            fx.setChecked(c.flip_x)
+            fy.setChecked(c.flip_y)
+            txt.setChecked(c.include_text)
+            for k, sp in pens.items():
+                sp.setValue(c.pens.get(k, 0))
+            dlg._preset = c
+        dlg._preset = None
+        preset.currentIndexChanged.connect(apply_preset)
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         bb.accepted.connect(dlg.accept)
         bb.rejected.connect(dlg.reject)
         f.addRow(bb)
         if dlg.exec() == QDialog.Accepted:
+            if dlg._preset is not None:
+                cfg = dlg._preset
             cfg.units_per_mm, cfg.swap_xy, cfg.flip_x, cfg.flip_y = upm.value(), swap.isChecked(), fx.isChecked(), fy.isChecked()
             cfg.include_text = txt.isChecked()
+            cfg.dialect, cfg.text_mode, cfg.merge_notches = dialect.currentText(), tmode.currentText(), merge.isChecked()
             cfg.pens = {k: s.value() for k, s in pens.items()}
             self.project.export_configs["plt"] = asdict(cfg)
 
