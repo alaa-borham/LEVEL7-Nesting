@@ -81,7 +81,10 @@ def marker_scene(project: Project, marker: Marker, include_labels: bool = True, 
             # GRAFIS keeps texts readable on mirrored copies: anchor at the top of the frame, turned 180 deg
             ang = getattr(lb, "angle", 0.0)
             if pl.mirrored and lb.box:
-                anchor = (lb.position[0], lb.box[3] - (lb.position[1] - lb.box[1]))
+                import math as _m
+                t = _m.radians(ang)
+                x0, y0 = lb.box[0], lb.box[1]          # frame origin (top-left of the text frame)
+                anchor = (x0 + 5.0 * _m.cos(t) + 5.0 * _m.sin(t), y0 + 5.0 * _m.sin(t) - 5.0 * _m.cos(t))
                 rot = pl.rotation + 180.0 - ang
             else:
                 anchor, rot = lb.position, pl.rotation + ang

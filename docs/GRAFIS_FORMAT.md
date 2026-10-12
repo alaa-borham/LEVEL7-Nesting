@@ -53,13 +53,14 @@ pool: per record in order: [16 B aux if flag==2] + count × 8 B
 ```
 
 * kind 2: `count` points (f32 x, f32 y). **4155/4155** polylines per file match their stored bbox (C).
-* kind 4: text. Words: (x0,y0),(x1,y1) frame; (w, height); (0, 0.4); f32 angle in **radians** at +32;
-  text string at +48. GRAFIS' DXF inserts the text at (x0+5, min y+5) with that height; on mirrored
-  copies at (x0+5, max y−5) turned 180° (C for axis-aligned texts; ±2 mm for the one 1.1° text).
+* kind 4: text. Words: (x0,y0) = text-frame origin (top-left), (x1,y1) opposite bbox corner; (w, height h);
+  (0, 0.4); f32 angle in **radians** at +32; text string at +48. GRAFIS inserts the text at
+  origin + R(angle)·(5, −(h+5)) (frame = h + 2×5 mm); on mirrored copies at origin + R(angle)·(5, −5) turned
+  180° (C: identical in all 15 sizes of the piece DXF exports and in the 44/1500 marker DXF).
 * kind 6: position = degenerate bbox (C), code text (e.g. "221"), sub-lines (cross/square) — meaning U.
 * style: `0` = cut line — written by GRAFIS into the SCB for the nested size only (C);
   `-7` seam line (C, = GRAFIS DXF layer 8); `-6` net contour lying on the cut line, not exported as
-  seam (C); `-3` grain arrow (P); `1` other lines.
+  seam (C); `-3` grain arrow (C: identical to GRAFIS' piece DXF exports in all 15 grading entries); `1` other lines.
 * notches: flag-2, 2-point, 5 mm style-1 elements. If one end lies on the cut contour it is a cut
   notch (base on the contour, pointing inward) — 44/44 identical to the notch slits in GRAFIS' DXF;
   if it lies on the seam line it is a seam notch (GRAFIS layer 8) — 24/24 identical (C, size 44).

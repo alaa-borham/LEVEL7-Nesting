@@ -101,5 +101,4 @@ def test_size_texts_match_grafis(data):
     for txt, pos, h in texts:
         best = min(ours, key=lambda t: math.dist(t.position, pos))
         assert best.text == txt and best.height == pytest.approx(h, abs=1e-4)
-        # texts of one piece type are turned by 1.1 deg; their frame-to-insert rule is approximate (< 2 mm)
-        assert math.dist(best.position, pos) < (0.01 if best.rotation % 90 == 0 else 2.0)
+        assert math.dist(best.position, pos) < 0.01

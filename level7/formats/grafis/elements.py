@@ -133,14 +133,20 @@ def text_angle(e: Element) -> float:
 
 
 def text_anchor(e: Element) -> tuple[tuple[float, float], float, tuple] | None:
-    """Text elements: words 0-1 = frame corners (x0,y0),(x1,y1); word 2 = (width?, height).
-    GRAFIS' own DXF export inserts the text at (x0 + 5, min(y) + 5) with height = word 2[1]
-    (verified on all size labels of the 44/1500 marker)."""
-    if e.kind != KIND_TEXT or len(e.raw) < 24:
+    """Text elements: word 0 = frame origin (x0, y0) = top-left corner of the text frame, word 1 = opposite
+    bbox corner, word 2 = (width?, height h), angle (radians) at +32.
+    GRAFIS inserts the text at origin + R(angle) * (5, -(h + 5))  (frame = text height + 2 x 5 mm padding).
+    Verified exactly on all size texts of the GRAFIS piece DXFs (5 parts x 15 sizes, angles -0.05..1.48 deg)
+    and on the 44/1500 marker DXF. Returns (insert point, height, box)."""
+    import math
+    if e.kind != KIND_TEXT or len(e.raw) < 36:
         return None
     x0, y0, x1, y1, _w, h = struct.unpack_from("<6f", e.raw, 0)
-    box = (min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1))
-    return ((box[0] + TEXT_PADDING, box[1] + TEXT_PADDING), h, box)
+    th = struct.unpack_from("<f", e.raw, 32)[0]
+    c, s = math.cos(th), math.sin(th)
+    u, v = TEXT_PADDING, -(h + TEXT_PADDING)
+    ins = (x0 + c * u - s * v, y0 + s * u + c * v)
+    return (ins, h, (x0, y0, x1, y1))
 
 
 def symbol_position(e: Element) -> tuple[float, float] | None:

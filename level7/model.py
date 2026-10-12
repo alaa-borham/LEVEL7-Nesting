@@ -52,7 +52,7 @@ class Label:
     text: str
     position: Point                      # insertion point (lower-left of the text)
     height: float = 10.0
-    box: tuple | None = None             # (x0, y0, x1, y1) text frame as stored by GRAFIS
+    box: tuple | None = None             # (x0, y0, x1, y1) as stored by GRAFIS: (x0,y0) = frame origin (top-left)
     angle: float = 0.0                   # degrees, CCW in pattern coordinates
 
 

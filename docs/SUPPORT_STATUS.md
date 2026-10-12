@@ -9,7 +9,8 @@
 | Cut contour per part and size (MDL, all 14 sizes + base) | probable method, verified against GRAFIS cut flags for size 44 |
 | Cut contour of nested size (SCB) | confirmed (GRAFIS flags) |
 | Cut contour, notches, seam line, size texts | identical to GRAFIS' own DXF export for size 44 (cut < 0.001 mm) |
-| Internal lines, grain line | read; roles are probable (not contained in the GRAFIS DXF received) |
+| Grain line, size texts — all 15 sizes | identical to GRAFIS piece DXF exports (parts 007, 009, 010, 011, 012) |
+| Internal lines; cut contours of sizes other than 44 | read; not yet compared with a GRAFIS export (the piece DXFs received contain only grain + text) |
 | Symbols (kind 6) | position + code read; meaning unknown → layer MARK only, never drilled/cut |
 | SCB placements: position, rotation, mirror, bundle, copies | reproduced exactly (efficiency/area/length = GRAFIS) |
 | Spline definitions, construction program | not read (GRAFIS stores evaluated polylines, which are used) |
@@ -53,9 +54,9 @@ desktop shortcut check). Results are only claimed for runs that actually passed 
 
 ## Information still needed (what each item settles)
 1. ~~Screenshot of the marker in GRAFIS~~ — received; orientation confirmed.
-2. Size 44 verified against GRAFIS' DXF of the 1500 marker. Still useful: **a GRAFIS DXF of the
-   pattern pieces in all sizes, with grain lines and internal lines switched on** → vertex-level check
-   of the other 13 sizes, grain and internal lines.
+2. Size 44 verified against GRAFIS' DXF of the 1500 marker; grain + texts verified for all sizes (piece DXFs).
+   Still useful: **the same piece DXF export with the cut line (and internal lines / notches) switched on**
+   → vertex-level check of the cut contours of the other 13 sizes.
 3. ~~The 1500 mm GRAFIS marker as SCB~~ — received; decoded with the same rules and identical to GRAFIS.
 4. ~~GRAFIS PLT for the plotter~~ — received (Algotex); profile implemented and compared. Still needed:
    **cut/plot `examples/calibration_1000mm_square_algotex.plt` on the Algotex and measure it.**
