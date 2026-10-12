@@ -1,0 +1,94 @@
+name: windows-build
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: x64
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+          python -m pip install -e .
+
+      - name: Unit tests (Windows)
+        run: python -m pytest -q --junitxml=test-results.xml
+
+      - name: GUI smoke test (offscreen)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          mkdir ui-shots
+          python tests/ui_smoke.py ui-shots
+
+      - name: PyInstaller build
+        run: pyinstaller packaging/level7.spec --noconfirm --clean
+
+      - name: Frozen executable smoke test
+        shell: pwsh
+        run: |
+          $exe = "dist\LEVEL7Nesting\level7-cli.exe"
+          & $exe inspect "samples\Neay blue pants.mdl" "samples\Neay blue pants-44.scb" -o frozen-reports
+          if ($LASTEXITCODE -ne 0) { throw "inspect failed" }
+          & $exe nest "samples\Neay blue pants-44.scb" --width 1430 --time 10 -o frozen.l7n
+          if ($LASTEXITCODE -ne 0) { throw "nest failed / invalid marker" }
+          & $exe export frozen.l7n --format dxf -o frozen.dxf
+          & $exe export frozen.l7n --format plt -o frozen.plt
+          if (!(Test-Path frozen.dxf) -or !(Test-Path frozen.plt)) { throw "export failed" }
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $p = Start-Process "dist\LEVEL7Nesting\LEVEL7Nesting.exe" -ArgumentList '"samples\Neay blue pants-44.scb"' -PassThru
+          Start-Sleep -Seconds 15
+          if ($p.HasExited) { throw "GUI exited early with code $($p.ExitCode)" }
+          Stop-Process -Id $p.Id
+
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $iscc)) { choco install innosetup -y --no-progress; }
+          $ver = python -c "import level7; print(level7.__version__)"
+          & $iscc "/DAppVersion=$ver" packaging\installer.iss
+          if ($LASTEXITCODE -ne 0) { throw "iscc failed" }
+
+      - name: Silent install test (desktop shortcut + launch)
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist\installer\*-Setup.exe | Select-Object -First 1
+          Start-Process $setup.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/ALLUSERS','/TASKS="desktopicon"','/LOG=install.log' -Wait
+          $app = "${env:ProgramFiles}\LEVEL7 Nesting\LEVEL7Nesting.exe"
+          if (!(Test-Path $app)) { Get-Content install.log; throw "not installed" }
+          $lnk = "${env:PUBLIC}\Desktop\LEVEL7 Nesting.lnk"
+          if (!(Test-Path $lnk)) { throw "desktop shortcut missing" }
+          & "${env:ProgramFiles}\LEVEL7 Nesting\level7-cli.exe" info "samples\Neay blue pants-44.scb"
+          if ($LASTEXITCODE -ne 0) { throw "installed CLI failed" }
+          Write-Host "installed OK: $app, shortcut $lnk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LEVEL7Nesting-Setup
+          path: dist/installer/*.exe
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-evidence
+          path: |
+            test-results.xml
+            ui-shots/
+            frozen-reports/
+            frozen.dxf
+            frozen.plt
+            install.log

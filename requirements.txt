@@ -1,0 +1,6 @@
+# Runtime dependencies (pinned versions used for the tested build)
+shapely==2.2.0          # BSD-3-Clause
+pyclipper==1.4.0        # MIT (Clipper library: Boost Software License)
+ezdxf==1.4.4            # MIT
+PySide6-Essentials==6.12.0  # LGPL-3.0 (Qt for Python), dynamically linked
+numpy==2.5.4            # BSD-3-Clause (dependency of shapely)
