@@ -10,7 +10,8 @@
 | Cut contour of nested size (SCB) | confirmed (GRAFIS flags) |
 | Cut contour, notches, seam line, size texts | identical to GRAFIS' own DXF export for size 44 (cut < 0.001 mm) |
 | Grain line, size texts — all 15 sizes | identical to GRAFIS piece DXF exports (parts 007, 009, 010, 011, 012) |
-| Internal lines; cut contours of sizes other than 44 | read; not yet compared with a GRAFIS export (the piece DXFs received contain only grain + text) |
+| Cut contours of all 14 sizes + base | **confirmed** against GRAFIS' AAMA export (DXF + RUL): all 165 grade points × 14 sizes lie on LEVEL7's MDL contours within 0.007 mm (RUL precision); base identical (< 0.001 mm) |
+| Internal lines | read; not yet compared with a GRAFIS export |
 | Symbols (kind 6) | position + code read; meaning unknown → layer MARK only, never drilled/cut |
 | SCB placements: position, rotation, mirror, bundle, copies | reproduced exactly (efficiency/area/length = GRAFIS) |
 | Spline definitions, construction program | not read (GRAFIS stores evaluated polylines, which are used) |
@@ -41,6 +42,11 @@ GRAFIS options: "Right-Left" spreading = LEVEL7 open lay with mirrored copies; "
   lines identical, texts at the same places (glyph shapes differ). Not yet cut on the device →
   `verified_with_device=false` until a 1:1 test (calibration square) is cut and measured.
 * DXF: generic R2000, mm, separate layers; vertex-exact. Not labelled AAMA/ASTM.
+* AAMA import (DXF + RUL, as written by GRAFIS): pieces, all sizes, notches (layer 4), seam lines (layer 14),
+  grain (layer 7), material, quantity, Arabic names. Grade points exact; non-graded curve points are
+  interpolated linearly → graded sizes are approximate (front up to ≈5 mm off GRAFIS' own curve grading);
+  the native MDL reader is exact and remains the reference path. Opened automatically when a `.rul` sits
+  next to the `.dxf`. Not labelled as a full AAMA/ASTM implementation.
 * DXF import: generic + GRAFIS DXF exports (blocks exploded, layer 1 cut with notch spikes, layer 8
   seam). GRAFIS' marker DXF has no grain lines → grain must be set per piece before nesting.
 * ISO **Bullmer** (GRAFIS "Bullmer-Cutter (typical)" compatible): reproduces GRAFIS' cut file for the
@@ -54,9 +60,8 @@ desktop shortcut check). Results are only claimed for runs that actually passed 
 
 ## Information still needed (what each item settles)
 1. ~~Screenshot of the marker in GRAFIS~~ — received; orientation confirmed.
-2. Size 44 verified against GRAFIS' DXF of the 1500 marker; grain + texts verified for all sizes (piece DXFs).
-   Still useful: **the same piece DXF export with the cut line (and internal lines / notches) switched on**
-   → vertex-level check of the cut contours of the other 13 sizes.
+2. ~~All-size verification~~ — received (piece DXFs + AAMA DXF/RUL): cut contours, grain lines and texts
+   verified in all sizes.
 3. ~~The 1500 mm GRAFIS marker as SCB~~ — received; decoded with the same rules and identical to GRAFIS.
 4. ~~GRAFIS PLT for the plotter~~ — received (Algotex); profile implemented and compared. Still needed:
    **cut/plot `examples/calibration_1000mm_square_algotex.plt` on the Algotex and measure it.**

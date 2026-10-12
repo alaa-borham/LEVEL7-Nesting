@@ -21,12 +21,26 @@ def open_any(path: str) -> tuple[Project, list[str]]:
             proj.cut_order = default_cut_order(proj)
         return proj, res.issues
     if ext == ".dxf":
+        if _is_aama(path):
+            from .readers.aama import read_aama
+            return read_aama(path)
         from .readers.dxf import read_dxf
         return read_dxf(path)
     if ext == ".l7n":
         from .project_storage.store import load_project
         return load_project(path), []
     raise ValueError(f"unsupported file type: {ext}")
+
+
+def _is_aama(path: str) -> bool:
+    """AAMA/ASTM DXF: a sibling .rul file or 'Piece Name:' annotations in blocks."""
+    if os.path.exists(os.path.splitext(path)[0] + ".rul") or os.path.exists(os.path.splitext(path)[0] + ".RUL"):
+        return True
+    try:
+        with open(path, "rb") as fh:
+            return b"Piece Name:" in fh.read(4_000_000)
+    except OSError:
+        return False
 
 
 def default_cut_order(proj: Project) -> CutOrder:

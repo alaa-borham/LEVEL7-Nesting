@@ -69,7 +69,11 @@ pool: per record in order: [16 B aux if flag==2] + count × 8 B
   T2M4/T5M4 (size 44); SCB WIDTH equals max Y of the reconstructed marker.
 * Curves are stored as evaluated polylines; spline parameters are not read (unsupported).
 
-### Cut contour in MDL (P, verified)
+### Cut contour in MDL (C — verified in all sizes)
+GRAFIS' AAMA export (`samples/reference/aama`): all 165 grade points of the 11 production pieces, graded by
+the RUL deltas into the 14 sizes, lie on LEVEL7's contours within 0.007 mm (RUL has 2 decimals). The AAMA
+"sample size 40" is GRAFIS' base `__HN40_0` (geometry identical to size 28 in this model).
+
 MDL has no cut flags. The reader takes the largest closed cycle formed by whole polyline elements
 joined end-to-end. For size 44 this selects exactly GRAFIS' cut-flag id set for 9/9 placed parts; the
 same id set is selected in all 15 grading entries; area and bbox equal GRAFIS' stored values.

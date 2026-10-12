@@ -1,6 +1,6 @@
 # Test results
 
-## Automated tests (`python -m pytest -q`) — 46 passed
+## Automated tests (`python -m pytest -q`) — 48 passed
 Linux (Python 3.13, dev container) and Windows (GitHub Actions `windows-2022`, Python 3.12;
 see the `windows-build` workflow runs for the current status).
 
@@ -33,6 +33,7 @@ see the `windows-build` workflow runs for the current status).
 | GRAFIS PLT | `test_grafis_reference_plt.py` | Algotex profile vs GRAFIS PLT: framing, 28 cut contours + 44 notch slits ≤ 0.035 mm, seam lines, 64 text strokes placed |
 | GRAFIS Bullmer ISO | `test_grafis_reference_bullmer.py` | header/job/end lines, block set, 28 pieces; per piece same strokes, start, direction, points (≤ 0.1 mm; 1308/1318 identical) |
 | GRAFIS piece DXFs | `test_grafis_reference_pieces.py` | 5 parts × 15 sizes: grain arrows identical (< 0.001 mm), size texts: string, height, angle, position (< 0.01 mm) |
+| GRAFIS AAMA | `test_grafis_reference_aama.py` | 165 grade points × 14 sizes on MDL contours ≤ 0.007 mm; base < 0.001 mm; AAMA reader: 11 pieces, 14 sizes, Arabic names, notches = MDL |
 | DXF import | `test_dxf_import.py` | GRAFIS DXF → 28 pieces, 46 notches; unknown grain refused with reason; nest after defining grain |
 | GUI | `tests/ui_smoke.py` (offscreen) | open SCB, nest 1500, manual move flagged, undo, language switch |
 
