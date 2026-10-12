@@ -1,7 +1,8 @@
 """ISO (G-code style) cutting-file post-processor.
 
-No machine dialect is configured: the brand/model of the user's cutter, a reference
-file and/or documentation are needed. Until a ``MachineProfile`` is marked
+Target machine (user): Bullmer cutter (Germany). Its cut-file dialect is not publicly documented,
+so no dialect is configured: the exact model and a reference cut file written by GRAFIS for it are
+needed. Until a ``MachineProfile`` is marked
 ``verified``, only a DIAGNOSTIC PREVIEW can be produced; it is clearly marked as not
 for production and uses generic codes. This module never talks to a machine.
 """
