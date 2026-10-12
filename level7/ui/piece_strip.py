@@ -9,12 +9,12 @@ from PySide6.QtWidgets import QScrollArea, QToolTip, QWidget
 from ..geometry import bbox, transform_points
 from .marker_view import bundle_letter
 
-THUMB_H = 52          # px available for the outline
-ROW_H = THUMB_H + 30  # outline + count line
+THUMB_H = 26          # px available for the outline (compact: more room for the marker)
+ROW_H = THUMB_H + 18  # outline + count line
 HEAD_W = 54           # size / bundle column
-TOP = 18              # "Pc: placed/total" line
+TOP = 14              # "Pc: placed/total" line
 MIN_CELL = 56
-MAX_CELL = 190
+MAX_CELL = 150
 
 
 class PieceStrip(QWidget):
@@ -112,15 +112,15 @@ class PieceStrip(QWidget):
         f.setPointSizeF(8)
         p.setFont(f)
         p.setPen(fg)
-        p.drawText(QPointF(4, 13), f"Pc: {self.placed}/ {self.total}")
+        p.drawText(QPointF(4, 11), f"Pc: {self.placed}/ {self.total}")
         p.drawLine(HEAD_W - 4, TOP, HEAD_W - 4, self.height())
         dim = QColor(fg)
         dim.setAlpha(140)
         for r, (size, b) in enumerate(self.rows):
             y = TOP + r * ROW_H
             p.setPen(fg)
-            p.drawText(QRectF(2, y + ROW_H - 18, HEAD_W - 8, 16), Qt.AlignLeft | Qt.AlignVCenter, size)
-            p.drawText(QRectF(2, y + ROW_H - 18, HEAD_W - 8, 16), Qt.AlignRight | Qt.AlignVCenter, bundle_letter(b))
+            p.drawText(QRectF(2, y + 2, HEAD_W - 8, ROW_H - 4), Qt.AlignLeft | Qt.AlignVCenter, size)
+            p.drawText(QRectF(2, y + 2, HEAD_W - 8, ROW_H - 4), Qt.AlignRight | Qt.AlignVCenter, bundle_letter(b))
             p.setPen(QPen(dim, 1))
             p.drawLine(0, y + ROW_H, self.width(), y + ROW_H)
             for piece, x, cw in self.cols:
@@ -131,7 +131,7 @@ class PieceStrip(QWidget):
                 rn, rm, has_m = c
                 done = rn == 0 and rm == 0
                 if shape:
-                    cx, cy = x + cw / 2, y + 4 + THUMB_H / 2
+                    cx, cy = x + cw / 2, y + 3 + THUMB_H / 2
                     path = QPainterPath()
                     for i, (sx, sy) in enumerate(shape):
                         pt = QPointF(cx + sx * self.scale, cy - sy * self.scale)
@@ -144,7 +144,7 @@ class PieceStrip(QWidget):
                     p.setBrush(Qt.NoBrush)
                 p.setPen(fg if not done else dim)
                 txt = f"{rn}   {rm if has_m else '-'}"
-                p.drawText(QRectF(x, y + ROW_H - 18, cw, 16), Qt.AlignCenter, txt)
+                p.drawText(QRectF(x, y + ROW_H - 15, cw, 14), Qt.AlignCenter, txt)
         p.end()
 
     def _piece_at(self, pos):

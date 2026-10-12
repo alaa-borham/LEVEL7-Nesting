@@ -15,3 +15,8 @@
 No cloud or AI service is used by the application; it runs offline.
 LGPL note: the installer contains unmodified Qt/PySide6 libraries as separate files; include the
 LGPL text and a note on how to obtain the Qt source when redistributing.
+
+## Optional nesting engine
+* **sparrow** (MIT, J. Gardeyn / KU Leuven) with **jagua-rs** (MPL-2.0): built by CI from a pinned commit and
+  bundled as `engines/sparrow.exe`; run as a separate process. Licence notices: THIRD_PARTY_LICENSES.md.
+  Without it LEVEL7 uses only its own engine.

@@ -164,7 +164,7 @@ class MainWindow(QMainWindow):
 
         # GRAFIS-like piece strip above the marker
         self.strip_area, self.strip = make_strip_area(self)
-        self.strip_area.setMinimumHeight(70)
+        self.strip_area.setMinimumHeight(40)
         self.strip.open_table.connect(lambda: (self.dock_left.show(), self.dock_left.raise_()))
         self.dock_strip = QDockWidget(self)
         self.dock_strip.setObjectName("piece_strip")
@@ -187,7 +187,8 @@ class MainWindow(QMainWindow):
         self.f_mode = QComboBox()
         self.f_time = QSpinBox()
         self.f_time.setRange(1, 7200)
-        self.f_time.setValue(30)
+        self.f_time.setValue(120)
+        self.f_engine = QComboBox()
         self.f_seed = QSpinBox()
         self.f_seed.setRange(0, 2 ** 31 - 1)
         self.f_seed.setValue(1)
@@ -199,7 +200,7 @@ class MainWindow(QMainWindow):
         self.form_rows = []
         for key, wid in (("width", self.f_width), ("margin_l", self.f_ml), ("margin_r", self.f_mr),
                          ("margin_s", self.f_ms), ("margin_e", self.f_me), ("spacing", self.f_sp), ("lay", self.f_lay),
-                         ("max_len", self.f_maxlen), ("material", self.f_material), ("mode", self.f_mode),
+                         ("max_len", self.f_maxlen), ("material", self.f_material), ("mode", self.f_mode), ("engine", self.f_engine),
                          ("time", self.f_time), ("seed", self.f_seed), ("rot180", self.f_rot180),
                          ("rot90", self.f_rot90), ("tolerance", self.f_tol)):
             lab = QLabel()
@@ -402,6 +403,13 @@ class MainWindow(QMainWindow):
         self.f_mode.addItems([tr("mode_fast"), tr("mode_balanced"), tr("mode_long")])
         self.f_mode.setCurrentIndex(cur if cur >= 0 else 1)
         self.f_mode.blockSignals(False)
+        from ..nesting import sparrow
+        cur = self.f_engine.currentIndex()
+        self.f_engine.clear()
+        self.f_engine.addItems([tr("engine_auto") + ("" if sparrow.available() else " — " + tr("not_available")),
+                                tr("engine_builtin")])
+        self.f_engine.setCurrentIndex(cur if cur >= 0 else (0 if sparrow.available() else 1))
+        self.f_engine.setToolTip(tr("engine_tip"))
         if not self.project:
             self.statusBar().showMessage(tr("ready"))
         self.update_results()
@@ -420,7 +428,7 @@ class MainWindow(QMainWindow):
         self.retranslate()
 
     def _mode_changed(self, i):
-        self.f_time.setValue({0: 5, 1: 30, 2: 120}.get(i, 30))
+        self.f_time.setValue({0: 10, 1: 120, 2: 300}.get(i, 120))
 
     # -- file handling -------------------------------------------------------------------
     def dragEnterEvent(self, ev):
@@ -561,6 +569,7 @@ class MainWindow(QMainWindow):
 
     def nest_settings_from_form(self) -> NestSettings:
         return NestSettings(mode=["fast", "balanced", "long"][max(0, self.f_mode.currentIndex())],
+                            engine="auto" if self.f_engine.currentIndex() <= 0 else "builtin",
                             time_limit=float(self.f_time.value()), seed=self.f_seed.value(),
                             allow_rotation_180=self.f_rot180.isChecked(), allow_rotation_90=self.f_rot90.isChecked(),
                             curve_tolerance=self.f_tol.value())
@@ -652,8 +661,10 @@ class MainWindow(QMainWindow):
 
     def _refresh_strip(self):
         self.strip.set_data(self.project, self.marker)
+        from .piece_strip import ROW_H, TOP
         rows = max(1, len(self.strip.rows))
-        self.strip_area.setFixedHeight(min(18 + rows * 82 + 22, 18 + 3 * 82 + 22))
+        extra = 16 if rows > 2 or self.strip.sizeHint().width() > self.strip_area.width() else 4   # scroll bars
+        self.strip_area.setFixedHeight(TOP + min(rows, 2) * ROW_H + extra)
 
     def update_results(self, v=None):
         if not self.marker or not self.project:

@@ -33,6 +33,22 @@ jobs:
           }
           Get-Content level7/_build.py
 
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build sparrow nesting engine (MIT; pinned commit)
+        shell: pwsh
+        env:
+          SPARROW_COMMIT: 4629b22795ae6b25b3b460ccde6fb36a71292b6d
+        run: |
+          git clone --quiet https://github.com/JeroenGar/sparrow.git ..\sparrow-src
+          git -C ..\sparrow-src checkout --quiet $env:SPARROW_COMMIT
+          Copy-Item packaging\sparrow\Cargo.lock ..\sparrow-src\Cargo.lock   # dependency versions as tested
+          cargo build --release --locked --manifest-path ..\sparrow-src\Cargo.toml
+          if ($LASTEXITCODE -ne 0) { throw "sparrow build failed" }
+          New-Item -ItemType Directory -Force engines | Out-Null
+          Copy-Item ..\sparrow-src\target\release\sparrow.exe engines\
+          & engines\sparrow.exe --help | Select-Object -First 3
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -60,6 +76,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "inspect failed" }
           & $exe nest "samples\Neay blue pants-44.scb" --width 1430 --time 10 -o frozen.l7n
           if ($LASTEXITCODE -ne 0) { throw "nest failed / invalid marker" }
+          & $exe nest "samples\Neay blue pants-44.scb" --width 1500 --time 25 --engine auto -o frozen_sparrow.l7n | Tee-Object -Variable out
+          if ($LASTEXITCODE -ne 0) { throw "nest with sparrow failed / invalid marker" }
+          if (-not ($out -match "engine: sparrow|engine: builtin")) { throw "engine not reported" }
           & $exe export frozen.l7n --format dxf -o frozen.dxf
           & $exe export frozen.l7n --format plt -o frozen.plt
           if (!(Test-Path frozen.dxf) -or !(Test-Path frozen.plt)) { throw "export failed" }

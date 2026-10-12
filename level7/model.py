@@ -139,6 +139,7 @@ class NestSettings:
     allow_mirror: bool = False
     curve_tolerance: float = 0.2   # mm, max deviation of search polygon (outward only)
     attempts: int = 0              # 0 = until time limit
+    engine: str = "auto"           # auto: built-in start + sparrow compression when available; builtin: only LEVEL7
 
 
 @dataclass

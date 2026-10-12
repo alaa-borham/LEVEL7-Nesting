@@ -115,6 +115,42 @@ def _is_aama(path: str) -> bool:
         return False
 
 
+def _use_sparrow(settings, fabric, pinned) -> bool:
+    from .nesting import sparrow
+    engine = os.environ.get("LEVEL7_ENGINE", settings.engine or "auto")
+    return engine in ("auto", "sparrow") and sparrow.available() and not pinned and not fabric.max_length
+
+
+def _nest_with_sparrow(proj, items, fabric, settings, workers, progress, stop_event):
+    """LEVEL7's engine builds a valid start quickly, sparrow compresses it for the rest of the time; the shorter
+    layout that passes LEVEL7's validator wins (so the result is never worse than the built-in start)."""
+    from dataclasses import replace
+    from .model import Marker
+    from .nesting import sparrow
+    from .nesting.parallel import run_parallel
+    total = settings.time_limit or 30.0
+    t_start = min(15.0, max(3.0, 0.15 * total))
+    start = run_parallel(items, fabric, replace(settings, time_limit=t_start), workers=workers, progress=progress,
+                         stop_event=stop_event)
+    if stop_event is not None and stop_event.is_set():
+        return start, "builtin"
+    remaining = max(5.0, total - t_start)
+
+    def prog(d):
+        if progress:
+            progress({**d, "engine": "sparrow"})
+    res = sparrow.run(items, fabric, settings, remaining, progress=prog, stop_event=stop_event,
+                      warm=start if not start.unplaced else None, workers=workers)
+    if res is None:
+        return start, "builtin"
+    check = validate_marker(proj, Marker(name="check", fabric=fabric, placements=res.placements, length=res.length),
+                            allowed_rotations={(it.piece_uid, it.mirrored): it.rotations for it in items})
+    if not check.ok or (len(res.unplaced), res.length) >= (len(start.unplaced), start.length):
+        return start, "builtin"
+    res.evaluations += start.evaluations
+    return res, "sparrow"
+
+
 def default_cut_order(proj: Project) -> CutOrder:
     co = CutOrder(size_quantities={s: 0 for s in proj.size_names})
     for p in proj.pieces:
@@ -138,7 +174,10 @@ def run_nesting(proj: Project, fabric: FabricSettings, settings: NestSettings, c
     if not items and not unplaced:
         raise ValueError("nothing to nest: set size quantities and piece counts")
     t0 = time.monotonic()
-    if items:
+    engine_used = "builtin"
+    if items and _use_sparrow(settings, fabric, pinned):
+        res, engine_used = _nest_with_sparrow(proj, items, fabric, settings, workers, progress, stop_event)
+    elif items:
         res = run_parallel(items, fabric, settings, workers=workers, progress=progress, stop_event=stop_event)
     else:   # every requested copy was rejected (e.g. unknown grain): report them, do not fail
         from .nesting.engine import NestResult
@@ -161,7 +200,7 @@ def run_nesting(proj: Project, fabric: FabricSettings, settings: NestSettings, c
     marker.length = st["length_mm"]
     marker.stats = st
     info = {"validation": v, "warnings": warnings, "evaluations": res.evaluations, "elapsed": res.elapsed,
-            "stopped": res.stopped, "history": res.history, "max_search_deviation": None}
+            "stopped": res.stopped, "history": res.history, "max_search_deviation": None, "engine": engine_used}
     return marker, info
 
 

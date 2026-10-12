@@ -179,6 +179,14 @@ T = {
     "plt_reset": ("Recommended settings", "الإعدادات الموصى بها"),
     "material_tip": ("Material of this part (O = upper fabric, F = lining …); choose or type a new code",
                      "خامة هذه القطعة (O = القماش الأساسي، F = البطانة …)؛ اختر أو اكتب رمزًا جديدًا"),
+    "engine": ("Nesting engine", "محرك التعشيق"),
+    "engine_auto": ("Automatic (sparrow)", "تلقائي (sparrow)"),
+    "engine_builtin": ("LEVEL7 only", "LEVEL7 فقط"),
+    "not_available": ("not available", "غير متوفر"),
+    "engine_tip": ("Automatic: LEVEL7 builds a valid marker first, then the sparrow engine shortens it for the rest of "
+                   "the time; the shorter valid marker is kept. Best results from about 2 minutes.",
+                   "تلقائي: LEVEL7 يبني ماركرًا صحيحًا أولًا، ثم يقوم محرك sparrow بتقصيره في باقي الوقت، ويُحفظ الأقصر "
+                   "الصحيح. أفضل النتائج من حوالي دقيقتين."),
     "cancel": ("Cancel", "إلغاء"),
 }
 

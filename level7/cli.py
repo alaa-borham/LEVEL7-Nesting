@@ -41,7 +41,7 @@ def _nest(a, proj):
     if sizes:
         proj.cut_order.size_quantities = sizes
     fab = FabricSettings(width=a.width, spacing=a.spacing, margin_left=a.margin, margin_right=a.margin)
-    st = NestSettings(time_limit=a.time, seed=a.seed, mode=a.mode)
+    st = NestSettings(time_limit=a.time, seed=a.seed, mode=a.mode, engine=getattr(a, "engine", "auto"))
 
     def prog(d):
         if not d.get("final"):
@@ -58,6 +58,7 @@ def cmd_nest(a):
     proj.markers.append(marker)
     print(json.dumps({k: v for k, v in marker.stats.items() if k != "by_size"}, indent=1, default=str))
     print(info["validation"].summary())
+    print("engine:", info.get("engine", "builtin"))
     for w in info["warnings"]:
         print("warning:", w)
     for pl in marker.placements:
@@ -130,6 +131,8 @@ def main(argv=None):
         s.add_argument("--time", type=float, default=30)
         s.add_argument("--seed", type=int, default=1)
         s.add_argument("--mode", default="balanced")
+        s.add_argument("--engine", choices=["auto", "builtin"], default="auto",
+                       help="auto: LEVEL7 start + sparrow compression when the engine is bundled")
         s.add_argument("--spacing", type=float, default=0.0)
         s.add_argument("--margin", type=float, default=0.0)
         s.add_argument("--workers", type=int, default=None)
