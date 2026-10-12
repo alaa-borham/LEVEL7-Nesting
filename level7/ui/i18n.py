@@ -147,6 +147,13 @@ T = {
     "upd_downloading": ("Downloading update {v}…", "جارٍ تحميل التحديث {v}…"),
     "upd_save_first": ("The program will close to install the update.\nSave the current project first?",
                        "سيُغلق البرنامج لتثبيت التحديث.\nهل تريد حفظ المشروع الحالي أولًا؟"),
+    "pieces_table": ("Pieces && quantities table", "جدول القطع والكميات"),
+    "tb_open": ("Open", "فتح"), "tb_save": ("Save", "حفظ"), "tb_undo": ("Undo", "تراجع"),
+    "tb_redo": ("Redo", "إعادة"), "tb_rotate180": ("Rotate 180°", "تدوير 180°"), "tb_pin": ("Pin", "تثبيت"),
+    "tb_measure": ("Measure", "قياس"), "tb_zoom_fit": ("Fit", "ملاءمة"), "tb_display_options": ("Display", "العرض"),
+    "tb_pieces_table": ("Pieces", "القطع"), "tb_run": ("Nest", "تعشيق"), "tb_stop": ("Stop", "إيقاف"),
+    "tb_export_plt": ("PLT", "PLT"), "tb_export_dxf": ("DXF", "DXF"), "tb_export_iso": ("ISO", "ISO"),
+    "tb_language": ("العربية", "English"),
     "cancel": ("Cancel", "إلغاء"),
 }
 

@@ -292,13 +292,45 @@ class MainWindow(QMainWindow):
         self.m_help.addAction(self.act_auto_upd)
         self.m_help.addSeparator()
         self.m_help.addAction(self._act("about", self.about))
+        self._build_toolbar(undo, redo)
+
+    TOOLBAR = (("open", "open"), ("save", "save"), None, ("undo", None), ("redo", None), None,
+               ("rotate180", "rotate180"), ("pin", "pin"), ("measure", "measure"), None,
+               ("zoom_fit", "zoom_fit"), ("display_options", "display"), ("pieces_table", "pieces"), None,
+               ("run", "run"), ("stop", "stop"), None,
+               ("export_plt", "plt"), ("export_dxf", "dxf"), ("export_iso", "iso"), None,
+               ("language", "language"))
+
+    def _build_toolbar(self, undo, redo):
+        from PySide6.QtCore import QSize
+        from .icons import icon
         tb = self.addToolBar("main")
         tb.setObjectName("main")
-        for a in self.actions_tr:
-            if a[1] in ("open", "save", "run", "stop", "rotate180", "pin", "measure", "zoom_fit", "language"):
-                tb.addAction(a[0])
-        tb.addAction(undo)
-        tb.addAction(redo)
+        tb.setMovable(False)
+        tb.setIconSize(QSize(28, 28))
+        tb.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        tb.setStyleSheet("QToolBar { spacing: 2px; padding: 2px 4px; }"
+                         "QToolButton { padding: 2px 6px; min-width: 46px; }")
+        acts = {k: a for a, k in self.actions_tr}
+        acts["undo"], acts["redo"] = undo, redo
+        acts["pieces_table"] = self.act_table
+        self.toolbar_items = []
+        for item in self.TOOLBAR:
+            if item is None:
+                tb.addSeparator()
+                continue
+            key, ic = item
+            a = acts[key]
+            a.setIcon(icon(ic or key))
+            tb.addAction(a)
+            self.toolbar_items.append((a, key))
+        self.toolbar = tb
+
+    def _retranslate_toolbar(self):
+        for a, key in self.toolbar_items:
+            a.setIconText(tr("tb_" + key))
+            sc = a.shortcut().toString(QKeySequence.NativeText)
+            a.setToolTip(a.text().replace("&", "") + (f"  ({sc})" if sc else ""))
 
     def retranslate(self):
         rtl = LANG["current"] == "ar"
@@ -308,6 +340,8 @@ class MainWindow(QMainWindow):
             a.setText(tr(k))
         self.undo_actions[0].setText(tr("undo"))
         self.undo_actions[1].setText(tr("redo"))
+        self.act_table.setText(tr("pieces_table"))
+        self._retranslate_toolbar()
         for m, k in self.menus_tr:
             m.setTitle(tr(k))
         for lab, k in self.form_rows:

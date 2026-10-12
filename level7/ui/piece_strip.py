@@ -23,6 +23,7 @@ class PieceStrip(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMouseTracking(True)
+        self.setLayoutDirection(Qt.LeftToRight)     # GRAFIS layout: sizes on the left, counts "n  m"
         self.rows: list[tuple[str, int]] = []
         self.cols = []            # (piece, cell_x, cell_w)
         self.counts = {}          # (row, piece_uid) -> (rem_n, rem_m, has_m)
@@ -105,6 +106,7 @@ class PieceStrip(QWidget):
         fg, bg = pal.color(QPalette.WindowText), pal.color(QPalette.Base)
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
+        p.setLayoutDirection(Qt.LeftToRight)
         p.fillRect(self.rect(), bg)
         f = QFont(self.font())
         f.setPointSizeF(8)
@@ -180,4 +182,5 @@ def make_strip_area(parent=None):
     area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
     area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
     area.setFrameShape(QScrollArea.NoFrame)
+    area.setLayoutDirection(Qt.LeftToRight)
     return area, strip
