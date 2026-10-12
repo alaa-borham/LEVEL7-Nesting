@@ -120,8 +120,10 @@ def inspect_file(path: str, encoding: str = "cp1256") -> dict:
                 f"(GRAFIS EFFCNCY {proj.sbinfo.get('EFFCNCY')}), area {st['pieces_area_m2']:.2f} m2 "
                 f"(USDAREA {proj.sbinfo.get('USDAREA')}), length {st['length_mm']:.2f}")
             findings["confirmed"].append("EFFCNCY definition = sum of placed cut areas / (WIDTH x LENGTH)")
-            findings["probable"].append("rotation = base + extra + 180*(flags&0x80); mirror byte = mirrored copy; "
-                                        "mirror about pattern Y axis before rotation (absolute L/R needs a GRAFIS screenshot)")
+            findings["confirmed"].append("rotation = base + extra + 180*(flags&0x80); mirror byte = mirrored copy, "
+                                         "mirror about pattern Y axis before rotation; marker Y axis upward - "
+                                         "identical piece positions, orientations and bundles (A/B) to the GRAFIS "
+                                         "screen view of this marker (docs/evidence)")
             findings["probable"].append("#SBTLIST columns = copies / mirrored copies per bundle (28 = 2 bundles x 14)")
             if proj.sources[0].internal_model_name:
                 findings["confirmed"].append(f"internal MODEL name: {proj.sources[0].internal_model_name!r} "

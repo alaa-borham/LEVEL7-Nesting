@@ -505,6 +505,7 @@ class MainWindow(QMainWindow):
                  f"Utilisation (usable width): {s['efficiency_usable_width_pct']:.2f} %",
                  f"Waste: {s['waste_pct']:.2f} %",
                  f"Consumption: {s['consumption_m']:.3f} m = {s['consumption_yd']:.3f} yd",
+                 f"Per garment (U/B): {s.get('length_per_garment_m', 0):.3f} m ({s.get('garments', 0)} garments)",
                  "By size: " + ", ".join(f"{k}: {n}" for k, n in sorted(s["by_size"].items()))]
         if self.marker.compute_time:
             lines.append(f"Compute time: {self.marker.compute_time:.1f} s, seed {self.marker.seed}")

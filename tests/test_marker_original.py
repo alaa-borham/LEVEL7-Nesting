@@ -17,6 +17,7 @@ def test_original_marker_reconstruction(scb):
     assert st["pieces_area_m2"] == pytest.approx(3.51, abs=0.005)
     assert st["length_mm"] == pytest.approx(2929.93, abs=0.01)
     assert scb.checks["bbox_mismatch"] == [] and scb.checks["area_mismatch"] == []
+    assert st["garments"] == 2 and round(st["length_per_garment_m"], 2) == 1.46   # GRAFIS "U/B = 1.46 m"
 
 
 def test_piece_types_and_copies_independent(scb):

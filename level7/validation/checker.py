@@ -143,6 +143,7 @@ def marker_stats(project: Project, marker: Marker) -> dict:
     eff_total = 100 * area / tot if tot else 0.0
     eff_usable = 100 * area / usable if usable else 0.0
     by_size = Counter(pl.size for pl in marker.placements if pl.placed)
+    garments = len({(pl.size, pl.bundle) for pl in marker.placements if pl.placed})
     return {
         "length_mm": length,
         "width_mm": f.width,
@@ -153,6 +154,8 @@ def marker_stats(project: Project, marker: Marker) -> dict:
         "waste_pct": 100 - eff_total,
         "consumption_m": length / 1000.0,
         "consumption_yd": length / 914.4,
+        "garments": garments,
+        "length_per_garment_m": (length / 1000.0 / garments) if garments else 0.0,   # GRAFIS "U/B"
         "placed": sum(1 for p in marker.placements if p.placed),
         "unplaced": sum(1 for p in marker.placements if not p.placed),
         "by_size": dict(by_size),

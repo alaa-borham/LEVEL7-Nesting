@@ -38,8 +38,10 @@ see the `windows-build` workflow runs for the current status).
 | 1400 | 3042.2 | 82.50 % | valid |
 | 1430 | 2960.5 | 83.00 % | valid |
 | 1500 | 2840.2 | 82.48 % | valid |
+| 1500 (GRAFIS auto-nest, screenshot) | 2850 (displayed 2.85 m) | 82.2 % | — |
 
-At equal width LEVEL7 is currently ≈1 % longer than the GRAFIS marker after 60 s.
+At 1430 mm LEVEL7 is ≈1 % longer than the saved GRAFIS marker after 60 s; at 1500 mm it is ≈10 mm
+shorter than GRAFIS' own nest shown in the screenshot.
 
 ## Export verification (examples/VERIFICATION.json)
 Every marker exported to PLT, DXF and diagnostic ISO and re-read: 28/28 cut paths each;

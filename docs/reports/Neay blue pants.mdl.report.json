@@ -10,7 +10,7 @@
   "probable": [
    "text encoding cp1256: Arabic part names decode to valid words",
    "cut contour (MDL) = largest closed cycle of whole polyline elements; matches the GRAFIS cut flags of the 44 marker for 9/9 placed parts and the same element set is chosen in all 15 grading entries",
-   "units = millimetres: '#TFLIST' tables declare mm and the hem line of the front lies at y=-1040 = T5M4 for size 44; marker WIDTH equals max Y of placed pieces",
+   "units = millimetres: '#TFLIST' tables declare mm; part 7 size 44 has its hem line at y=-1040 and T2M4/T5M4 = 1040 for size 44; SCB WIDTH 1430 equals the max Y of the reconstructed marker; front length ~1135 is realistic only in mm",
    "style -7/-6 = seam (net) line, -3 = grain line, 2-point flagged style 1 = notch"
   ],
   "unknown": [

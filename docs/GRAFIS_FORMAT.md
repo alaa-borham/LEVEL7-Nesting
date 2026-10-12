@@ -71,13 +71,15 @@ Header: f32 WIDTH @36, u32 PCSTOTAL @56, u32 GRDTAB count @60, f32 efficiency ra
 f32 exact LENGTH @76. Then PCSTOTAL records × 120 B from offset 96 — see
 `level7/formats/grafis/placements.py` for the field table.
 
-Transform (P; reproduces the marker with zero overlap, all grain lines parallel to the length,
-efficiency 83.86 %, area 3.51 m², length 2929.93 = GRAFIS values):
+Transform (C; reproduces the marker with zero overlap, all grain lines parallel to the length,
+efficiency 83.86 %, area 3.51 m², length 2929.93 = GRAFIS values, and is visually identical — piece
+positions, orientation, left/right and bundle A/B — to the GRAFIS screen view,
+`docs/evidence/grafis_original_1430.png` vs `docs/evidence/level7_reconstruction_1430.png`):
 `rotation = base(+36) + extra(+84) + 180·(flags@40 & 0x80)`, `mirror = byte@41`, mirror = x→−x before
 rotation, then translate so that the bbox lower-left equals (X,Y)@20.
 
 `EFFCNCY` = Σ placed cut areas / (WIDTH × LENGTH) (C).
 
 Open points (U): u32 check values, placement fields +28, +64..72, flag bit 0x40, blocks (2,4..9)
-except (2,8), construction blocks (3,k,1..6). Absolute left/right orientation of the marker cannot be
-proven without a GRAFIS screenshot (a global vertical flip is indistinguishable).
+except (2,8), construction blocks (3,k,1..6). Bundle 1 = "A", bundle 2 = "B" in the GRAFIS view (C).
+GRAFIS "U/B" = marker length / number of bundles (1.46 m, C).
