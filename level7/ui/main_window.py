@@ -224,8 +224,8 @@ class MainWindow(QMainWindow):
         self.form_spacing.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
         self.form_spacing.setHorizontalSpacing(6)
         self.form_spacing.setVerticalSpacing(3)
-        for key, wid in (("margin_l", self.f_ml), ("margin_r", self.f_mr), ("margin_s", self.f_ms),
-                         ("margin_e", self.f_me), ("spacing", self.f_sp), ("buffer_x", self.f_bx),
+        for key, wid in (("spacing", self.f_sp), ("margin_l", self.f_ml), ("margin_r", self.f_mr), ("margin_s", self.f_ms),
+                         ("margin_e", self.f_me), ("buffer_x", self.f_bx),
                          ("buffer_y", self.f_by), ("shrink_x", self.f_shx), ("shrink_y", self.f_shy)):
             lab = QLabel()
             wid.setFixedWidth(118)
