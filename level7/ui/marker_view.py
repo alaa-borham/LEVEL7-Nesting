@@ -428,12 +428,33 @@ class MarkerView(QGraphicsView):
         return [it.placement for it in self.scene().selectedItems() if isinstance(it, PieceItem)]
 
     # -- interaction -----------------------------------------------------------------
+    def focus_point(self):
+        """What the user works on: the measurement (its middle / the arc) or the selected pieces; else None."""
+        if self.measure_mode:
+            pts = [q for q in (self._m_start, self._m_end) if q is not None]
+            if self.measure_kind == "curve":
+                pts = [QPointF(*c[2]) for c in (self._c_start, self._c_end) if c is not None]
+            if pts:
+                return QPointF(sum(q.x() for q in pts) / len(pts), sum(q.y() for q in pts) / len(pts))
+        sel = [it for it in self.scene().selectedItems() if isinstance(it, PieceItem)]
+        if sel:
+            r = sel[0].sceneBoundingRect()
+            for it in sel[1:]:
+                r = r.united(it.sceneBoundingRect())
+            return r.center()
+        return None
+
     def zoom_step(self, f: float):
-        """Zoom buttons: around the marker's bottom-left corner, which stays at the bottom of the view."""
+        """Zoom buttons: around the measurement / selected pieces when there are any (they stay in the middle),
+        otherwise around the marker's bottom-left corner, which stays at the bottom of the view."""
+        c = self.focus_point()
         old = self.transformationAnchor()
         self.setTransformationAnchor(QGraphicsView.NoAnchor)
         self.scale(f, f)
         self.setTransformationAnchor(old)
+        if c is not None:
+            self.centerOn(c)
+            return
         self.horizontalScrollBar().setValue(self.horizontalScrollBar().minimum())
         self.verticalScrollBar().setValue(self.verticalScrollBar().maximum())
 
@@ -447,7 +468,11 @@ class MarkerView(QGraphicsView):
 
     def wheelEvent(self, ev):
         f = 1.25 if ev.angleDelta().y() > 0 else 0.8
-        self.scale(f, f)
+        c = self.focus_point()
+        if c is not None:                       # a measurement / selection: it stays in the middle
+            self.zoom_step(f)
+            return
+        self.scale(f, f)                        # otherwise around the mouse pointer
 
     def mousePressEvent(self, ev):
         if ev.button() == Qt.MiddleButton:
