@@ -246,6 +246,7 @@ class MarkerView(QGraphicsView):
     measured = Signal(float)
     match_picked = Signal(str, str, int)   # piece uid, "notch" / "corner", index
     pick_finished = Signal()               # right-click ends picking match points
+    piece_dropped = Signal(str, str, bool, float, float)   # size, piece uid, mirrored, scene x / y (from the strip)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -294,6 +295,8 @@ class MarkerView(QGraphicsView):
             b.clicked.connect(fn)
             self.zoom_buttons.append(b)
         self.pick_match = False            # plaid: next click on a piece picks its match point
+        self.setAcceptDrops(True)          # pieces dragged from the strip above
+        self.viewport().setAcceptDrops(True)
 
     def apply_theme(self):
         from .themes import colours
@@ -486,6 +489,33 @@ class MarkerView(QGraphicsView):
             return
         self.horizontalScrollBar().setValue(self.horizontalScrollBar().minimum())
         self.verticalScrollBar().setValue(self.verticalScrollBar().maximum())
+
+    # -- pieces dragged from the strip -------------------------------------------------------
+    def _strip_drag(self, ev):
+        from .piece_strip import PIECE_MIME
+        return ev.mimeData().hasFormat(PIECE_MIME) and self.marker is not None
+
+    def dragEnterEvent(self, ev):
+        if self._strip_drag(ev):
+            ev.acceptProposedAction()
+        else:
+            super().dragEnterEvent(ev)
+
+    def dragMoveEvent(self, ev):
+        if self._strip_drag(ev):
+            ev.acceptProposedAction()
+        else:
+            super().dragMoveEvent(ev)
+
+    def dropEvent(self, ev):
+        if not self._strip_drag(ev):
+            super().dropEvent(ev)
+            return
+        from .piece_strip import PIECE_MIME
+        size, uid, mir = bytes(ev.mimeData().data(PIECE_MIME)).decode("utf-8").split("\t")
+        pt = self.mapToScene(ev.position().toPoint())
+        ev.acceptProposedAction()
+        self.piece_dropped.emit(size, uid, mir == "1", pt.x(), pt.y())
 
     def resizeEvent(self, ev):
         super().resizeEvent(ev)

@@ -148,6 +148,7 @@ class MainWindow(QMainWindow):
         self.view.moved.connect(self.on_moved)
         self.view.scene().selectionChanged.connect(self._marker_selection_changed)
         self.view.dragging.connect(self._live_length)
+        self.view.piece_dropped.connect(self.place_from_strip)
         self.view.measured.connect(lambda d: self.statusBar().showMessage(tr("distance", d=d)))
         self._build_docks()
         self._build_actions()
@@ -1157,10 +1158,29 @@ class MainWindow(QMainWindow):
         self._row_select.attach()
         st = self.sizes_table
         st.setRowCount(0)
+        st.clearSpans()
+        from ..service import MODEL_SEP, model_tags
+        tags = model_tags(p)
+        last_tag = None
         for s in p.size_names:
+            tag = s.split(MODEL_SEP, 1)[0] if tags and MODEL_SEP in s else None
+            if tags and tag != last_tag:
+                # several models: a separator row with the model's name before its sizes
+                last_tag = tag
+                r = st.rowCount()
+                st.insertRow(r)
+                head = QTableWidgetItem(f"{tags.index(tag) + 1} = {tag}" if tag in tags else (tag or ""))
+                head.setFlags(Qt.ItemIsEnabled)
+                f = head.font()
+                f.setBold(True)
+                head.setFont(f)
+                head.setBackground(self.palette().alternateBase())
+                st.setItem(r, 0, head)
+                st.setSpan(r, 0, 1, 2)
             r = st.rowCount()
             st.insertRow(r)
-            it = QTableWidgetItem(s)
+            it = QTableWidgetItem(s.split(MODEL_SEP, 1)[1] if tag else s)   # size without the model name
+            it.setData(Qt.UserRole, s)
             it.setFlags(Qt.ItemIsEnabled)
             st.setItem(r, 0, it)
             sp = QSpinBox()
@@ -1275,8 +1295,9 @@ class MainWindow(QMainWindow):
             co.piece_counts[uid] = (n, m) if use else (0, 0)
             g = self.pieces_table.cellWidget(r, 6).value()
             pc.grain_angle = None if g < 0 else g
-        co.size_quantities = {self.sizes_table.item(r, 0).text(): self.sizes_table.cellWidget(r, 1).value()
-                              for r in range(self.sizes_table.rowCount())}
+        co.size_quantities = {self.sizes_table.item(r, 0).data(Qt.UserRole): self.sizes_table.cellWidget(r, 1).value()
+                              for r in range(self.sizes_table.rowCount())
+                              if self.sizes_table.cellWidget(r, 1) is not None}     # model separator rows skipped
         mat = self.f_material.currentData()
         co.material = None if mat in ("*", "", None) else mat
 
@@ -1640,6 +1661,39 @@ class MainWindow(QMainWindow):
             self.undo.push(PlacementStateCommand(self, changes, "move"))
         else:
             self.view.refresh()
+
+    def place_from_strip(self, size, uid, mirrored, x, y):
+        """A piece dragged from the strip onto the marker: one copy still to place goes there (its centre at the
+        drop point); a copy taken out keeps its turn, a new one gets the first turn its grain allows. Undo-able;
+        overlaps show in red like any manual move."""
+        if not self.marker or self._busy():
+            return
+        from dataclasses import replace
+
+        from ..geometry import bbox
+        from ..service import allowed_rotation_map
+        ex = {(s, int(b)) for s, b in self.project.cut_order.excluded}
+        cands = [pl for pl in self.marker.placements if not pl.placed and pl.piece_uid == uid and pl.size == size
+                 and (size, pl.bundle) not in ex]
+        if not cands:
+            return
+        cands.sort(key=lambda pl: (pl.mirrored != mirrored, pl.reason != TAKEN_OUT, pl.bundle))
+        pl = cands[0]
+        piece = self.project.piece(uid)
+        rot = pl.rotation
+        if pl.reason != TAKEN_OUT:
+            rots = allowed_rotation_map(self.project, self.nest_settings_from_form()).get((uid, pl.mirrored)) or [0.0]
+            rot = rots[0]
+        x0, y0, x1, y1 = bbox(placement_points(piece.sizes[size].cut, replace(pl, x=0.0, y=0.0, rotation=rot)))
+        old = PlacementStateCommand.state(pl)
+        new = (x - (x0 + x1) / 2, y - (y0 + y1) / 2, rot, pl.mirrored, False, True, None)
+        if self.marker.origin != "original":
+            self.marker.origin = "manual"
+        self.undo.push(PlacementStateCommand(self, [(pl, old, new)], "place"))
+        item = self.view.items_by_uid.get(pl.uid)
+        if item is not None:
+            self.view.scene().clearSelection()
+            item.setSelected(True)
 
     def _off_fabric(self, piece, pl) -> bool:
         """The whole piece lies outside the fabric (above / below it or before its start)."""

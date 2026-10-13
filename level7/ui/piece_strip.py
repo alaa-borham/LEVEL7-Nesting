@@ -2,9 +2,9 @@
 and the copies still to place (normal / mirrored, "-" = no mirrored copies) under each outline."""
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPalette, QPen
-from PySide6.QtWidgets import QScrollArea, QToolTip, QWidget
+from PySide6.QtCore import QMimeData, QPoint, QPointF, QRect, QRectF, QSize, Qt, Signal
+from PySide6.QtGui import QColor, QDrag, QFont, QPainter, QPainterPath, QPalette, QPen
+from PySide6.QtWidgets import QApplication, QScrollArea, QToolTip, QWidget
 
 from ..geometry import bbox, transform_points
 from .marker_view import bundle_letter
@@ -18,6 +18,9 @@ MAX_CELL = 150
 
 
 CHECK = 12            # include / exclude check box in the size column
+
+
+PIECE_MIME = "application/x-level7-strip-piece"     # "size<TAB>piece uid<TAB>mirrored 0/1"
 
 
 class PieceStrip(QWidget):
@@ -274,7 +277,40 @@ class PieceStrip(QWidget):
         r, lx = self._hit(pos)
         return r is not None and lx < getattr(self, "head_w", HEAD_W)
 
+    def _cell_at(self, pos):
+        """(row, piece, mirrored copy wanted, cell rect) under pos: the left half of a cell = normal copies, the
+        right half = mirrored ones (as the two numbers under the outline)."""
+        r, lx = self._hit(pos)
+        if r is None:
+            return None
+        bx, y = self._origin(r)
+        for piece, x, cw in self.line_cols[self.pos[r][0]]:
+            if x <= lx < x + cw:
+                c = self.counts.get((self.rows[r], piece.uid))
+                if c is None:
+                    return None
+                rn, rm, _has_m = c
+                mir = lx >= x + cw / 2 and rm > 0 or rn == 0
+                return self.rows[r], piece, mir, (rn, rm), QRect(int(bx + x), int(y), int(cw), ROW_H)
+        return None
+
     def mouseMoveEvent(self, ev):
+        start = getattr(self, "_drag_from", None)
+        if start is not None and ev.buttons() & Qt.LeftButton and \
+                (ev.position() - start[0]).manhattanLength() >= QApplication.startDragDistance():
+            self._drag_from = None
+            row, piece, mir, (rn, rm), rect = start[1]
+            if (rm if mir else rn) <= 0:
+                return                                   # nothing of it left to place
+            drag = QDrag(self)
+            md = QMimeData()
+            md.setData(PIECE_MIME, f"{row[0]}\t{piece.uid}\t{int(mir)}".encode("utf-8"))
+            drag.setMimeData(md)
+            pm = self.grab(rect)
+            drag.setPixmap(pm)
+            drag.setHotSpot(QPoint(pm.width() // 2, pm.height() // 2))
+            drag.exec(Qt.CopyAction)
+            return
         if self._in_head(ev.position()):
             from .i18n import tr
             QToolTip.showText(ev.globalPosition().toPoint(), tr("strip_toggle_tip"), self)
@@ -298,6 +334,8 @@ class PieceStrip(QWidget):
         pc = self._piece_at(ev.position())
         if pc is not None and ev.button() == Qt.LeftButton:
             self.piece_clicked.emit(pc.uid)
+            cell = self._cell_at(ev.position())        # dragging it onto the marker places one copy there
+            self._drag_from = (ev.position(), cell) if cell is not None else None
         super().mousePressEvent(ev)
 
     def mouseDoubleClickEvent(self, ev):
