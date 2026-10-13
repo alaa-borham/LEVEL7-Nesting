@@ -444,7 +444,7 @@ class MarkerView(QGraphicsView):
         painter.setBrush(accent)
         for pt in (a, b):
             painter.drawEllipse(QPointF(pt), 3.5, 3.5)
-        txt = f"D = {d:.1f} mm    ΔX = {abs(dx):.1f}    ΔY = {abs(dy):.1f}"
+        txt = f"{d:.1f} mm"                     # only the distance between the two points
         f = QFont("Segoe UI", 10)
         f.setBold(True)
         painter.setFont(f)

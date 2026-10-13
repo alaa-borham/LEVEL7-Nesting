@@ -272,6 +272,10 @@ T = {
                   "confirm (the first files are experimental until GRAFIS has opened them).",
                   "تم الحفظ بصيغة GRAFIS SCB:\n{p}\n\nأعاد LEVEL7 قراءته وهو مطابق. افتحه مرة في GRAFIS للتأكيد "
                   "(أول الملفات تجريبية حتى يفتحها GRAFIS)."),
+    "scb_not_possible": ("This session cannot be saved as GRAFIS SCB (several models, or no GRAFIS SCB template). "
+                         "Choose the LEVEL7 project format.",
+                         "لا يمكن حفظ هذه الجلسة بصيغة GRAFIS SCB (عدة موديلات أو لا يوجد ملف SCB من GRAFIS كقالب). "
+                         "اختر صيغة مشروع LEVEL7."),
     "cancel": ("Cancel", "إلغاء"),
 }
 

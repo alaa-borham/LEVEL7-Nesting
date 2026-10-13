@@ -563,6 +563,7 @@ class MainWindow(QMainWindow):
         self.settings_store.setValue("last_dir", os.path.dirname(path))
         self.project = proj
         self.project_path = path if path.lower().endswith(".l7n") else None
+        self.scb_template_path = path if path.lower().endswith(".scb") else None
         self.undo.clear()
         self.load_tables()
         if proj.markers:
@@ -733,37 +734,78 @@ class MainWindow(QMainWindow):
                             curve_tolerance=self.f_tol.value())
 
     def mark_dirty(self, on: bool = True):
-        if self.project is None:
-            on = False
-        if on != self.dirty:
-            self.dirty = on
-            self._update_title()
+        try:
+            if self.project is None:
+                on = False
+            if on != self.dirty:
+                self.dirty = on
+                self._update_title()
+        except RuntimeError:          # window already being destroyed (undo stack signals on shutdown)
+            pass
 
     def _update_title(self):
         self.setWindowTitle(f"{tr('app_title')} {__version__}" +
                             (f" — {self.project.name}{' *' if self.dirty else ''}" if self.project else ""))
+
+    def _scb_possible(self):
+        """GRAFIS SCB template for this session (single model with a marker), else None."""
+        from ..service import scb_template
+        if self.project is None or self.marker is None or any(p.model for p in self.project.pieces):
+            return None
+        return getattr(self, "scb_template_path", None) or scb_template(self.project)
 
     def save(self) -> bool:
         if not self.project:
             return True
         if not self.project_path:
             return self.save_as()
-        from ..project_storage.store import save_project
         self.read_tables()
-        save_project(self.project, self.project_path)
+        try:
+            if self.project_path.lower().endswith(".scb"):
+                import shutil
+                from ..formats.grafis.writer import write_scb
+                template = self._scb_possible()
+                if template is None:
+                    QMessageBox.warning(self, tr("save"), tr("scb_not_possible"))
+                    return self.save_as()
+                if os.path.abspath(template) == os.path.abspath(self.project_path):
+                    bak = self.project_path + ".bak"
+                    if not os.path.exists(bak):            # keep GRAFIS' original once before overwriting it
+                        shutil.copy2(self.project_path, bak)
+                    import tempfile
+                    fd, tmp_t = tempfile.mkstemp(suffix=".scb")
+                    os.close(fd)
+                    shutil.copy2(template, tmp_t)
+                    template = tmp_t
+                write_scb(template, self.project, self.marker, self.project_path)
+            else:
+                from ..project_storage.store import save_project
+                save_project(self.project, self.project_path)
+        except Exception as e:
+            QMessageBox.critical(self, tr("save"), str(e))
+            return False
         self.statusBar().showMessage(tr("saved", p=self.project_path))
         self.mark_dirty(False)
         return True
 
     def save_as(self) -> bool:
+        """Default: GRAFIS SCB when the session allows it (like GRAFIS), else the LEVEL7 project format."""
         if not self.project:
             return True
-        p, _ = QFileDialog.getSaveFileName(self, tr("save_as"), os.path.join(
-            self.settings_store.value("last_dir", ""), self.project.name + ".l7n"), "LEVEL7 project (*.l7n)")
+        template = self._scb_possible()
+        f_scb, f_l7n = "GRAFIS SCB (*.scb)", "LEVEL7 project (*.l7n)"
+        filters = f"{f_scb};;{f_l7n}" if template else f_l7n
+        start_dir = os.path.dirname(template) if template else self.settings_store.value("last_dir", "")
+        name = self.project.name + (".scb" if template else ".l7n")
+        p, chosen = QFileDialog.getSaveFileName(self, tr("save_as"), os.path.join(start_dir, name), filters,
+                                                f_scb if template else f_l7n)
         if not p:
             return False
-        if not p.lower().endswith(".l7n"):
-            p += ".l7n"
+        ext = ".scb" if chosen == f_scb else ".l7n"
+        if not p.lower().endswith(ext):
+            p = os.path.splitext(p)[0] + ext
+        if ext == ".scb":
+            self.scb_template_path = template          # keep the GRAFIS template of this session
         self.project_path = p
         return self.save()
 
