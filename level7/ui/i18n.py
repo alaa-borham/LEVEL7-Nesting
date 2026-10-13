@@ -238,6 +238,12 @@ T = {
                      "في الانتظار: جلسة أخرى تعشّق الآن — يبدأ هذا التعشيق تلقائيًا بعد انتهائها"),
     "nest_started": ("Nesting started", "بدأ التعشيق"),
     "nest_cancelled": ("Nesting cancelled before it started", "أُلغي التعشيق قبل أن يبدأ"),
+    "parallel": ("Simultaneous nestings", "تعشيقات متزامنة"),
+    "ft_parallel": ("How many nestings (sessions / marker list) may run at the same time. The processor cores are "
+                    "divided between them: more at once = each one slower. Further runs wait for their turn. "
+                    "Rule of thumb: about 3-4 cores per nesting.",
+                    "عدد التعشيقات (الجلسات / قائمة الماركرات) التي تعمل في نفس الوقت. أنوية المعالج تُقسَّم بينها: "
+                    "عدد أكبر = كل واحد أبطأ. الباقي ينتظر دوره. القاعدة: حوالي 3–4 أنوية لكل تعشيق."),
     "tab_spacing": ("Margins, buffers and shrinkage", "الهوامش والبفر والانكماش"),
     "tb_tab_spacing": ("Margins", "الهوامش"),
     "measure_tool": ("Measure", "قياس"), "tb_measure_tool": ("Measure", "قياس"),

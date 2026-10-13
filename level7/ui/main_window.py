@@ -61,10 +61,9 @@ class PlacementStateCommand(QUndoCommand):
 
 
 # -------------------------------------------------------------------------------- worker
-# one nesting run at a time in the whole application: each run already uses every processor core (several
-# search processes + sparrow); runs in several sessions at once overloaded the machine and froze the windows.
-# Later runs wait for their turn; their time limit starts when they actually start.
-_NEST_SLOT = threading.Semaphore(1)
+# nesting runs share the processor (level7.nesting.slots): at most "simultaneous nestings" runs work at once,
+# each on its share of the cores; later runs wait for a slot and their time limit starts when they start.
+from ..nesting.slots import NEST_SLOTS
 
 
 class NestWorker(QThread):
@@ -83,7 +82,7 @@ class NestWorker(QThread):
 
     def run(self):
         queued = False
-        while not _NEST_SLOT.acquire(timeout=0.3):
+        while not NEST_SLOTS.acquire(timeout=0.3):
             if not queued:
                 queued = True
                 self.waiting.emit(True)
@@ -95,14 +94,15 @@ class NestWorker(QThread):
                 self.waiting.emit(False)
             self._run()
         finally:
-            _NEST_SLOT.release()
+            NEST_SLOTS.release()
 
     def _run(self):
         from ..service import run_nesting
         try:
             marker, info = run_nesting(self.project, self.fabric, self.settings, self.cut_order, self.pinned,
                                        progress=lambda d: self.progress.emit(d), stop_event=self.stop_event,
-                                       placements=self.placements, keep_out=self.keep_out)
+                                       placements=self.placements, keep_out=self.keep_out,
+                                       workers=NEST_SLOTS.workers())
             self.finished_ok.emit(marker, info)
         except Exception as e:
             self.failed.emit(f"{e}\n{traceback.format_exc()}")
@@ -254,6 +254,17 @@ class MainWindow(QMainWindow):
         self.f_rot180.setChecked(True)
         self.f_rot90 = QCheckBox()
         self.f_tol = self._dspin(0.01, 2.0, 0.2, 2)
+        # application-wide: how many nestings may run at the same time (cores are divided between them)
+        from ..nesting.slots import auto_limit
+        self.f_parallel = QSpinBox()
+        self.f_parallel.setRange(1, 16)
+        try:
+            lim = int(self.settings_store.value("parallel_nests", 0) or 0)
+        except (TypeError, ValueError):
+            lim = 0
+        self.f_parallel.setValue(lim or auto_limit())
+        NEST_SLOTS.set_limit(self.f_parallel.value())
+        self.f_parallel.valueChanged.connect(self._set_parallel)
         self.f_material = QComboBox()
         self.form_rows = []
         self.form_fields = {}
@@ -290,7 +301,7 @@ class MainWindow(QMainWindow):
         for key, wid in (("width", self.f_width), ("lay", self.f_lay),
                          ("max_len", self.f_maxlen), ("material", self.f_material), ("mode", self.f_mode), ("engine", self.f_engine),
                          ("time", self.f_time), ("seed", self.f_seed), ("rot180", self.f_rot180),
-                         ("rot90", self.f_rot90), ("tolerance", self.f_tol)):
+                         ("rot90", self.f_rot90), ("tolerance", self.f_tol), ("parallel", self.f_parallel)):
             lab = QLabel()
             if not isinstance(wid, QCheckBox):
                 wid.setFixedWidth(118)           # compact panel: full explanations are in the tooltips
@@ -1455,6 +1466,15 @@ class MainWindow(QMainWindow):
         self.btn_stop.setEnabled(running)
         self.progress_bar.setVisible(running)
         self.progress_bar.setRange(0, 0 if running else 1)
+
+    def _set_parallel(self, n):
+        NEST_SLOTS.set_limit(n)
+        self.settings_store.setValue("parallel_nests", n)
+        for w in self._all_windows():               # same value in every session window
+            if w is not self:
+                w.f_parallel.blockSignals(True)
+                w.f_parallel.setValue(n)
+                w.f_parallel.blockSignals(False)
 
     def _nest_waiting(self, on):
         self.statusBar().showMessage(tr("nest_waiting") if on else tr("nest_started"))

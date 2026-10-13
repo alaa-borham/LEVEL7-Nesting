@@ -221,7 +221,7 @@ def build_project(order: MarkerOrder, cache: dict | None = None):
 
 
 def run_order(order: MarkerOrder, outdir: str, plt_config=None, iso_config=None, default_time=120.0,
-              progress=None, stop_event=None, cache=None):
+              progress=None, stop_event=None, cache=None, workers=None):
     from . import service
     from .model import FabricSettings, NestSettings
     from .project_storage.store import save_project
@@ -231,7 +231,8 @@ def run_order(order: MarkerOrder, outdir: str, plt_config=None, iso_config=None,
                             buffer_x=float(order.buffer_x or 0.0), buffer_y=float(order.buffer_y or 0.0),
                             shrink_x=float(order.shrink_x or 0.0), shrink_y=float(order.shrink_y or 0.0))
     st = NestSettings(time_limit=float(order.time or default_time), seed=1, engine=order.engine or "auto")
-    marker, info = service.run_nesting(proj, fabric, st, progress=progress, stop_event=stop_event, name=order.name)
+    marker, info = service.run_nesting(proj, fabric, st, progress=progress, stop_event=stop_event, name=order.name,
+                                       workers=workers)
     unplaced = [p for p in marker.placements if not p.placed]
     if not info["validation"].ok:
         raise OrderError("nested marker failed validation: " + info["validation"].summary())
@@ -307,7 +308,8 @@ def run_batch(orders: list[MarkerOrder], outdir: str, plt_config=None, iso_confi
             o.status, o.message = "failed", "stopped"
             continue
         try:
-            run_order(o, outdir, plt_config, iso_config, default_time, progress, stop_event, cache)
+            run_order(o, outdir, plt_config, iso_config, default_time, progress, stop_event, cache,
+                      workers=slot.workers() if slot is not None and hasattr(slot, "workers") else None)
         except Exception as exc:
             o.status, o.message = "failed", str(exc)
         finally:

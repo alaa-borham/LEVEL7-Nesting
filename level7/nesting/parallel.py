@@ -68,7 +68,7 @@ def _better(a: NestResult | None, b: NestResult) -> bool:
 def run_parallel(items: list[NestItem], fabric: FabricSettings, settings: NestSettings, workers: int | None = None,
                  progress=None, stop_event: threading.Event | None = None) -> NestResult:
     # one core is left free for the user interface
-    workers = workers or max(1, min(4, (os.cpu_count() or 2) - 1))
+    workers = max(1, min(4, workers or (os.cpu_count() or 2) - 1))      # beyond 4 seeds the gain is small
     if workers == 1:
         return NestEngine(items, fabric, settings, progress=progress, stop_event=stop_event).run()
     ctx = mp.get_context("spawn")
