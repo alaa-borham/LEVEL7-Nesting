@@ -213,10 +213,25 @@ class MainWindow(QMainWindow):
         self.form.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
         self.form.setHorizontalSpacing(6)
         self.form.setVerticalSpacing(3)
-        for key, wid in (("width", self.f_width), ("margin_l", self.f_ml), ("margin_r", self.f_mr),
-                         ("margin_s", self.f_ms), ("margin_e", self.f_me), ("spacing", self.f_sp),
-                         ("buffer_x", self.f_bx), ("buffer_y", self.f_by), ("shrink_x", self.f_shx),
-                         ("shrink_y", self.f_shy), ("lay", self.f_lay),
+        # margins, buffers and shrinkage: own toolbar icon with a drop-down panel (like Pieces / Sizes)
+        mw = QWidget()
+        self.form_spacing = QFormLayout(mw)
+        self.form_spacing.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
+        self.form_spacing.setHorizontalSpacing(6)
+        self.form_spacing.setVerticalSpacing(3)
+        for key, wid in (("margin_l", self.f_ml), ("margin_r", self.f_mr), ("margin_s", self.f_ms),
+                         ("margin_e", self.f_me), ("spacing", self.f_sp), ("buffer_x", self.f_bx),
+                         ("buffer_y", self.f_by), ("shrink_x", self.f_shx), ("shrink_y", self.f_shy)):
+            lab = QLabel()
+            wid.setFixedWidth(118)
+            self.form_spacing.addRow(lab, wid)
+            self.form_fields[key] = wid
+            self.form_rows.append((lab, key))
+        from PySide6.QtCore import QSize as _QSize
+        from .table_popup import TablePopup
+        self.spacing_popup = TablePopup(self, mw, _QSize(290, 290))
+        self.table_popups = self.table_popups + (self.spacing_popup,)
+        for key, wid in (("width", self.f_width), ("lay", self.f_lay),
                          ("max_len", self.f_maxlen), ("material", self.f_material), ("mode", self.f_mode), ("engine", self.f_engine),
                          ("time", self.f_time), ("seed", self.f_seed), ("rot180", self.f_rot180),
                          ("rot90", self.f_rot90), ("tolerance", self.f_tol)):
@@ -342,9 +357,9 @@ class MainWindow(QMainWindow):
         self._build_toolbar(undo, redo)
 
     TOOLBAR = (("open", "open"), ("add_model", "add_model"), ("save", "save"), None, ("undo", None), ("redo", None), None,
-               ("rotate180", "rotate180"), ("pin", "pin"), ("measure", "measure"), ("measure_curve", "measure_curve"), None,
+               ("rotate180", "rotate180"), ("pin", "pin"), ("measure_tool", "measure"), None,
                ("zoom_fit", "zoom_fit"), ("display_options", "display"), None,
-               ("tab_pieces", "pieces"), ("tab_sizes", "sizes"), None,
+               ("tab_pieces", "pieces"), ("tab_sizes", "sizes"), ("tab_spacing", "margins"), None,
                ("run", "run"), ("stop", "stop"), ("batch", "batch"), None,
                ("export_plt", "plt"), ("export_dxf", "dxf"), ("export_iso", "iso"), None,
                ("language", "language"))
@@ -363,7 +378,11 @@ class MainWindow(QMainWindow):
         acts["undo"], acts["redo"] = undo, redo
         acts["tab_pieces"] = self._act("tab_pieces", lambda: self.show_table_tab(0), checkable=True)
         acts["tab_sizes"] = self._act("tab_sizes", lambda: self.show_table_tab(1), checkable=True)
-        self.tab_actions = (acts["tab_pieces"], acts["tab_sizes"])
+        acts["tab_spacing"] = self._act("tab_spacing", lambda: self.show_table_tab(2), checkable=True)
+        self.tab_actions = (acts["tab_pieces"], acts["tab_sizes"], acts["tab_spacing"])
+        # one 'Measure' button: click = measure with the chosen kind, right-click = choose distance / curve
+        acts["measure_tool"] = self.act_measure_tool = self._act("measure_tool", self.toggle_measure_tool,
+                                                                 checkable=True)
         for pop in self.table_popups:
             pop.closed.connect(self._sync_tab_actions)
         self.m_view.addActions(list(self.tab_actions))
@@ -377,6 +396,14 @@ class MainWindow(QMainWindow):
             a.setIcon(icon(ic or key))
             tb.addAction(a)
             self.toolbar_items.append((a, key))
+        from PySide6.QtWidgets import QMenu
+        self.m_measure = QMenu(self)
+        self.m_measure.addAction(self.act_measure)
+        self.m_measure.addAction(self.act_measure_curve)
+        mb = tb.widgetForAction(self.act_measure_tool)
+        mb.setContextMenuPolicy(Qt.CustomContextMenu)
+        mb.customContextMenuRequested.connect(lambda pos, b=mb: self.m_measure.exec(b.mapToGlobal(pos)))
+        self.measure_kind = "curve" if self.settings_store.value("measure_kind", "line") == "curve" else "line"
         # theme switch: its own button at the far end of the toolbar (far left in Arabic)
         from PySide6.QtWidgets import QSizePolicy, QToolButton
         spacer = QWidget()
@@ -414,6 +441,7 @@ class MainWindow(QMainWindow):
         self.settings_store.setValue("theme", name)
         for a, key in self.toolbar_items:
             a.setIcon(icon(dict((k, i) for k, i in (x for x in self.TOOLBAR if x)).get(key) or key))
+        self._measure_icon()
         self.theme_button.setIcon(icon("theme"))
         self.toolbar.setStyleSheet(self.toolbar.styleSheet())   # re-polish with the new palette
         for w in QApplication.instance().allWidgets():
@@ -426,6 +454,7 @@ class MainWindow(QMainWindow):
             a.setIconText(tr("tb_" + key))
             sc = a.shortcut().toString(QKeySequence.NativeText)
             a.setToolTip(a.text().replace("&", "") + (f"  ({sc})" if sc else ""))
+        self._measure_icon()
 
     def retranslate(self):
         rtl = LANG["current"] == "ar"
@@ -449,6 +478,8 @@ class MainWindow(QMainWindow):
             self.form_fields[k].setToolTip(tip)
         self.pieces_popup.title.setText(tr("tab_pieces"))
         self.sizes_popup.title.setText(tr("tab_sizes"))
+        self.spacing_popup.title.setText(tr("tab_spacing"))
+        self._measure_icon()
         self.dock_fabric.setWindowTitle(tr("fabric"))
         self.dock_results.setWindowTitle(tr("results"))
         self.pieces_table.setHorizontalHeaderLabels([tr(k) for k in ("col_use", "col_name", "col_mat", "col_sizes",
@@ -1008,19 +1039,34 @@ class MainWindow(QMainWindow):
         if changes:
             self.undo.push(PlacementStateCommand(self, changes, "pin"))
 
+    def set_measure(self, kind):
+        """kind: 'line' (distance), 'curve' (along a piece edge) or None (off). Keeps menu, toolbar and view in step."""
+        if kind:
+            self.measure_kind = kind
+            self.settings_store.setValue("measure_kind", kind)
+        self.act_measure.setChecked(kind == "line")
+        self.act_measure_curve.setChecked(kind == "curve")
+        self.act_measure_tool.setChecked(kind is not None)
+        self._measure_icon()
+        self.view.set_measure_mode(kind is not None, kind or "line")
+        if kind:
+            self.statusBar().showMessage(tr("measure_curve_hint" if kind == "curve" else "measure_hint"))
+
+    def _measure_icon(self):
+        from .icons import icon
+        if hasattr(self, "act_measure_tool"):
+            curve = getattr(self, "measure_kind", "line") == "curve"
+            self.act_measure_tool.setIcon(icon("measure_curve" if curve else "measure"))
+            self.act_measure_tool.setToolTip(tr("measure_curve" if curve else "measure") + "\n" + tr("measure_tool_tip"))
+
+    def toggle_measure_tool(self, on):
+        self.set_measure(self.measure_kind if on else None)
+
     def toggle_measure_curve(self, on):
-        if on and self.act_measure.isChecked():
-            self.act_measure.setChecked(False)
-        self.view.set_measure_mode(on, "curve")
-        if on:
-            self.statusBar().showMessage(tr("measure_curve_hint"))
+        self.set_measure("curve" if on else None)
 
     def toggle_measure(self, on):
-        if on and self.act_measure_curve.isChecked():
-            self.act_measure_curve.setChecked(False)
-        self.view.set_measure_mode(on)
-        if on:
-            self.statusBar().showMessage(tr("measure_hint"))
+        self.set_measure("line" if on else None)
 
     def display_options(self):
         import json

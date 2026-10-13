@@ -187,6 +187,21 @@ def _draw(name: str, p: QPainter, fg: QColor):
             p.drawText(r, Qt.AlignCenter, lab)
         p.setPen(QPen(fg, 1.5))
         p.drawLine(QPointF(3, 27), QPointF(29, 27))
+    elif name == "margins":
+        # fabric with dashed margin line and two pieces kept apart by a buffer
+        p.setBrush(QColor(ACCENT.red(), ACCENT.green(), ACCENT.blue(), 60))
+        p.drawRect(QRectF(2, 6, 28, 20))
+        p.setBrush(Qt.NoBrush)
+        p.setPen(QPen(fg, 1.0, Qt.DashLine))
+        p.drawRect(QRectF(5, 9, 22, 14))
+        p.setPen(QPen(fg, 1.4))
+        _piece(p, QRectF(7, 11, 6, 10))
+        _piece(p, QRectF(19, 11, 6, 10))
+        p.setPen(QPen(RED, 1.4))
+        p.drawLine(QPointF(13.5, 16), QPointF(18.5, 16))
+        for x, d in ((13.5, 1.6), (18.5, -1.6)):
+            p.drawLine(QPointF(x, 16), QPointF(x + d, 14.4))
+            p.drawLine(QPointF(x, 16), QPointF(x + d, 17.6))
     elif name == "pieces":
         for i, x in enumerate((3, 12, 21)):
             _piece(p, QRectF(x, 9, 8, 14 - i * 3))
