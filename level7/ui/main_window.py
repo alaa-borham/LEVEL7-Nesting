@@ -184,8 +184,17 @@ class MainWindow(QMainWindow):
         self.f_ms = self._dspin(0, 2000, 0)
         self.f_me = self._dspin(0, 2000, 0)
         self.f_sp = self._dspin(0, 50, 0)
+        self.f_bx = self._dspin(0, 100, 0)
+        self.f_by = self._dspin(0, 100, 0)
+        self.f_shx = self._dspin(-20, 20, 0, 2)
+        self.f_shy = self._dspin(-20, 20, 0, 2)
         self.f_lay = QComboBox()
         self.f_maxlen = self._dspin(0, 100000, 0)
+        for f in (self.f_width, self.f_ml, self.f_mr, self.f_ms, self.f_me, self.f_sp, self.f_bx, self.f_by,
+                  self.f_maxlen):
+            f.setSuffix(" mm")
+        for f in (self.f_shx, self.f_shy):
+            f.setSuffix(" %")
         self.f_mode = QComboBox()
         self.f_time = QSpinBox()
         self.f_time.setRange(1, 7200)
@@ -200,13 +209,22 @@ class MainWindow(QMainWindow):
         self.f_tol = self._dspin(0.01, 2.0, 0.2, 2)
         self.f_material = QComboBox()
         self.form_rows = []
+        self.form_fields = {}
+        self.form.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
+        self.form.setHorizontalSpacing(6)
+        self.form.setVerticalSpacing(3)
         for key, wid in (("width", self.f_width), ("margin_l", self.f_ml), ("margin_r", self.f_mr),
-                         ("margin_s", self.f_ms), ("margin_e", self.f_me), ("spacing", self.f_sp), ("lay", self.f_lay),
+                         ("margin_s", self.f_ms), ("margin_e", self.f_me), ("spacing", self.f_sp),
+                         ("buffer_x", self.f_bx), ("buffer_y", self.f_by), ("shrink_x", self.f_shx),
+                         ("shrink_y", self.f_shy), ("lay", self.f_lay),
                          ("max_len", self.f_maxlen), ("material", self.f_material), ("mode", self.f_mode), ("engine", self.f_engine),
                          ("time", self.f_time), ("seed", self.f_seed), ("rot180", self.f_rot180),
                          ("rot90", self.f_rot90), ("tolerance", self.f_tol)):
             lab = QLabel()
+            if not isinstance(wid, QCheckBox):
+                wid.setFixedWidth(118)           # compact panel: full explanations are in the tooltips
             self.form.addRow(lab, wid)
+            self.form_fields[key] = wid
             self.form_rows.append((lab, key))
         self.f_mode.currentIndexChanged.connect(self._mode_changed)
         btns = QHBoxLayout()
@@ -423,8 +441,12 @@ class MainWindow(QMainWindow):
         self.theme_button.setToolTip(tr("theme"))
         for m, k in self.menus_tr:
             m.setTitle(tr(k))
+        from .i18n import T
         for lab, k in self.form_rows:
             lab.setText(tr(k))
+            tip = tr("ft_" + k) if "ft_" + k in T else ""
+            lab.setToolTip(tip)
+            self.form_fields[k].setToolTip(tip)
         self.pieces_popup.title.setText(tr("tab_pieces"))
         self.sizes_popup.title.setText(tr("tab_sizes"))
         self.dock_fabric.setWindowTitle(tr("fabric"))
@@ -539,8 +561,17 @@ class MainWindow(QMainWindow):
 
     def batch_dialog(self):
         from .batch_dialog import BatchDialog
+        dlg = getattr(self, "_batch_dlg", None)
+        try:
+            if dlg is not None and dlg.isVisible():   # one list window per session: bring it to the front
+                dlg.raise_()
+                dlg.activateWindow()
+                return
+        except RuntimeError:                          # already deleted
+            pass
         dlg = BatchDialog(self)
         dlg.setAttribute(Qt.WA_DeleteOnClose, True)
+        self._batch_dlg = dlg
         dlg.show()
 
     def new_session(self):
@@ -571,6 +602,9 @@ class MainWindow(QMainWindow):
         if proj.markers:
             m = proj.markers[0]
             self.f_width.setValue(m.fabric.width)
+            for f, v in ((self.f_sp, m.fabric.spacing), (self.f_bx, m.fabric.buffer_x), (self.f_by, m.fabric.buffer_y),
+                         (self.f_shx, m.fabric.shrink_x), (self.f_shy, m.fabric.shrink_y)):
+                f.setValue(v)
         self.refresh_markers_list(select=0 if proj.markers else -1)
         msg = f"{os.path.basename(path)}: {len(proj.pieces)} pieces"
         if proj.sources and proj.sources[0].internal_model_name:
@@ -726,6 +760,8 @@ class MainWindow(QMainWindow):
         lay = [LayType.OPEN, LayType.FACE_TO_FACE, LayType.FOLDED][max(0, self.f_lay.currentIndex())]
         return FabricSettings(width=self.f_width.value(), margin_left=self.f_ml.value(), margin_right=self.f_mr.value(),
                               margin_start=self.f_ms.value(), margin_end=self.f_me.value(), spacing=self.f_sp.value(),
+                              buffer_x=self.f_bx.value(), buffer_y=self.f_by.value(),
+                              shrink_x=self.f_shx.value(), shrink_y=self.f_shy.value(),
                               lay_type=lay, max_length=self.f_maxlen.value() or None)
 
     def nest_settings_from_form(self) -> NestSettings:
@@ -754,6 +790,8 @@ class MainWindow(QMainWindow):
         from ..service import scb_template
         if self.project is None or self.marker is None or any(p.model for p in self.project.pieces):
             return None
+        if any(pl.sx != 1.0 or pl.sy != 1.0 for pl in self.marker.placements):
+            return None                        # shrinkage is not written to SCB (see formats.grafis.writer)
         return getattr(self, "scb_template_path", None) or scb_template(self.project)
 
     def save(self) -> bool:

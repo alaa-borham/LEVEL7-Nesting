@@ -83,6 +83,9 @@ def write_scb(template_path: str, project, marker, out_path: str) -> dict:
     placed = [pl for pl in marker.placements if pl.placed]
     if not placed:
         raise ScbWriteError("the marker has no placed pieces")
+    if any(abs(pl.sx - 1.0) > 1e-9 or abs(pl.sy - 1.0) > 1e-9 for pl in placed):
+        raise ScbWriteError("markers with shrinkage cannot be written as SCB yet (GRAFIS' shrinkage fields are "
+                            "not decoded); save as LEVEL7 project or export PLT/DXF/ISO")
     # GRAFIS numbers bundles through the whole marker (1..N); LEVEL7 numbers them per size
     order = {e.name: e.index for e in ts.sizes}
     gkeys = sorted({(pl.size, pl.bundle) for pl in placed}, key=lambda sb: (order.get(sb[0], 0), sb[1]))

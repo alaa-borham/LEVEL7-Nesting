@@ -75,9 +75,12 @@ class BatchDialog(QDialog):
         self.b_stop.setEnabled(False)
         self.b_open.setEnabled(False)
         self.b_folder.setEnabled(False)
+        self.b_close = QPushButton(tr("batch_close"))
         for b in (self.b_start, self.b_stop, self.b_open, self.b_folder):
             bottom.addWidget(b)
         bottom.addStretch(1)
+        bottom.addWidget(self.b_close)
+        self.b_close.clicked.connect(self.close)
         v.addLayout(bottom)
         self.b_load.clicked.connect(self.load)
         self.b_tpl.clicked.connect(self.template)
@@ -159,7 +162,7 @@ class BatchDialog(QDialog):
         self.worker = BatchWorker(self.orders, self.outdir, self.w.plt_config(), ISO_PRESETS["bullmer_grafis"](),
                                   float(self.time.value()))
         self.worker.order_changed.connect(lambda k: self.fill())
-        self.worker.finished_all.connect(self.done)
+        self.worker.finished_all.connect(self._finished)
         self.worker.start()
         self._update_buttons()
 
@@ -167,7 +170,7 @@ class BatchDialog(QDialog):
         if self.worker:
             self.worker.stop_event.set()
 
-    def done(self, summary):
+    def _finished(self, summary):            # not 'done': that is QDialog.done(), called by the close button
         self.fill()
         ok = sum(1 for o in self.orders if o.status == "done")
         QMessageBox.information(self, tr("batch_title"), tr("batch_done", ok=ok, n=len(self.orders), s=summary))

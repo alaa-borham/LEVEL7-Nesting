@@ -10,8 +10,12 @@ bundled executable (engines/sparrow[.exe]) as a separate process:
 * progress: feasible intermediate solutions are read from the SVG snapshots sparrow writes
   (``<n>_<length>_{expl_f|cmpr|final}.svg``); "stop" kills the process and keeps the best snapshot.
 
-Pieces are only translated and rotated by the allowed angles (never scaled or reshaped); every returned
-layout is checked again by LEVEL7's validator in the service layer.
+Pieces are only translated and rotated by the allowed angles (never reshaped; scaled only by the shrinkage
+set on the fabric); every returned layout is checked again by LEVEL7's validator in the service layer.
+
+Shrinkage and directional buffers act in marker axes, so for them each item type is given to sparrow already
+turned to its first allowed rotation, scaled and grown by the buffer rectangle; the remaining allowed turns
+must then be 0 / 180° (which commute with axis scaling); otherwise sparrow is not used for that job.
 """
 from __future__ import annotations
 
@@ -24,7 +28,9 @@ import sys
 import tempfile
 import time
 
-from ..geometry import ring_area, transform_points
+from shapely.geometry import Polygon
+
+from ..geometry import grow_rect, ring_area, transform_points
 from ..model import Placement
 from .engine import NestItem, NestResult
 
@@ -59,18 +65,36 @@ def _groups(items: list[NestItem]):
     return list(g.values())
 
 
-def build_instance(items: list[NestItem], fabric, name="level7") -> tuple[dict, list]:
+def _frame(fabric):
+    """(ex, ey, sx, sy, marker_axes): buffer half-widths, shrink factors, whether shapes go in marker axes."""
+    ex, ey = max(0.0, fabric.buffer_x) / 2.0, max(0.0, fabric.buffer_y) / 2.0
+    sx, sy = fabric.scale
+    return ex, ey, sx, sy, bool(ex or ey or sx != 1.0 or sy != 1.0)
+
+
+def _base_rot(its, fabric) -> float:
+    return its[0].rotations[0] if _frame(fabric)[4] else 0.0
+
+
+def build_instance(items: list[NestItem], fabric, name="level7") -> tuple[dict | None, list]:
     groups = _groups(items)
+    ex, ey, sx, sy, axes = _frame(fabric)
     out = []
     for k, its in enumerate(groups):
-        pts = transform_points(its[0].cut, 0.0, its[0].mirrored)
+        r0 = _base_rot(its, fabric)
+        rel = [round((r - r0) % 360.0, 6) for r in its[0].rotations]
+        if axes and any(r not in (0.0, 180.0) for r in rel):
+            return None, groups                    # 90° turns do not commute with axis scaling / buffers
+        pts = transform_points(its[0].cut, r0, its[0].mirrored, sx=sx, sy=sy)
+        if ex or ey:
+            pts = list(grow_rect(Polygon(pts).buffer(0), ex, ey).exterior.coords)[:-1]
         if ring_area(pts) < 0:
             pts = pts[::-1]
         data = [[float(x), float(y)] for x, y in pts] + [[float(pts[0][0]), float(pts[0][1])]]
         out.append({"id": k, "demand": len(its),
-                    "orientation": {"rotation": {"mode": "discrete", "angles": [float(r) for r in its[0].rotations]}},
+                    "orientation": {"rotation": {"mode": "discrete", "angles": [float(r) for r in rel]}},
                     "shape": {"type": "simple_polygon", "data": data}})
-    inst = {"name": name, "items": out, "strip_height": float(fabric.usable_width)}
+    inst = {"name": name, "items": out, "strip_height": float(fabric.usable_width + 2 * ey)}
     if fabric.spacing > 0:
         inst["min_item_separation"] = float(fabric.spacing)
     return inst, groups
@@ -86,27 +110,33 @@ def warm_solution(inst: dict, groups: list, result: NestResult, fabric) -> dict 
         k = by_uid.get(pl.uid)
         if k is None:
             return None
+        ex, ey = _frame(fabric)[:2]
+        rel = (pl.rotation - _base_rot(groups[k], fabric)) % 360.0
         placed.append({"item_id": k, "transformation": {
-            "rotation": float(pl.rotation), "translation": [pl.x - fabric.margin_start, pl.y - fabric.margin_left]}})
+            "rotation": float(rel), "translation": [pl.x - fabric.margin_start + ex, pl.y - fabric.margin_left + ey]}})
     sol = dict(inst)
-    sol["solution"] = {"strip_width": float(result.length - fabric.margin_start - fabric.margin_end),
+    ex = _frame(fabric)[0]
+    sol["solution"] = {"strip_width": float(result.length - fabric.margin_start - fabric.margin_end + 2 * ex),
                        "layout": {"container_id": 0, "placed_items": placed}}
     return sol
 
 
 def _to_result(entries, groups, fabric, length_strip, seed, elapsed, stopped) -> NestResult | None:
     pools = [list(its) for its in groups]
+    ex, ey, sx, sy, _ = _frame(fabric)
     pls = []
     for k, x, y, r in entries:
         if k >= len(pools) or not pools[k]:
             return None
         it = pools[k].pop()
         pls.append(Placement(uid=it.uid, piece_uid=it.piece_uid, size=it.size, bundle=it.bundle,
-                             x=x + fabric.margin_start, y=y + fabric.margin_left, rotation=r % 360.0,
-                             mirrored=it.mirrored))
+                             x=x + fabric.margin_start - ex, y=y + fabric.margin_left - ey,
+                             rotation=round((r + _base_rot(groups[k], fabric)) % 360.0, 6),
+                             mirrored=it.mirrored, sx=sx, sy=sy))
     if any(pools):
         return None
-    return NestResult(pls, [], length_strip + fabric.margin_start + fabric.margin_end, 0, elapsed, seed, stopped, [])
+    return NestResult(pls, [], length_strip - 2 * ex + fabric.margin_start + fabric.margin_end, 0, elapsed, seed,
+                      stopped, [])
 
 
 def parse_svg(path, groups, fabric, seed=0, elapsed=0.0, stopped=False) -> NestResult | None:
@@ -139,6 +169,8 @@ def run(items: list[NestItem], fabric, settings, time_limit: float, progress=Non
     t0 = time.monotonic()
     try:
         inst, groups = build_instance(items, fabric)
+        if inst is None:
+            return None
         src = warm_solution(inst, groups, warm, fabric) if warm is not None else None
         path = os.path.join(work, "job.json")
         with open(path, "w", encoding="utf-8") as fh:

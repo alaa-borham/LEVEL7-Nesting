@@ -275,6 +275,8 @@ def run_nesting(proj: Project, fabric: FabricSettings, settings: NestSettings, c
     for u in list(res.unplaced) + list(unplaced):
         marker.placements.append(Placement(uid=u.item_uid or f"u{len(marker.placements)}", piece_uid=u.piece_uid,
                                            size=u.size, mirrored=u.mirrored, placed=False, reason=u.reason))
+    for pl in marker.placements:                 # unplaced copies too: placed later by hand with the same shrinkage
+        pl.sx, pl.sy = fabric.scale
     allowed = {}
     for it in items:
         allowed[(it.piece_uid, it.mirrored)] = it.rotations

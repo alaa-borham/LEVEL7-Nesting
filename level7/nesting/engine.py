@@ -13,7 +13,9 @@ Strategy
    moves, periodic restarts) until the time limit or a stop request and keeps the best
    complete solution. Results are geometric; global optimality is never claimed.
 
-The engine never scales or alters piece geometry. Pieces that cannot fit the usable
+The engine never alters piece geometry; the only scaling is the shrinkage the user sets on the fabric
+(FabricSettings.shrink_x / shrink_y), applied in marker axes and recorded on every placement (sx, sy).
+Directional buffers (buffer_x / buffer_y) grow the search shapes only. Pieces that cannot fit the usable
 width in any allowed orientation are reported as unplaced with a reason.
 """
 from __future__ import annotations
@@ -160,14 +162,17 @@ class NestEngine:
         self.stop_event = stop_event or threading.Event()
         self._oriented: dict = {}
         self._nfp_cache: dict = {}
-        self.y0 = fabric.margin_left
-        self.y1 = fabric.margin_left + fabric.usable_width
-        self.x0 = fabric.margin_start
+        # directional buffers grow the shapes by ex / ey on each side; the usable area grows by the same amount
+        # so the buffer only acts between pieces, not against the margins
+        self.ex, self.ey = max(0.0, fabric.buffer_x) / 2.0, max(0.0, fabric.buffer_y) / 2.0
+        self.sx, self.sy = fabric.scale
+        self.y0 = fabric.margin_left - self.ey
+        self.y1 = fabric.margin_left + fabric.usable_width + self.ey
+        self.x0 = fabric.margin_start - self.ex
         total = sum(max(bbox(it.cut)[2] - bbox(it.cut)[0], bbox(it.cut)[3] - bbox(it.cut)[1]) for it in items)
-        self.xmax = (fabric.max_length - fabric.margin_end) if fabric.max_length else self.x0 + total * 1.2 + 1000.0
-        for it in items:
-            it.search, it.deviation = search_polygon(it.cut, fabric.spacing + 2 * CONTACT_MM,
-                                                     settings.curve_tolerance)
+        total *= max(self.sx, self.sy)
+        self.xmax = ((fabric.max_length - fabric.margin_end) if fabric.max_length else
+                     fabric.margin_start + total * 1.2 + 1000.0) + self.ex
 
     key_mode = "length_x_y"
 
@@ -183,7 +188,9 @@ class NestEngine:
         key = (it.shape_key, rot)
         o = self._oriented.get(key)
         if o is None:
-            pts = transform_points(it.search, rot, it.mirrored)
+            pts, _ = search_polygon(transform_points(it.cut, rot, it.mirrored, sx=self.sx, sy=self.sy),
+                                    self.fabric.spacing + 2 * CONTACT_MM, self.settings.curve_tolerance,
+                                    (self.ex, self.ey))
             bx0, by0, bx1, by1 = bbox(pts)
             norm = [(x - bx0, y - by0) for x, y in pts]
             ip = to_int(norm)
@@ -234,7 +241,7 @@ class NestEngine:
             if best is None:
                 fits = any(self.oriented(it, r)[4] <= (self.y1 - self.y0) + 1e-6 for r in it.rotations)
                 failed[idx] = ("no free position within length limit" if fits else
-                               f"does not fit usable width {self.y1 - self.y0:.1f} mm in allowed orientations")
+                               f"does not fit usable width {self.fabric.usable_width:.1f} mm in allowed orientations")
                 continue
             _, rot, t, w = best
             placed.append((it, rot, t))
@@ -276,11 +283,11 @@ class NestEngine:
                 ip, bx0, by0, w, h = self.oriented(it, rot)
                 pl = Placement(uid=it.uid, piece_uid=it.piece_uid, size=it.size, bundle=it.bundle,
                                x=t[0] / SCALE - bx0, y=t[1] / SCALE - by0, rotation=rot, mirrored=it.mirrored,
-                               pinned=it.pinned is not None)
+                               pinned=it.pinned is not None, sx=self.sx, sy=self.sy)
                 pls.append(pl)
             else:
                 unpl.append(Unplaced(it.uid, it.piece_uid, it.size, it.mirrored, failed.get(idx, "not placed")))
-        return NestResult(pls, unpl, length + self.fabric.margin_end, evaluations, elapsed, self.settings.seed,
+        return NestResult(pls, unpl, max(length - self.ex, self.fabric.margin_start) + self.fabric.margin_end, evaluations, elapsed, self.settings.seed,
                           stopped, history)
 
     # -- optimisation loop ---------------------------------------------------------
@@ -312,7 +319,7 @@ class NestEngine:
         def report(sol):
             if self.progress:
                 self.progress({"elapsed": time.monotonic() - t0, "evaluations": evaluations,
-                               "length": sol[2] + self.fabric.margin_end, "unplaced": len(sol[1]),
+                               "length": sol[2] - self.ex + self.fabric.margin_end, "unplaced": len(sol[1]),
                                "result": self.to_result(sol, evaluations, time.monotonic() - t0, False, history),
                                "final": False})
 

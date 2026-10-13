@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from shapely.geometry import Polygon, box
 from shapely.strtree import STRtree
 
-from ..geometry import grain_angle, placement_points
+from ..geometry import grain_angle, grow_rect, placement_points
 from ..model import Marker, Project
 
 AREA_TOL = 0.01     # mm^2 overlap area tolerated (numerical noise)
@@ -66,7 +66,7 @@ def validate_marker(project: Project, marker: Marker, required: dict | None = No
     # geometry preserved (rigid motion => same area)
     for pl in marker.placements:
         if pl.uid in polys:
-            orig = abs(Polygon(project.piece(pl.piece_uid).sizes[pl.size].cut).area)
+            orig = abs(Polygon(project.piece(pl.piece_uid).sizes[pl.size].cut).area) * pl.sx * pl.sy
             if abs(polys[pl.uid].area - orig) > 1e-6 * max(orig, 1.0) + 1e-6:
                 issues.append(Issue("geometry", f"area changed for {pl.uid}", [pl.uid]))
     # bounds
@@ -81,8 +81,11 @@ def validate_marker(project: Project, marker: Marker, required: dict | None = No
     # overlap / spacing
     tree = STRtree(geoms)
     sp = f.spacing
+    # directional buffers: the other piece must stay out of this one grown by (buffer_x, buffer_y) (+ spacing)
+    bx, by = max(0.0, f.buffer_x - DIST_TOL), max(0.0, f.buffer_y - DIST_TOL)
     for i, g in enumerate(geoms):
-        cand = tree.query(g.buffer(sp + DIST_TOL) if sp > 0 else g)
+        gr = grow_rect(g, bx, by) if (bx > 0 or by > 0) else None
+        cand = tree.query((gr or g).buffer(sp + DIST_TOL) if sp > 0 else (gr or g))
         for j in cand:
             j = int(j)
             if j <= i:
@@ -91,11 +94,18 @@ def validate_marker(project: Project, marker: Marker, required: dict | None = No
             inter = g.intersection(h).area
             if inter > AREA_TOL:
                 issues.append(Issue("overlap", f"{uids[i]} overlaps {uids[j]} by {inter:.2f} mm2", [uids[i], uids[j]]))
-            elif sp > 0:
+                continue
+            if sp > 0:
                 d = g.distance(h)
                 if d < sp - DIST_TOL:
                     issues.append(Issue("spacing", f"{uids[i]} - {uids[j]} distance {d:.3f} < {sp}",
                                         [uids[i], uids[j]]))
+                    continue
+            if gr is not None:
+                bad = gr.distance(h) < sp - DIST_TOL if sp > 0 else gr.intersection(h).area > AREA_TOL
+                if bad:
+                    issues.append(Issue("spacing", f"{uids[i]} - {uids[j]} closer than buffer X {f.buffer_x} / "
+                                                   f"Y {f.buffer_y} mm", [uids[i], uids[j]]))
     # orientation
     if allowed_rotations is not None:
         for pl in marker.placements:

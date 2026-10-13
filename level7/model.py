@@ -110,6 +110,8 @@ class Placement:
     mirrored: bool = False         # mirror about pattern Y axis (x -> -x) before rotation
     pinned: bool = False
     placed: bool = True
+    sx: float = 1.0                # shrinkage factors along marker length (x) / width (y), applied after rotation
+    sy: float = 1.0
     reason: str | None = None      # why not placed
 
 
@@ -121,8 +123,16 @@ class FabricSettings:
     margin_start: float = 0.0      # along length
     margin_end: float = 0.0
     spacing: float = 0.0           # min distance between cut lines (mm)
+    buffer_x: float = 0.0          # extra distance between pieces along the marker length (mm)
+    buffer_y: float = 0.0          # extra distance between pieces across the marker width (mm)
+    shrink_x: float = 0.0          # shrinkage along the length (%): +2 = pieces 2 % longer, -2 = 2 % shorter
+    shrink_y: float = 0.0          # shrinkage across the width (%)
     lay_type: LayType = LayType.OPEN
     max_length: float | None = None
+
+    @property
+    def scale(self) -> tuple[float, float]:
+        return 1.0 + self.shrink_x / 100.0, 1.0 + self.shrink_y / 100.0
 
     @property
     def usable_width(self) -> float:

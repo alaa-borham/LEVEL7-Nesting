@@ -82,9 +82,15 @@ class PieceItem(QGraphicsPathItem):
         self.setPath(_path(cut))
         o = self.view.options
         dark = QColor(40, 40, 40)
-        if o["buffer"] and self.view.marker is not None and self.view.marker.fabric.spacing > 0:
+        fab = self.view.marker.fabric if self.view.marker is not None else None
+        if o["buffer"] and fab is not None and (fab.spacing > 0 or fab.buffer_x > 0 or fab.buffer_y > 0):
             from shapely.geometry import Polygon
-            buf = Polygon(cut).buffer(self.view.marker.fabric.spacing / 2.0, join_style=2)
+
+            from ..geometry import grow_rect
+            buf = Polygon(cut).buffer(0)
+            if fab.spacing > 0:
+                buf = buf.buffer(fab.spacing / 2.0, join_style=2)
+            buf = grow_rect(buf, max(0.0, fab.buffer_x) / 2.0, max(0.0, fab.buffer_y) / 2.0)
             self._child(list(buf.exterior.coords), True, QPen(QColor(150, 150, 150), 0, Qt.DotLine))
         if o["internal"]:
             for s in g.seam:

@@ -9,8 +9,10 @@ from shapely.geometry.polygon import orient
 from ..model import Placement, Point
 
 
-def transform_points(pts: list[Point], rotation: float, mirrored: bool, dx: float = 0.0, dy: float = 0.0) -> list[Point]:
-    """Mirror about Y axis (x -> -x) if requested, rotate CCW by ``rotation`` deg, translate."""
+def transform_points(pts: list[Point], rotation: float, mirrored: bool, dx: float = 0.0, dy: float = 0.0,
+                     sx: float = 1.0, sy: float = 1.0) -> list[Point]:
+    """Mirror about Y axis (x -> -x) if requested, rotate CCW by ``rotation`` deg, scale by (sx, sy) in marker
+    axes (shrinkage), translate."""
     a = math.radians(rotation)
     c, s = math.cos(a), math.sin(a)
     # snap exact multiples of 90 deg to avoid 1e-16 noise
@@ -20,12 +22,30 @@ def transform_points(pts: list[Point], rotation: float, mirrored: bool, dx: floa
     for x, y in pts:
         if mirrored:
             x = -x
-        out.append((c * x - s * y + dx, s * x + c * y + dy))
+        out.append((sx * (c * x - s * y) + dx, sy * (s * x + c * y) + dy))
     return out
 
 
 def placement_points(pts: list[Point], pl: Placement) -> list[Point]:
-    return transform_points(pts, pl.rotation, pl.mirrored, pl.x, pl.y)
+    return transform_points(pts, pl.rotation, pl.mirrored, pl.x, pl.y, pl.sx, pl.sy)
+
+
+def grow_rect(poly, ax: float, ay: float):
+    """Exact Minkowski sum of a shapely polygon with the rectangle [-ax, ax] x [-ay, ay]."""
+    if ax <= 0 and ay <= 0:
+        return poly
+    from shapely.geometry import MultiPoint
+    from shapely.ops import unary_union
+    parts = [poly]
+    for ring in [poly.exterior]:
+        c = list(ring.coords)
+        for (x0, y0), (x1, y1) in zip(c, c[1:]):
+            parts.append(MultiPoint([(x + u, y + v) for x, y in ((x0, y0), (x1, y1))
+                                     for u in (-ax, ax) for v in (-ay, ay)]).convex_hull)
+    out = unary_union(parts)
+    if out.geom_type != "Polygon":
+        out = max(out.geoms, key=lambda g: g.area)
+    return Polygon(out.exterior)
 
 
 def bbox(pts: list[Point]) -> tuple[float, float, float, float]:
@@ -65,12 +85,14 @@ def grain_angle(pts: list[Point]) -> float | None:
     return None if best is None else best[1]
 
 
-def search_polygon(pts: list[Point], spacing: float, tolerance: float) -> tuple[list[Point], float]:
+def search_polygon(pts: list[Point], spacing: float, tolerance: float,
+                   rect: tuple[float, float] = (0.0, 0.0)) -> tuple[list[Point], float]:
     """Outward approximation used for searching placements.
 
     Returns a simplified polygon that fully contains the original cut contour grown by
     ``spacing / 2``. Construction: buffer by spacing/2 + tolerance, simplify with
-    ``tolerance`` (Douglas-Peucker moves the boundary by at most ``tolerance``).
+    ``tolerance`` (Douglas-Peucker moves the boundary by at most ``tolerance``). ``rect`` = (ax, ay) additionally
+    grows the shape by ax along x and ay along y (directional buffer, marker axes).
     The achieved maximum deviation (Hausdorff distance to the grown original) is returned.
     """
     base = Polygon(pts)
@@ -78,10 +100,12 @@ def search_polygon(pts: list[Point], spacing: float, tolerance: float) -> tuple[
         base = base.buffer(0)
     grow = spacing / 2.0
     target = base.buffer(grow, join_style=2, mitre_limit=2.0) if grow > 0 else base
+    target = grow_rect(target, *rect)
     if tolerance <= 0:
         poly = target
     else:
-        poly = base.buffer(grow + tolerance, join_style=2, mitre_limit=2.0).simplify(tolerance, preserve_topology=True)
+        src, g = (base, grow + tolerance) if rect[0] <= 0 and rect[1] <= 0 else (target, tolerance)
+        poly = src.buffer(g, join_style=2, mitre_limit=2.0).simplify(tolerance, preserve_topology=True)
         if not poly.contains(target):
             poly = poly.union(target).simplify(0, preserve_topology=True)
     if poly.geom_type != "Polygon":
