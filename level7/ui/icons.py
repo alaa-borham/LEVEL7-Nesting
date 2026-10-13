@@ -60,6 +60,14 @@ def _draw(name: str, p: QPainter, fg: QColor):
         p.setPen(QPen(QColor("white"), 2))
         p.drawLine(QPointF(24, 5), QPointF(24, 11))
         p.drawLine(QPointF(21, 8), QPointF(27, 8))
+    elif name == "batch":
+        for k, y in enumerate((5, 13, 21)):
+            p.setBrush(QColor(ACCENT.red(), ACCENT.green(), ACCENT.blue(), 200 - k * 40))
+            p.drawRoundedRect(QRectF(3, y, 20, 6), 1.5, 1.5)
+        p.setBrush(Qt.NoBrush)
+        p.setPen(QPen(GREEN, 2.2, Qt.SolidLine, Qt.RoundCap))
+        p.drawLine(QPointF(25, 9), QPointF(25, 25))
+        _arrow_head(p, QPointF(25, 28), 90, 5)
     elif name == "save":
         p.drawRoundedRect(QRectF(5, 5, 22, 22), 2, 2)
         p.drawRect(QRectF(10, 5, 12, 7))

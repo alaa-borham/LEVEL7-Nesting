@@ -20,3 +20,6 @@ LGPL text and a note on how to obtain the Qt source when redistributing.
 * **sparrow** (MIT, J. Gardeyn / KU Leuven) with **jagua-rs** (MPL-2.0): built by CI from a pinned commit and
   bundled as `engines/sparrow.exe`; run as a separate process. Licence notices: THIRD_PARTY_LICENSES.md.
   Without it LEVEL7 uses only its own engine.
+
+## Marker order lists
+* **openpyxl** 3.1.5 (MIT): reading / writing Excel (.xlsx) marker order lists. CSV lists need no extra package.

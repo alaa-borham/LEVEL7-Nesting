@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 
 
@@ -112,6 +113,26 @@ def cmd_export(a):
     return 0
 
 
+def cmd_batch(a):
+    from . import batch
+    from .exporters.iso import ISO_PRESETS
+    from .exporters.plt import PRESETS
+    if a.template:
+        batch.write_template(a.orders)
+        print("example list written:", a.orders)
+        return 0
+    orders = batch.parse_orders(a.orders)
+    out = a.outdir or os.path.join(os.path.dirname(os.path.abspath(a.orders)),
+                                   "LEVEL7_" + os.path.splitext(os.path.basename(a.orders))[0])
+
+    def show(k, o):
+        if o.status != "running":
+            print(f"{o.name}: {o.status} {o.message}", flush=True)
+    summary = batch.run_batch(orders, out, PRESETS[a.plt_preset](), ISO_PRESETS[a.iso_preset](), a.time, on_order=show)
+    print("summary:", summary)
+    return 0 if all(o.status == "done" for o in orders) else 2
+
+
 def main(argv=None):
     for stream in (sys.stdout, sys.stderr):
         try:  # Windows consoles default to cp1252/cp1256: never crash on Arabic names
@@ -138,6 +159,14 @@ def main(argv=None):
         s.add_argument("--workers", type=int, default=None)
         s.add_argument("-o", "--output")
         s.set_defaults(fn=fn)
+    s = sub.add_parser("batch", help="nest, save and export a list of markers (Excel / CSV)")
+    s.add_argument("orders")
+    s.add_argument("-o", "--outdir", default=None)
+    s.add_argument("--time", type=float, default=120, help="default seconds per marker")
+    s.add_argument("--plt-preset", default="algotex_grafis")
+    s.add_argument("--iso-preset", default="bullmer_grafis")
+    s.add_argument("--template", action="store_true", help="write an example list to ORDERS and exit")
+    s.set_defaults(fn=cmd_batch)
     s = sub.add_parser("export")
     s.add_argument("project")
     s.add_argument("--marker", type=int, default=-1)

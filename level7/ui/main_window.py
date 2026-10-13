@@ -307,6 +307,8 @@ class MainWindow(QMainWindow):
         self.m_view.addAction(self.act_table)
         self.m_nest.addAction(self._act("run", self.run_nesting, "F5"))
         self.m_nest.addAction(self._act("stop", self.stop_nesting, "Esc"))
+        self.m_nest.addSeparator()
+        self.m_nest.addAction(self._act("batch", self.batch_dialog, "Ctrl+B"))
         self.m_export.addAction(self._act("export_plt", lambda: self.export("plt")))
         self.m_export.addAction(self._act("export_dxf", lambda: self.export("dxf")))
         self.m_export.addAction(self._act("export_iso", lambda: self.export("iso")))
@@ -325,7 +327,7 @@ class MainWindow(QMainWindow):
                ("rotate180", "rotate180"), ("pin", "pin"), ("measure", "measure"), None,
                ("zoom_fit", "zoom_fit"), ("display_options", "display"), None,
                ("tab_pieces", "pieces"), ("tab_sizes", "sizes"), None,
-               ("run", "run"), ("stop", "stop"), None,
+               ("run", "run"), ("stop", "stop"), ("batch", "batch"), None,
                ("export_plt", "plt"), ("export_dxf", "dxf"), ("export_iso", "iso"), None,
                ("language", "language"))
 
@@ -532,6 +534,12 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, tr("add_model"), msg + "\n\n" + "\n".join(problems))
         self.statusBar().showMessage(msg)
         self.show_table_tab(1)                 # choose the sizes of each model
+
+    def batch_dialog(self):
+        from .batch_dialog import BatchDialog
+        dlg = BatchDialog(self)
+        dlg.setAttribute(Qt.WA_DeleteOnClose, True)
+        dlg.show()
 
     def new_session(self):
         if self.sessions is not None:

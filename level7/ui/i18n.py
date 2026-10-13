@@ -237,6 +237,28 @@ T = {
     "models_added": ("{n} model file(s) added; {t} models in this session. Set the quantities per model and size.",
                      "تمت إضافة {n} ملف؛ عدد الموديلات في الجلسة {t}. اكتب الكميات لكل موديل ومقاس."),
     "models_max": ("At most {n} model files per session.", "الحد الأقصى {n} ملف موديل في الجلسة الواحدة."),
+    "batch": ("Marker list (batch)…", "قائمة ماركرات (دفعة)…"), "tb_batch": ("Batch", "قائمة"),
+    "batch_title": ("Marker list — nest, save and export in sequence", "قائمة ماركرات — تعشيق وحفظ وتصدير بالتسلسل"),
+    "batch_load": ("Open list (Excel / CSV)…", "فتح قائمة (Excel / CSV)…"),
+    "batch_template": ("Save example list…", "حفظ نموذج قائمة…"),
+    "batch_outdir": ("Output folder…", "مجلد الحفظ…"),
+    "batch_time": ("Default time per marker:", "الوقت الافتراضي لكل ماركر:"),
+    "batch_time_tip": ("Used when the list has no 'time' column value for a marker",
+                       "يُستخدم إذا لم يكن في القائمة وقت للماركر"),
+    "batch_hint": ("Columns: marker, file, size, qty, width, material, formats (plt;dxf;iso), time, spacing — one "
+                   "row per marker/file/size. Use 'Save example list' for a ready template.",
+                   "الأعمدة: ماركر، ملف، مقاس، كمية، عرض، خامة، صيغ (plt;dxf;iso)، وقت، مسافة — سطر لكل ماركر/ملف/مقاس. "
+                   "استخدم «حفظ نموذج قائمة» للحصول على نموذج جاهز."),
+    "batch_loaded": ("{n} markers in {p}. Output folder: {o}", "{n} ماركر في {p}. مجلد الحفظ: {o}"),
+    "batch_start": ("Start", "بدء"), "batch_stop": ("Stop", "إيقاف"),
+    "batch_open_markers": ("Open markers in sessions", "فتح الماركرات في جلسات"),
+    "batch_open_folder": ("Open output folder", "فتح مجلد الحفظ"),
+    "batch_done": ("{ok} of {n} markers done.\nSummary: {s}", "تم إنجاز {ok} من {n} ماركر.\nالملخص: {s}"),
+    "bt_marker": ("Marker", "الماركر"), "bt_files": ("Design files", "ملفات التصميم"), "bt_sizes": ("Sizes × qty", "المقاسات × الكمية"),
+    "bt_width": ("Width", "العرض"), "bt_formats": ("Export", "التصدير"), "bt_status": ("Status", "الحالة"),
+    "bt_length": ("Length mm", "الطول مم"), "bt_eff": ("Efficiency", "الكفاءة"),
+    "bs_pending": ("waiting", "في الانتظار"), "bs_running": ("nesting…", "جارٍ التعشيق…"),
+    "bs_done": ("done", "تم"), "bs_failed": ("failed", "فشل"),
     "cancel": ("Cancel", "إلغاء"),
 }
 

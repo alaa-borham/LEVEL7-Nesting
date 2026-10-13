@@ -7,7 +7,7 @@ ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 ICON = os.path.join(ROOT, "level7", "resources", "level7.ico")
 datas = [(os.path.join(ROOT, "level7", "resources"), "level7/resources"),
          (os.path.join(ROOT, "docs"), "docs")]
-hidden = ["shapely", "pyclipper", "ezdxf", "level7.nesting.parallel", "PySide6.QtNetwork"]
+hidden = ["shapely", "pyclipper", "ezdxf", "level7.nesting.parallel", "PySide6.QtNetwork", "openpyxl"]
 excl = ["PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.Qt3DCore", "PySide6.QtQuick",
         "PySide6.QtQml", "PySide6.QtMultimedia", "PySide6.QtPdf", "tkinter", "matplotlib"]
 
