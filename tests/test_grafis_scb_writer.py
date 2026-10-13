@@ -69,3 +69,40 @@ def test_multi_model_session_refused(tmp_path):
     service.add_model(p, ALL_SCB[2])
     with pytest.raises(ScbWriteError):
         write_scb(SCB, p, p.markers[0], str(tmp_path / "x.scb"))
+
+
+def test_written_scb_has_valid_grafis_check_values(tmp_path):
+    """GRAFIS verifies the per-block and file-header check values ("Style cannot be read ... corrupt file")."""
+    import struct
+
+    from level7.formats.grafis.container import grafis_check, read_container
+    from level7.formats.grafis.writer import write_scb
+    from level7.model import FabricSettings, NestSettings
+    from level7.service import open_any, run_nesting
+    proj, _ = open_any(SCB)
+    m, info = run_nesting(proj, FabricSettings(width=1500.0), NestSettings(time_limit=3, engine="builtin"), workers=1)
+    out = str(tmp_path / "new.scb")
+    write_scb(SCB, proj, m, out)
+    raw = open(out, "rb").read()
+    assert grafis_check(b"\0\0\0\0" + raw[4:80]) == struct.unpack_from("<I", raw, 0)[0]
+    tmpl = open(SCB, "rb").read()
+    c, t = read_container(out), read_container(SCB).by_id()
+    changed = 0
+    for b in c.blocks:
+        blk = b"\0\0\0\0" + raw[b.offset + 4:b.offset + b.size]
+        o = t[b.bid]
+        if grafis_check(b"\0\0\0\0" + tmpl[o.offset + 4:o.offset + o.size]) == o.check:   # formula known here
+            assert grafis_check(blk) == b.check, b.bid
+        changed += b.payload != o.payload
+    assert changed >= 1
+
+
+def test_check_formula_reproduces_grafis_files():
+    import struct
+
+    from level7.formats.grafis.container import grafis_check, read_container
+    raw = open(SCB, "rb").read()
+    assert grafis_check(b"\0\0\0\0" + raw[4:80]) == struct.unpack_from("<I", raw, 0)[0]
+    c = read_container(SCB)
+    small = [b for b in c.blocks if b.size < 20000]
+    assert all(grafis_check(b"\0\0\0\0" + raw[b.offset + 4:b.offset + b.size]) == b.check for b in small)

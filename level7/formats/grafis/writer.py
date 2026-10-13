@@ -21,7 +21,7 @@ import struct
 from pathlib import Path
 
 from ...geometry import bbox, placement_points, ring_area
-from .container import BLOCK_MARK, TRAILER, read_container
+from .container import BLOCK_MARK, TRAILER, grafis_check, read_container
 from .placements import HDR, REC, decode_marker
 from .textsections import parse_text
 
@@ -200,7 +200,8 @@ def write_scb(template_path: str, project, marker, out_path: str) -> dict:
     new_text = _replace_section(new_text, "SBTLIST", tl_lines)
     new_text_bytes = new_text.encode(ENC) + b"\x00"
 
-    # rebuild the container: same order, same block stamps, new payloads where changed
+    # rebuild the container: same order; changed blocks get new payloads and a recomputed check value (GRAFIS
+    # verifies it: a stale value made GRAFIS report "Style cannot be read ... corrupt file")
     out = bytearray(data[:80])
     for b in cont.blocks:
         payload = b.payload
@@ -210,10 +211,21 @@ def write_scb(template_path: str, project, marker, out_path: str) -> dict:
             payload = new_text_bytes
         pad = (-(32 + len(payload))) % 8
         payload = payload + b"\x00" * pad
-        out += struct.pack("<II", b.check, (32 + len(payload)) // 8) + BLOCK_MARK + struct.pack("<4I", *b.bid)
-        out += payload
+        head = struct.pack("<II", 0, (32 + len(payload)) // 8) + BLOCK_MARK + struct.pack("<4I", *b.bid)
+        check = b.check
+        if head[4:] + payload != data[b.offset + 4:b.offset + b.size]:          # block changed
+            original = b"\0\0\0\0" + data[b.offset + 4:b.offset + b.size]
+            if grafis_check(original) != b.check:
+                raise ScbWriteError(f"cannot compute the GRAFIS check value of block {b.bid} - not written")
+            check = grafis_check(head + payload)
+        out += struct.pack("<I", check) + head[4:] + payload
     out += TRAILER
     struct.pack_into("<I", out, 4, (len(out) - 8) // 8)
+    original_head = b"\0\0\0\0" + data[4:80]
+    if grafis_check(original_head) != struct.unpack_from("<I", data, 0)[0]:
+        raise ScbWriteError("cannot compute the GRAFIS file header check value - not written")
+    struct.pack_into("<I", out, 0, 0)
+    struct.pack_into("<I", out, 0, grafis_check(bytes(out[:80])))
     tmp = out_path + ".part"                 # the GRAFIS file is replaced only once the new one is complete
     with open(tmp, "wb") as fh:
         fh.write(out)

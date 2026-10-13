@@ -2,11 +2,11 @@
 
 Structure established from the sample files (see docs/GRAFIS_FORMAT.md):
 
-    offset 0   u32  unknown (varies per file; not a simple sum/CRC32/Adler32)
+    offset 0   u32  check value of the 80-byte file header (see grafis_check)
     offset 4   u32  (file_size - 8) / 8           -> verified on both samples
     offset 8   b"GRAFIS-Modelldatei" + 2-letter variant ("VB", "VD" seen) + b"\\n\\0\\n\\0", zero padding to 80
     offset 80  block chain, each block:
-                   u32  unknown (per-block check value, algorithm unknown)
+                   u32  check value of the block (see grafis_check)
                    u32  block length in 8-byte units, measured from the block start
                    8s   b"BLO5kenn"
                    4*u32 hierarchical block id (a, b, c, d)
@@ -123,3 +123,31 @@ def read_container(path: str, strict: bool = False) -> Container:
     with open(path, "rb") as fh:
         data = fh.read()
     return parse_container(data, path, strict)
+
+
+CHECK_MOD = 1024000000
+
+
+def grafis_check(data: bytes) -> int:
+    """GRAFIS check value of a block (or of the 80-byte file header), its own check field set to zero.
+
+    Found from the sample files (3150 of 3159 blocks and all 5 file headers reproduced): sum over the data
+    read as signed 16-bit little-endian words, word k (1-based) weighted by k, kept in a 32-bit integer from
+    which 1,024,000,000 is subtracted whenever the running total reaches it. The 9 blocks not reproduced are
+    very large piece-geometry blocks (> 32k words) that LEVEL7 never rewrites.
+    """
+    if len(data) % 2:
+        data += b"\0"
+    words = struct.unpack(f"<{len(data) // 2}h", data)
+    acc = 0
+    for k, x in enumerate(words, 1):
+        acc += k * x
+        if acc >= CHECK_MOD:
+            acc -= CHECK_MOD
+        acc = ((acc + 0x80000000) & 0xFFFFFFFF) - 0x80000000      # 32-bit signed wrap-around
+    return acc & 0xFFFFFFFF
+
+
+def block_check(check_field_zeroed_block: bytes) -> int:
+    return grafis_check(check_field_zeroed_block)
+

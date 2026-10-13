@@ -21,7 +21,7 @@ derived from these two files only; statuses: **C** = confirmed by an independent
 | 80… | blocks | block chain | C |
 | end−8 | bytes | `mdlEND_5` | C |
 
-Block: `u32 check (U)`, `u32 length in 8-byte units (from block start)`, `"BLO5kenn"`,
+Block: `u32 check (C, see below)`, `u32 length in 8-byte units (from block start)`, `"BLO5kenn"`,
 `4×u32 id (a,b,c,d)`, payload. The parser follows the length chain strictly; the chain covers the
 file without gaps (558 blocks MDL, 445 SCB). `BLO5kenn` is never searched for.
 
@@ -105,7 +105,7 @@ reconstruction from the SCB within 0.0008 mm; notches, seam lines and texts as d
 
 `EFFCNCY` = Σ placed cut areas / (WIDTH × LENGTH) (C).
 
-Open points (U): u32 check values, placement fields +28, +64..72, flag bit 0x40, blocks (2,4..9)
+Open points (U): placement fields +28, +64..72, flag bit 0x40, blocks (2,4..9)
 except (2,8), construction blocks (3,k,1..6). Bundle 1 = "A", bundle 2 = "B" in the GRAFIS view (C).
 GRAFIS "U/B" = marker length / number of bundles (1.46 m, C).
 
@@ -120,3 +120,14 @@ GRAFIS "U/B" = marker length / number of bundles (1.46 m, C).
   is recognised by its "__" name; a size whose reference is the base entry uses the base geometry.
 * Lines of #TLIST / #GRDTAB / #SBTLIST in an unknown layout are no longer dropped silently: they are reported as
   "COMPAT:" notes, the GUI warns and offers a compatibility report (Help menu).
+
+
+## Check values (C)
+The u32 at file offset 0 (over the 80-byte header) and the first u32 of every block (over the whole block)
+are check values that GRAFIS verifies — a stale value makes GRAFIS report "Style cannot be read (GRAFIS installed
+incorrectly, computer error or corrupt file)". Algorithm (level7.formats.grafis.container.grafis_check), with the
+check field itself set to 0: read the bytes as signed 16-bit little-endian words; acc += k * word for k = 1, 2, …;
+whenever acc >= 1,024,000,000 subtract 1,024,000,000; acc is a 32-bit signed integer (wraps around).
+Reproduces all 5 file headers and 3150 of 3159 blocks of the sample files; the 9 others are piece-geometry blocks
+of more than 32k words, which LEVEL7 never rewrites (the SCB writer refuses to write a block whose original check
+value it cannot reproduce).
