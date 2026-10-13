@@ -120,6 +120,41 @@ def _rescaled(pl: Placement, fabric: FabricSettings, project: Project) -> Placem
     return out
 
 
+def _match_rule(piece: Piece, size: str, fabric: FabricSettings, warnings: list):
+    if not matching.active(piece, fabric):
+        return None
+    a = matching.anchor(piece, size)
+    if a is None:
+        msg = f"{piece.name} {size}: match point not found in this size - not matched"
+        if msg not in warnings:
+            warnings.append(msg)
+        return None
+    return (*matching.rules(piece, fabric), a, *matching.targets(fabric, piece), fabric.repeat_x, fabric.repeat_y)
+
+
+def items_from_placements(project: Project, placements: list[Placement], fabric: FabricSettings,
+                          settings: NestSettings) -> tuple[list[NestItem], list[Unplaced], list[str]]:
+    """Re-nest exactly these copies (the pieces left in a marker); pinned ones keep their spot."""
+    items, unplaced, warnings = [], [], []
+    for pl in placements:
+        piece = project.piece(pl.piece_uid)
+        g = piece.sizes.get(pl.size)
+        if g is None:
+            unplaced.append(Unplaced(pl.uid, piece.uid, pl.size, pl.mirrored, f"size {pl.size} geometry not available"))
+            continue
+        rots, err = grain_rotations(piece, pl.mirrored, settings)
+        if err:
+            unplaced.append(Unplaced(pl.uid, piece.uid, pl.size, pl.mirrored, err))
+            continue
+        it = NestItem(pl.uid, piece.uid, pl.size, pl.bundle, pl.mirrored, rots, g.cut,
+                      label=f"{piece.name} {pl.size}{' (M)' if pl.mirrored else ''} #{pl.bundle}",
+                      match=_match_rule(piece, pl.size, fabric, warnings))
+        if pl.pinned:
+            it.pinned = _rescaled(pl, fabric, project)
+        items.append(it)
+    return items, unplaced, warnings
+
+
 def build_items(project: Project, sizes: dict[str, int], counts: dict[str, tuple[int, int]],
                 fabric: FabricSettings, settings: NestSettings, pinned: list[Placement] | None = None,
                 material: str | None = None, excluded=None) -> tuple[list[NestItem], list[Unplaced], list[str]]:
@@ -155,14 +190,7 @@ def build_items(project: Project, sizes: dict[str, int], counts: dict[str, tuple
                 unplaced.append(Unplaced("", piece.uid, size, False, f"size {size} geometry not available"))
                 continue
             g = piece.sizes[size]
-            match_rule = None
-            if matching.active(piece, fabric):
-                a = matching.anchor(piece, size)
-                if a is None:
-                    warnings.append(f"{piece.name} {size}: match point not found in this size - not matched")
-                else:
-                    match_rule = (*matching.rules(piece, fabric), a, *matching.targets(fabric, piece),
-                                  fabric.repeat_x, fabric.repeat_y)
+            match_rule = _match_rule(piece, size, fabric, warnings)
             for bundle in range(1, qty + 1):
                 if (size, bundle) in excluded:
                     continue

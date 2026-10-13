@@ -261,11 +261,18 @@ def required_copies(items) -> dict:
 
 def run_nesting(proj: Project, fabric: FabricSettings, settings: NestSettings, cut_order: CutOrder | None = None,
                 pinned=None, progress=None, stop_event: threading.Event | None = None, workers: int | None = None,
-                name: str | None = None) -> tuple[Marker, dict]:
+                name: str | None = None, placements=None, keep_out=None) -> tuple[Marker, dict]:
+    """Nest the cut order - or, with ``placements``, re-nest exactly those copies (pieces left in a marker);
+    ``keep_out`` (copies the user took out of the marker) stay in the result as not placed."""
     from .nesting.parallel import run_parallel
     co = cut_order or proj.cut_order
-    items, unplaced, warnings = build_items(proj, co.size_quantities, co.piece_counts, fabric, settings, pinned,
-                                           material=co.material, excluded=getattr(co, "excluded", None))
+    if placements is not None:
+        from .nesting.engine import items_from_placements
+        items, unplaced, warnings = items_from_placements(proj, placements, fabric, settings)
+        pinned = [it.pinned for it in items if it.pinned is not None]
+    else:
+        items, unplaced, warnings = build_items(proj, co.size_quantities, co.piece_counts, fabric, settings, pinned,
+                                               material=co.material, excluded=getattr(co, "excluded", None))
     if not items and not unplaced:
         raise ValueError("nothing to nest: set size quantities and piece counts")
     t0 = time.monotonic()
@@ -284,6 +291,9 @@ def run_nesting(proj: Project, fabric: FabricSettings, settings: NestSettings, c
     for u in list(res.unplaced) + list(unplaced):
         marker.placements.append(Placement(uid=u.item_uid or f"u{len(marker.placements)}", piece_uid=u.piece_uid,
                                            size=u.size, mirrored=u.mirrored, placed=False, reason=u.reason))
+    from dataclasses import replace as _replace
+    for pl in keep_out or []:                    # taken out by the user: still to place (strip), not nested
+        marker.placements.append(_replace(pl, placed=False, pinned=False, reason=pl.reason or "taken out of the marker"))
     for pl in marker.placements:                 # unplaced copies too: placed later by hand with the same shrinkage
         pl.sx, pl.sy = fabric.scale
     allowed = {}
@@ -293,6 +303,9 @@ def run_nesting(proj: Project, fabric: FabricSettings, settings: NestSettings, c
         if pl.pinned:
             allowed.setdefault((pl.piece_uid, pl.mirrored), []).append(pl.rotation)
     req = required_copies(items)
+    for pl in keep_out or []:
+        key = (pl.piece_uid, pl.size, pl.mirrored)
+        req[key] = req.get(key, 0) + 1
     for u in unplaced:                           # copies refused before nesting (unknown grain, missing size)
         key = (u.piece_uid, u.size, u.mirrored)
         req[key] = req.get(key, 0) + 1

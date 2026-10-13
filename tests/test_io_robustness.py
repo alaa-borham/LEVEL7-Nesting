@@ -84,3 +84,19 @@ def test_excluded_strip_rows_left_out_and_saved(tmp_path):
     path = str(tmp_path / "p.l7n")
     save_project(proj, path)
     assert load_project(path).cut_order.excluded == [(size, 2)]
+
+
+def test_renest_only_pieces_inside_keeps_taken_out_unplaced():
+    from dataclasses import replace
+
+    from level7.model import NestSettings
+    from level7.service import run_nesting
+    proj, _ = open_any(SCB)
+    m0 = proj.markers[0]
+    inside = [p for p in m0.placements if p.placed][2:]
+    out = [replace(p, placed=False, reason="taken out of the marker") for p in m0.placements if p.placed][:2]
+    m, info = run_nesting(proj, m0.fabric, NestSettings(time_limit=3, engine="builtin"), workers=1,
+                          placements=inside, keep_out=out)
+    assert info["validation"].ok, info["validation"].summary()
+    assert sum(p.placed for p in m.placements) == len(inside)
+    assert sorted(p.uid for p in m.placements if not p.placed) == sorted(p.uid for p in out)

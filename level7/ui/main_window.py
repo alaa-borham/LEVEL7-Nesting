@@ -26,6 +26,9 @@ from .updates import UpdateManager
 
 
 # ---------------------------------------------------------------------------------- undo
+TAKEN_OUT = "taken out of the marker"      # Placement.reason of copies the user removed from the marker
+
+
 class PlacementStateCommand(QUndoCommand):
     def __init__(self, window, changes, text):
         super().__init__(text)
@@ -34,21 +37,27 @@ class PlacementStateCommand(QUndoCommand):
 
     @staticmethod
     def state(pl: Placement):
-        return (pl.x, pl.y, pl.rotation, pl.mirrored, pl.pinned)
+        return (pl.x, pl.y, pl.rotation, pl.mirrored, pl.pinned, pl.placed, pl.reason)
 
     @staticmethod
     def apply(pl, st):
-        pl.x, pl.y, pl.rotation, pl.mirrored, pl.pinned = st
+        pl.x, pl.y, pl.rotation, pl.mirrored, pl.pinned, pl.placed, pl.reason = st
+
+    def _done(self):
+        if any(o[5] != n[5] for _pl, o, n in self.changes):      # a piece left / came back: redraw the marker
+            self.window._redraw_marker()
+        else:
+            self.window.after_edit()
 
     def redo(self):
         for pl, _o, n in self.changes:
             self.apply(pl, n)
-        self.window.after_edit()
+        self._done()
 
     def undo(self):
         for pl, o, _n in self.changes:
             self.apply(pl, o)
-        self.window.after_edit()
+        self._done()
 
 
 # -------------------------------------------------------------------------------- worker
@@ -57,17 +66,19 @@ class NestWorker(QThread):
     finished_ok = Signal(object, dict)
     failed = Signal(str)
 
-    def __init__(self, project, fabric, settings, cut_order, pinned):
+    def __init__(self, project, fabric, settings, cut_order, pinned, placements=None, keep_out=None):
         super().__init__()
         self.project, self.fabric, self.settings = project, fabric, settings
         self.cut_order, self.pinned = cut_order, pinned
+        self.placements, self.keep_out = placements, keep_out
         self.stop_event = threading.Event()
 
     def run(self):
         from ..service import run_nesting
         try:
             marker, info = run_nesting(self.project, self.fabric, self.settings, self.cut_order, self.pinned,
-                                       progress=lambda d: self.progress.emit(d), stop_event=self.stop_event)
+                                       progress=lambda d: self.progress.emit(d), stop_event=self.stop_event,
+                                       placements=self.placements, keep_out=self.keep_out)
             self.finished_ok.emit(marker, info)
         except Exception as e:
             self.failed.emit(f"{e}\n{traceback.format_exc()}")
@@ -264,7 +275,7 @@ class MainWindow(QMainWindow):
         self.btn_run = QPushButton()
         self.btn_stop = QPushButton()
         self.btn_stop.setEnabled(False)
-        self.btn_run.clicked.connect(self.run_nesting)
+        self.btn_run.clicked.connect(lambda: self.run_nesting())
         self.btn_stop.clicked.connect(self.stop_nesting)
         btns.addWidget(self.btn_run)
         btns.addWidget(self.btn_stop)
@@ -338,6 +349,7 @@ class MainWindow(QMainWindow):
         self.undo_actions = (undo, redo)
         self.m_edit.addAction(self._act("rotate180", self.rotate_selected, "R"))
         self.m_edit.addAction(self._act("pin", self.pin_selected, "P"))
+        self.m_edit.addAction(self._act("take_out", self.take_out_selected, "Delete"))
         self.act_measure = self._act("measure", self.toggle_measure, "M", checkable=True)
         self.m_edit.addAction(self.act_measure)
         self.act_measure_curve = self._act("measure_curve", self.toggle_measure_curve, "Shift+M", checkable=True)
@@ -356,7 +368,9 @@ class MainWindow(QMainWindow):
             self.m_theme.addAction(a)
             self.theme_actions[key] = a
         self.m_view.addSeparator()
-        self.m_nest.addAction(self._act("run", self.run_nesting, "F5"))
+        self.m_nest.addAction(self._act("run", lambda: self.run_nesting(), "F5"))
+        self.act_renest = self._act("renest_inside", lambda: self.renest_inside(), "Shift+F5")
+        self.m_nest.addAction(self.act_renest)
         self.m_nest.addAction(self._act("stop", self.stop_nesting, "Esc"))
         self.m_nest.addSeparator()
         self.m_nest.addAction(self._act("batch", self.batch_dialog, "Ctrl+B"))
@@ -427,6 +441,13 @@ class MainWindow(QMainWindow):
         self.m_measure = QMenu(self)
         self.m_measure.addAction(self.act_measure)
         self.m_measure.addAction(self.act_measure_curve)
+        # Nest: right-click offers full nesting / re-nest only the pieces inside the marker
+        self.m_run = QMenu(self)
+        self.m_run.addAction(acts["run"])
+        self.m_run.addAction(self.act_renest)
+        rb = tb.widgetForAction(acts["run"])
+        rb.setContextMenuPolicy(Qt.CustomContextMenu)
+        rb.customContextMenuRequested.connect(lambda pos, b=rb: self.m_run.exec(b.mapToGlobal(pos)))
         # Save: right-click offers Save / Save as… (like Measure)
         self.m_save = QMenu(self)
         for a, k in self.actions_tr:
@@ -1136,12 +1157,29 @@ class MainWindow(QMainWindow):
                 sx, sy = matching.snap(pc, replace(pl, x=pl.x + dx, y=pl.y + dy), self.marker.fabric)
                 dx, dy = dx + sx, dy + sy
             new = (pl.x + dx, pl.y + dy) + old[2:]
+            if self._off_fabric(pc, replace(pl, x=pl.x + dx, y=pl.y + dy)):
+                new = old[:5] + (False, TAKEN_OUT)        # dropped off the fabric: back to the strip
             changes.append((pl, old, new))
         if changes:
             self.marker.origin = "manual" if self.marker.origin != "original" else "original"
             self.undo.push(PlacementStateCommand(self, changes, "move"))
         else:
             self.view.refresh()
+
+    def _off_fabric(self, piece, pl) -> bool:
+        """The whole piece lies outside the fabric (above / below it or before its start)."""
+        from ..geometry import bbox
+        x0, y0, x1, y1 = bbox(placement_points(piece.sizes[pl.size].cut, pl))
+        return y0 >= self.marker.fabric.width or y1 <= 0 or x1 <= 0
+
+    def take_out_selected(self):
+        """Delete: the selected pieces leave the marker (counted again in the strip); undo brings them back."""
+        if not self.marker or self._busy():
+            return
+        changes = [(pl, PlacementStateCommand.state(pl), PlacementStateCommand.state(pl)[:5] + (False, TAKEN_OUT))
+                   for pl in self.view.selected_placements() if pl.placed and not pl.pinned]
+        if changes:
+            self.undo.push(PlacementStateCommand(self, changes, "take out"))
 
     def rotate_selected(self):
         if not self.marker or self._busy():
@@ -1158,14 +1196,16 @@ class MainWindow(QMainWindow):
             b1 = bbox(placement_points(g.cut, tmp))
             cx, cy = (b0[0] + b0[2]) / 2, (b0[1] + b0[3]) / 2
             nx, ny = cx - (b1[0] + b1[2]) / 2, cy - (b1[1] + b1[3]) / 2
-            changes.append((pl, PlacementStateCommand.state(pl), (nx, ny, tmp.rotation, pl.mirrored, pl.pinned)))
+            changes.append((pl, PlacementStateCommand.state(pl),
+                            (nx, ny, tmp.rotation, pl.mirrored, pl.pinned, pl.placed, pl.reason)))
         if changes:
             self.undo.push(PlacementStateCommand(self, changes, "rotate 180"))
 
     def pin_selected(self):
         if not self.marker or self._busy():
             return
-        changes = [(pl, PlacementStateCommand.state(pl), PlacementStateCommand.state(pl)[:4] + (not pl.pinned,))
+        changes = [(pl, PlacementStateCommand.state(pl),
+                    PlacementStateCommand.state(pl)[:4] + (not pl.pinned,) + PlacementStateCommand.state(pl)[5:])
                    for pl in self.view.selected_placements()]
         if changes:
             self.undo.push(PlacementStateCommand(self, changes, "pin"))
@@ -1241,10 +1281,20 @@ class MainWindow(QMainWindow):
         self._show_status(length, eff, (length / garments) if garments else 0.0, f.width)
 
     # -- nesting ---------------------------------------------------------------------------
-    def run_nesting(self):
+    def run_nesting(self, inside_only=None):
+        """inside_only: True = re-nest only the pieces still in the marker; None = ask when pieces were taken out."""
         if not self.project or (self.worker and self.worker.isRunning()):
             return
         self.read_tables()
+        out = [pl for pl in (self.marker.placements if self.marker else []) if not pl.placed and pl.reason == TAKEN_OUT]
+        if inside_only is None and out:
+            r = QMessageBox.question(self, tr("run"), tr("renest_ask", n=len(out)),
+                                     QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel, QMessageBox.Yes)
+            if r == QMessageBox.Cancel:
+                return
+            inside_only = r == QMessageBox.Yes
+        if inside_only:
+            return self._renest_inside()
         if not self._check_cut_order():
             return
         if not self._ensure_geometry():
@@ -1255,6 +1305,29 @@ class MainWindow(QMainWindow):
         pinned = [copy.copy(pl) for pl in (self.marker.placements if self.marker else [])
                   if pl.pinned and pl.placed and self.marker.origin != "original"]
         self.worker = NestWorker(self.project, fabric, st, self.project.cut_order, pinned)
+        self.worker.progress.connect(self.on_progress)
+        self.worker.finished_ok.connect(self.on_finished)
+        self.worker.failed.connect(lambda e: (self._nest_ui(False), QMessageBox.critical(self, tr("run"), e)))
+        self._nest_ui(True)
+        self.worker.start()
+
+    def renest_inside(self):
+        if self.project and self.marker and not (self.worker and self.worker.isRunning()):
+            self.read_tables()
+            self._renest_inside()
+
+    def _renest_inside(self):
+        """Re-nest the pieces in the current marker only; pieces taken out stay in the strip (not placed)."""
+        inside = [copy.copy(pl) for pl in self.marker.placements if pl.placed]
+        keep_out = [copy.copy(pl) for pl in self.marker.placements if not pl.placed]
+        if not inside:
+            QMessageBox.information(self, tr("run"), tr("renest_empty"))
+            return
+        fabric = self.fabric_from_form()
+        st = self.nest_settings_from_form()
+        self.project.nest_settings = st
+        self.worker = NestWorker(self.project, fabric, st, self.project.cut_order, [], placements=inside,
+                                 keep_out=keep_out)
         self.worker.progress.connect(self.on_progress)
         self.worker.finished_ok.connect(self.on_finished)
         self.worker.failed.connect(lambda e: (self._nest_ui(False), QMessageBox.critical(self, tr("run"), e)))

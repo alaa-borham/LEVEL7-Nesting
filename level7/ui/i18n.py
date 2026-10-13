@@ -225,6 +225,15 @@ T = {
                          "إضافة / حذف هذا المقاس من الماركر (يُطبَّق عند التعشيق)"),
     "strip_row_off": ("{r} left out of the marker - press Nest to apply", "{r} محذوف من الماركر — اضغط «تعشيق» للتطبيق"),
     "strip_row_on": ("{r} included in the marker - press Nest to apply", "{r} مضاف للماركر — اضغط «تعشيق» للتطبيق"),
+    "take_out": ("Take out of the marker", "إخراج من الماركر"),
+    "renest_inside": ("Re-nest only the pieces in the marker", "إعادة تعشيق القطع داخل الماركر فقط"),
+    "renest_ask": ("{n} piece(s) were taken out of the marker.\n\nYes: re-nest only the pieces still in the marker "
+                   "(the others stay in the strip).\nNo: nest the whole cut order again.",
+                   "تم إخراج {n} قطعة من الماركر.\n\nنعم: إعادة تعشيق القطع الموجودة داخل الماركر فقط (والباقي يبقى في "
+                   "الشريط العلوي).\nلا: تعشيق كل الطلب من جديد."),
+    "renest_empty": ("There are no pieces in the marker to re-nest.", "لا توجد قطع داخل الماركر لإعادة تعشيقها."),
+    "popup_move_tip": ("Drag the title to move this panel anywhere; double-click it to put it back under its icon",
+                       "اسحب العنوان لتحريك القائمة لأي مكان؛ دبل كليك عليه لإرجاعها تحت أيقونتها"),
     "tab_spacing": ("Margins, buffers and shrinkage", "الهوامش والبفر والانكماش"),
     "tb_tab_spacing": ("Margins", "الهوامش"),
     "measure_tool": ("Measure", "قياس"), "tb_measure_tool": ("Measure", "قياس"),
