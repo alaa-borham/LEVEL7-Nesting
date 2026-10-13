@@ -199,6 +199,10 @@ class MainWindow(QMainWindow):
     def _build_docks(self):
         self.pieces_table = QTableWidget(0, 7)
         self.pieces_table.verticalHeader().hide()
+        # a selected piece = its whole row highlighted, the field boxes in the row included
+        self.pieces_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        from .row_select import RowSelect
+        self._row_select = RowSelect(self.pieces_table)
         self.pieces_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.pieces_table.itemChanged.connect(
             lambda it: (self._refresh_material_groups(), self._table_edited()) if it.column() == 0 else None)
@@ -1008,6 +1012,7 @@ class MainWindow(QMainWindow):
             t.setCellWidget(r, 6, g)
             for c in (1, 2, 3):
                 t.item(r, c).setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+        self._row_select.attach()
         st = self.sizes_table
         st.setRowCount(0)
         for s in p.size_names:

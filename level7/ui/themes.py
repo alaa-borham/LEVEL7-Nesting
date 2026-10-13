@@ -76,6 +76,8 @@ QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QTextEdit, QPlainTextEdit {{
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus, QTextEdit:focus {{
     border-color: {_rgb(acc)}; }}
 QLineEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover, QComboBox:hover {{ border-color: {_rgb(acc, 0.6)}; }}
+QSpinBox[rowSelected="true"], QDoubleSpinBox[rowSelected="true"], QComboBox[rowSelected="true"] {{
+    background: {_rgb(acc, 0.30)}; border-color: {_rgb(acc, 0.8)}; }}
 QSpinBox::up-button, QDoubleSpinBox::up-button, QSpinBox::down-button, QDoubleSpinBox::down-button {{
     width: 16px; border: none; background: transparent; }}
 QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{ width: 7px; height: 7px; }}
