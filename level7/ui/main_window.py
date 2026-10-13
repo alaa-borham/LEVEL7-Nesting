@@ -158,20 +158,17 @@ class MainWindow(QMainWindow):
         self.sizes_table = QTableWidget(0, 2)
         self.sizes_table.verticalHeader().hide()
         self.sizes_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        left = QTabWidget()
-        left.addTab(self.pieces_table, "")
-        left.addTab(self.sizes_table, "")
-        self.left_tabs = left
-        self.dock_left = QDockWidget(self)
-        self.dock_left.setWidget(left)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.dock_left)
-        self.dock_left.setObjectName("pieces_table")
-        self.dock_left.hide()            # replaced by the GRAFIS-like strip on top (View menu / double-click)
+        # each table drops down under its own toolbar icon ("Pieces" / "Sizes")
+        from PySide6.QtCore import QSize
+        from .table_popup import TablePopup
+        self.pieces_popup = TablePopup(self, self.pieces_table, QSize(980, 460))
+        self.sizes_popup = TablePopup(self, self.sizes_table, QSize(380, 440))
+        self.table_popups = (self.pieces_popup, self.sizes_popup)
 
         # GRAFIS-like piece strip above the marker
         self.strip_area, self.strip = make_strip_area(self)
         self.strip_area.setMinimumHeight(40)
-        self.strip.open_table.connect(lambda: (self.dock_left.show(), self.dock_left.raise_()))
+        self.strip.open_table.connect(lambda: self.show_table_tab(0))
         self.dock_strip = QDockWidget(self)
         self.dock_strip.setObjectName("piece_strip")
         self.dock_strip.setWidget(self.strip_area)
@@ -306,8 +303,6 @@ class MainWindow(QMainWindow):
             self.m_theme.addAction(a)
             self.theme_actions[key] = a
         self.m_view.addSeparator()
-        self.act_table = self.dock_left.toggleViewAction()
-        self.m_view.addAction(self.act_table)
         self.m_nest.addAction(self._act("run", self.run_nesting, "F5"))
         self.m_nest.addAction(self._act("stop", self.stop_nesting, "Esc"))
         self.m_nest.addSeparator()
@@ -350,8 +345,9 @@ class MainWindow(QMainWindow):
         acts["tab_pieces"] = self._act("tab_pieces", lambda: self.show_table_tab(0), checkable=True)
         acts["tab_sizes"] = self._act("tab_sizes", lambda: self.show_table_tab(1), checkable=True)
         self.tab_actions = (acts["tab_pieces"], acts["tab_sizes"])
-        self.dock_left.visibilityChanged.connect(lambda _v: self._sync_tab_actions())
-        self.left_tabs.currentChanged.connect(lambda _i: self._sync_tab_actions())
+        for pop in self.table_popups:
+            pop.closed.connect(self._sync_tab_actions)
+        self.m_view.addActions(list(self.tab_actions))
         self.toolbar_items = []
         for item in self.TOOLBAR:
             if item is None:
@@ -377,19 +373,20 @@ class MainWindow(QMainWindow):
         self.toolbar = tb
 
     def show_table_tab(self, index: int):
-        """Toolbar 'Pieces' / 'Size quantities': open the table on that tab; a second click closes it."""
-        if self.dock_left.isVisible() and self.left_tabs.currentIndex() == index:
-            self.dock_left.hide()
+        """Toolbar 'Pieces' / 'Sizes': the table drops down under its icon; a second click closes it."""
+        pop = self.table_popups[index]
+        if pop.isVisible():
+            pop.hide()
         else:
-            self.left_tabs.setCurrentIndex(index)
-            self.dock_left.show()
-            self.dock_left.raise_()
+            for other in self.table_popups:
+                other.hide()
+            action = self.tab_actions[index]
+            pop.show_below(self.toolbar.widgetForAction(action) if hasattr(self, "toolbar") else None)
         self._sync_tab_actions()
 
     def _sync_tab_actions(self):
-        vis = self.dock_left.isVisible()
-        for i, a in enumerate(getattr(self, "tab_actions", ())):
-            a.setChecked(vis and self.left_tabs.currentIndex() == i)
+        for pop, a in zip(self.table_popups, getattr(self, "tab_actions", ())):
+            a.setChecked(pop.isVisible())
 
     def set_theme(self, name):
         from .icons import icon
@@ -419,7 +416,6 @@ class MainWindow(QMainWindow):
             a.setText(tr(k))
         self.undo_actions[0].setText(tr("undo"))
         self.undo_actions[1].setText(tr("redo"))
-        self.act_table.setText(tr("pieces_table"))
         self._retranslate_toolbar()
         self.m_theme.setTitle(tr("theme"))
         self.theme_button.setText(tr("theme"))
@@ -428,11 +424,10 @@ class MainWindow(QMainWindow):
             m.setTitle(tr(k))
         for lab, k in self.form_rows:
             lab.setText(tr(k))
-        self.dock_left.setWindowTitle(tr("pieces"))
+        self.pieces_popup.title.setText(tr("tab_pieces"))
+        self.sizes_popup.title.setText(tr("tab_sizes"))
         self.dock_fabric.setWindowTitle(tr("fabric"))
         self.dock_results.setWindowTitle(tr("results"))
-        self.left_tabs.setTabText(0, tr("pieces"))
-        self.left_tabs.setTabText(1, tr("sizes"))
         self.pieces_table.setHorizontalHeaderLabels([tr(k) for k in ("col_use", "col_name", "col_mat", "col_sizes",
                                                                      "col_count", "col_mirror", "col_grain")])
         for c, k in enumerate(("col_use", "col_name", "col_mat", "col_sizes", "col_count", "col_mirror", "col_grain")):
@@ -1031,9 +1026,7 @@ class MainWindow(QMainWindow):
             return True
         QMessageBox.information(self, tr("run"), reason)
         if not sizes or not used:
-            self.dock_left.show()
-            self.dock_left.raise_()
-            self.left_tabs.setCurrentIndex(1 if not sizes else 0)
+            self.show_table_tab(1 if not sizes else 0)
         return False
 
     def _ensure_geometry(self) -> bool:
