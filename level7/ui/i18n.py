@@ -271,6 +271,7 @@ T = {
     "running_live": ("Nesting… {t:.0f} / {T:.0f} s, best length {len}",
                      "جاري التعشيق… {t:.0f} / {T:.0f} ث، أفضل طول {len}"),
     "zoom_in": ("Zoom in", "تكبير"), "zoom_out": ("Zoom out", "تصغير"),
+    "marker_full": ("Marker full screen", "الماركر ملء الشاشة"),
     "nest_stopped_empty": ("Nesting stopped before a first complete marker - nothing changed",
                            "توقف التعشيق قبل اكتمال أول ماركر — لم يتغير شيء"),
     "tb_customize": ("Customize toolbar…", "تخصيص الأيقونات…"),

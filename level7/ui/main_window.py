@@ -419,6 +419,21 @@ class MainWindow(QMainWindow):
         self.act_measure_curve = self._act("measure_curve", self.toggle_measure_curve, "Shift+M", checkable=True)
         self.m_edit.addAction(self.act_measure_curve)
         self.m_view.addAction(self._act("zoom_fit", self.view.zoom_fit, "F"))
+        # zoom shortcuts (+ / - also on the number pad) and the marker over the whole screen (F11, Esc = back)
+        for key, fn, keys in (("zoom_in", lambda: self.view.zoom_step(1.25), ("Ctrl++", "Ctrl+=", "+")),
+                              ("zoom_out", lambda: self.view.zoom_step(0.8), ("Ctrl+-", "-")),
+                              ("marker_full", self.toggle_marker_full, ("F11",))):
+            a = self._act(key, fn)
+            a.setShortcuts([QKeySequence(k) for k in keys])
+            self.m_view.addAction(a)
+            self.addAction(a)                     # keeps working while the menu bar is hidden (full screen)
+        self.act_marker_full = a
+        self.act_marker_full.setCheckable(True)
+        self._act_full_exit = QAction(self)
+        self._act_full_exit.setShortcut(QKeySequence("Esc"))
+        self._act_full_exit.triggered.connect(lambda: self._marker_full and self.toggle_marker_full())
+        self._act_full_exit.setEnabled(False)
+        self.addAction(self._act_full_exit)
         self.m_view.addAction(self._act("display_options", self.display_options, "Ctrl+D"))
         self.m_view.addAction(self._act("tb_customize", lambda: self.customize_toolbar()))
         self.m_theme = self.m_view.addMenu("")
@@ -601,7 +616,7 @@ class MainWindow(QMainWindow):
     def _layout_toolbar(self, force=False):
         """Fill each toolbar row with as many icons as fit the window width (cut at a group separator when
         possible); further rows (up to 3) are shown only when needed."""
-        if not hasattr(self, "toolbars"):
+        if not hasattr(self, "toolbars") or getattr(self, "_marker_full", False):
             return
         avail = max(200, self.width() - 12 - getattr(self, "_tb_slack", 0))
         rows, cur, acc, last_sep = [], [], 0, None
@@ -707,6 +722,34 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, ev):
         super().resizeEvent(ev)
         self._layout_toolbar()
+
+    _marker_full = False
+
+    def toggle_marker_full(self):
+        """F11: only the marker, over the whole screen (menus, icons, piece strip, status bar and open panels
+        hidden); F11 or Esc brings everything back. Zoom keys keep working."""
+        on = not self._marker_full
+        self._marker_full = on
+        self.act_marker_full.setChecked(on)
+        self._act_full_exit.setEnabled(on)
+        if on:
+            self._full_restore = (self.isMaximized(), self.dock_strip.isVisible())
+            for p in self.table_popups:
+                if p.isVisible():
+                    p.hide()
+            self._sync_tab_actions()
+            for wdg in [self.menuBar(), self.statusBar(), self.dock_strip] + list(self.toolbars):
+                wdg.hide()
+            self.showFullScreen()
+        else:
+            was_max, strip = getattr(self, "_full_restore", (True, True))
+            self.menuBar().show()
+            self.statusBar().show()
+            self.dock_strip.setVisible(strip)
+            self.showMaximized() if was_max else self.showNormal()
+            self._tb_split = None
+            self._layout_toolbar(force=True)
+        QTimer.singleShot(0, self.view.zoom_fit)
 
     def eventFilter(self, obj, ev):
         """A click outside an open panel closes it (the pieces table stays open for clicks on the marker / strip,
