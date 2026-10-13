@@ -5,12 +5,14 @@ List layout - one row per (marker, file, size); marker-level settings are taken 
 marker that has them:
 
     marker | file       | size | qty | width | material | formats  | time | spacing | engine
+    (optional: buffer_x | buffer_y | shrink_x | shrink_y — extra buffer between pieces in mm, shrinkage in %)
     M001   | pants.mdl  | 44   | 2   | 1500  | O        | plt;iso  | 120  | 0       | auto
     M001   | pants.mdl  | 46   | 1
     M001   | shirt.mdl  | M    | 1
     M002   | shirt.mdl  | L    | 3   | 1440  | O        | dxf      | 60
 
-Header names may also be Arabic (ماركر, ملف, مقاس, كمية, عرض, خامة, صيغ, وقت, مسافة). File paths may be
+Header names may also be Arabic (ماركر, ملف, مقاس, كمية, عرض, خامة, صيغ, وقت, مسافة,
+بفر طول, بفر عرض, انكماش طول, انكماش عرض). File paths may be
 relative to the list's folder. Formats: plt, dxf, iso (separated by ; , or space).
 """
 from __future__ import annotations
@@ -20,6 +22,7 @@ import os
 import re
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 
 HEADERS = {
     "marker": ("marker", "ماركر", "الماركر", "name"),
@@ -32,7 +35,12 @@ HEADERS = {
     "time": ("time", "وقت", "الوقت", "seconds"),
     "spacing": ("spacing", "مسافة", "المسافة"),
     "engine": ("engine", "محرك"),
+    "buffer_x": ("buffer_x", "بفر طول", "بفر X", "بفر_طول"),
+    "buffer_y": ("buffer_y", "بفر عرض", "بفر Y", "بفر_عرض"),
+    "shrink_x": ("shrink_x", "انكماش طول", "انكماش_طول"),
+    "shrink_y": ("shrink_y", "انكماش عرض", "انكماش_عرض"),
 }
+NUMERIC = ("width", "time", "spacing", "buffer_x", "buffer_y", "shrink_x", "shrink_y")
 FORMATS = ("plt", "dxf", "iso", "scb")
 
 
@@ -52,7 +60,12 @@ class MarkerOrder:
     formats: list[str] = field(default_factory=list)
     time: float | None = None
     spacing: float | None = None
+    buffer_x: float | None = None
+    buffer_y: float | None = None
+    shrink_x: float | None = None          # %
+    shrink_y: float | None = None
     engine: str | None = None
+    file_stem: str = ""                    # output file name (unique within the batch)
     # results
     status: str = "pending"            # pending / running / done / failed
     message: str = ""
@@ -74,7 +87,7 @@ def _rows(path: str) -> list[list[str]]:
         rows = [["" if v is None else str(v).strip() for v in r] for r in ws.iter_rows(values_only=True)]
         wb.close()
         return rows
-    raw = open(path, "rb").read()
+    raw = Path(path).read_bytes()
     for enc in ("utf-8-sig", "cp1256", "latin-1"):
         try:
             text = raw.decode(enc)
@@ -128,15 +141,12 @@ def parse_orders(path: str) -> list[MarkerOrder]:
         o = orders.setdefault(name, MarkerOrder(name))
         path_f = f if os.path.isabs(f) else os.path.join(base, f)
         o.lines.append(OrderLine(os.path.normpath(path_f), size, qty))
-        try:
-            if o.width is None:
-                o.width = _num(get("width"))
-            if o.time is None:
-                o.time = _num(get("time"))
-            if o.spacing is None:
-                o.spacing = _num(get("spacing"))
-        except ValueError:
-            raise OrderError(f"row {n}: width / time / spacing must be numbers")
+        for k in NUMERIC:
+            if getattr(o, k) is None:
+                try:
+                    setattr(o, k, _num(get(k)))
+                except ValueError:
+                    raise OrderError(f"row {n}: {k} {get(k)!r} is not a number")
         if o.material is None and get("material"):
             o.material = get("material")
         if not o.formats and get("formats"):
@@ -217,7 +227,9 @@ def run_order(order: MarkerOrder, outdir: str, plt_config=None, iso_config=None,
     from .project_storage.store import save_project
     order.status, order.message, order.outputs = "running", "", []
     proj = build_project(order, cache)
-    fabric = FabricSettings(width=float(order.width), spacing=float(order.spacing or 0.0))
+    fabric = FabricSettings(width=float(order.width), spacing=float(order.spacing or 0.0),
+                            buffer_x=float(order.buffer_x or 0.0), buffer_y=float(order.buffer_y or 0.0),
+                            shrink_x=float(order.shrink_x or 0.0), shrink_y=float(order.shrink_y or 0.0))
     st = NestSettings(time_limit=float(order.time or default_time), seed=1, engine=order.engine or "auto")
     marker, info = service.run_nesting(proj, fabric, st, progress=progress, stop_event=stop_event, name=order.name)
     unplaced = [p for p in marker.placements if not p.placed]
@@ -225,7 +237,7 @@ def run_order(order: MarkerOrder, outdir: str, plt_config=None, iso_config=None,
         raise OrderError("nested marker failed validation: " + info["validation"].summary())
     proj.markers.append(marker)
     os.makedirs(outdir, exist_ok=True)
-    safe = re.sub(r'[\\\\/:*?"<>|]+', "_", order.name).strip() or "marker"
+    safe = order.file_stem or _stem(order.name)
     l7n = os.path.join(outdir, safe + ".l7n")
     save_project(proj, l7n)
     order.outputs.append(l7n)
@@ -257,10 +269,21 @@ def write_summary(orders: list[MarkerOrder], path: str):
                         " | ".join(os.path.basename(x) for x in o.outputs)])
 
 
+def _stem(name: str) -> str:
+    return re.sub(r'[\\/:*?"<>|]+', "_", name).strip() or "marker"
+
+
 def run_batch(orders: list[MarkerOrder], outdir: str, plt_config=None, iso_config=None, default_time=120.0,
               on_order=None, progress=None, stop_event=None) -> str:
     """Process the orders in sequence; a failing order is reported and the next one continues."""
     cache: dict = {}
+    used: set = set()
+    for o in orders:                   # 'A/B' and 'A:B' must not overwrite each other's files
+        stem, n = _stem(o.name), 2
+        while stem.lower() in used:
+            stem, n = f"{_stem(o.name)}_{n}", n + 1
+        used.add(stem.lower())
+        o.file_stem = stem
     for k, o in enumerate(orders):
         if stop_event is not None and stop_event.is_set():
             o.status, o.message = "failed", "stopped"
@@ -281,11 +304,12 @@ def run_batch(orders: list[MarkerOrder], outdir: str, plt_config=None, iso_confi
 
 
 def write_template(path: str):
-    rows = [["marker", "file", "size", "qty", "width", "material", "formats", "time", "spacing"],
-            ["M001", "pants.mdl", "44", "2", "1500", "O", "plt;iso", "120", "0"],
-            ["M001", "pants.mdl", "46", "1", "", "", "", "", ""],
-            ["M001", "shirt.mdl", "M", "1", "", "", "", "", ""],
-            ["M002", "shirt.mdl", "L", "3", "1440", "O", "dxf", "60", ""]]
+    rows = [["marker", "file", "size", "qty", "width", "material", "formats", "time", "spacing",
+             "buffer_x", "buffer_y", "shrink_x", "shrink_y"],
+            ["M001", "pants.mdl", "44", "2", "1500", "O", "plt;iso", "120", "0", "0", "0", "0", "0"],
+            ["M001", "pants.mdl", "46", "1", "", "", "", "", "", "", "", "", ""],
+            ["M001", "shirt.mdl", "M", "1", "", "", "", "", "", "", "", "", ""],
+            ["M002", "shirt.mdl", "L", "3", "1440", "O", "dxf", "60", "", "4", "0", "2", "0"]]
     if path.lower().endswith(".xlsx"):
         from openpyxl import Workbook
         wb = Workbook()

@@ -34,7 +34,15 @@ its source code is available at https://github.com/JeroenGar/jagua-rs and https:
 
 ## Other Rust crates compiled into sparrow
 Licensed under MIT and/or Apache-2.0 (or Zlib / Unlicense alternatives); the exact list and versions are in
-packaging/sparrow/Cargo.lock. Their licence texts are available from https://crates.io for each crate.
+packaging/sparrow/Cargo.lock. The installer ships every crate's licence file in `_internal/licenses/rust/`
+(collected by tools/collect_licenses.py from the build's cargo registry; crates without a licence file are listed
+with their SPDX licence in `NO_LICENSE_FILE.txt`).
 
 ## Python packages bundled in the installer
-See DEPENDENCIES.md (PySide6/Qt under LGPL-3.0, shapely, pyclipper, ezdxf, numpy …).
+See DEPENDENCIES.md (PySide6/Qt under LGPL-3.0, shapely, pyclipper, ezdxf, numpy …). Their licence files are in
+`_internal/licenses/python/`; the GNU LGPL-3.0 / GPL-3.0 texts for Qt in `_internal/licenses/qt/`.
+
+## GEOS (inside shapely; LGPL-2.1)
+shapely bundles the GEOS geometry library (https://libgeos.org, GNU LGPL-2.1), dynamically linked; its licence is
+`_internal/licenses/python/shapely/LICENSE_GEOS`. The corresponding source is available from https://libgeos.org
+and on request.

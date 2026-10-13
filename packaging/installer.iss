@@ -34,6 +34,10 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "assoc"; Description: "Open .l7n projects with LEVEL7 Nesting"; GroupDescription: "{cm:AdditionalIcons}"
 Name: "assocgrafis"; Description: "Open GRAFIS MDL / SCB files with LEVEL7 Nesting (double-click / Enter; several files = several sessions)"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
+[InstallDelete]
+; an update replaces the whole runtime: no stale Qt / Python DLLs or plugins from the previous build
+Type: filesandordirs; Name: "{app}\_internal"
+
 [Files]
 Source: "..\dist\LEVEL7Nesting\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
@@ -59,8 +63,8 @@ Root: HKA; Subkey: "Software\Classes\Applications\LEVEL7Nesting.exe\SupportedTyp
 Root: HKA; Subkey: "Software\Classes\Applications\LEVEL7Nesting.exe\SupportedTypes"; ValueType: string; ValueName: ".scb"; ValueData: ""
 Root: HKA; Subkey: "Software\Classes\Applications\LEVEL7Nesting.exe\SupportedTypes"; ValueType: string; ValueName: ".dxf"; ValueData: ""
 Root: HKA; Subkey: "Software\Classes\Applications\LEVEL7Nesting.exe\SupportedTypes"; ValueType: string; ValueName: ".l7n"; ValueData: ""
-Root: HKA; Subkey: "Software\Classes\.mdl"; ValueType: string; ValueName: ""; ValueData: "LEVEL7.Grafis"; Tasks: assocgrafis
-Root: HKA; Subkey: "Software\Classes\.scb"; ValueType: string; ValueName: ""; ValueData: "LEVEL7.Grafis"; Tasks: assocgrafis
+Root: HKA; Subkey: "Software\Classes\.mdl"; ValueType: string; ValueName: ""; ValueData: "LEVEL7.Grafis"; Tasks: assocgrafis; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.scb"; ValueType: string; ValueName: ""; ValueData: "LEVEL7.Grafis"; Tasks: assocgrafis; Flags: uninsdeletevalue
 
 [Run]
 Filename: "{app}\LEVEL7Nesting.exe"; Description: "{cm:LaunchProgram,LEVEL7 Nesting}"; Flags: nowait postinstall skipifsilent

@@ -270,6 +270,8 @@ class MarkerView(QGraphicsView):
         self._measure_item = None
         self._m_start = self._m_end = None
         self._m_fixed = False
+        self._c_start = self._c_end = None
+        self._c_arc, self._c_len = [], None
         self.items_by_uid = {}
         if marker is None:
             return
@@ -445,7 +447,8 @@ class MarkerView(QGraphicsView):
 
     def _snap(self, p: QPointF):
         """Nearest piece vertex / fabric corner within SNAP_PX pixels, else the point itself."""
-        scale = abs(self.transform().m11()) or 1.0
+        t = self.transform()
+        scale = math.hypot(t.m11(), t.m12()) or 1.0          # also right when the view is turned 90°
         r = self.SNAP_PX / scale
         best, bd = None, r
         for x, y in self._snap_pts:

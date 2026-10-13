@@ -179,8 +179,15 @@ class BatchDialog(QDialog):
         paths = [next((x for x in o.outputs if x.endswith(".l7n")), None) for o in self.orders if o.status == "done"]
         self.w.open_many([p for p in paths if p])
 
-    def closeEvent(self, ev):
+    def stop_and_wait(self):
         if self.worker and self.worker.isRunning():
             self.worker.stop_event.set()
-            self.worker.wait(20000)
+            self.worker.wait()                  # never delete a running thread (that aborts the app)
+
+    def closeEvent(self, ev):
+        self.stop_and_wait()
         super().closeEvent(ev)
+
+    def done(self, r):                          # Esc goes through reject() -> done(), not closeEvent
+        self.stop_and_wait()
+        super().done(r)

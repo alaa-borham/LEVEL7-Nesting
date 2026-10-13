@@ -195,7 +195,7 @@ def download(info: UpdateInfo, dest_dir: str | None = None, progress=None, cance
 
 def installer_arguments() -> list[str]:
     """Inno Setup: show progress only, close the running app, and start LEVEL7 again afterwards."""
-    return ["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS", "/LAUNCH=1"]
+    return ["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS", "/FORCECLOSEAPPLICATIONS", "/LAUNCH=1"]
 
 
 def start_installer(path: str):

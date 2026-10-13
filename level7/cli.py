@@ -41,7 +41,8 @@ def _nest(a, proj):
     sizes = _parse_sizes(a.sizes)
     if sizes:
         proj.cut_order.size_quantities = sizes
-    fab = FabricSettings(width=a.width, spacing=a.spacing, margin_left=a.margin, margin_right=a.margin)
+    fab = FabricSettings(width=a.width, spacing=a.spacing, margin_left=a.margin, margin_right=a.margin,
+                         buffer_x=a.buffer_x, buffer_y=a.buffer_y, shrink_x=a.shrink_x, shrink_y=a.shrink_y)
     st = NestSettings(time_limit=a.time, seed=a.seed, mode=a.mode, engine=getattr(a, "engine", "auto"))
 
     def prog(d):
@@ -95,9 +96,16 @@ def cmd_compare(a):
 def cmd_export(a):
     from .exporters.iso import MachineProfile
     from .exporters.plt import PlotterConfig
-    from .project_storage.store import load_project
-    from .service import export_marker
-    proj = load_project(a.project)
+    from .project_storage.store import ProjectFormatError
+    from .service import export_marker, open_any
+    try:
+        proj, _ = open_any(a.project)
+    except (OSError, ProjectFormatError, ValueError) as e:
+        print(f"cannot open {a.project}: {e}")
+        return 1
+    if not -len(proj.markers) <= a.marker < len(proj.markers):
+        print(f"{a.project} has {len(proj.markers)} marker(s); --marker {a.marker} does not exist")
+        return 1
     m = proj.markers[a.marker]
     cfg = None
     if a.format == "iso" and a.iso_preset:
@@ -158,6 +166,10 @@ def main(argv=None):
                        help="auto: LEVEL7 start + sparrow compression when the engine is bundled")
         s.add_argument("--spacing", type=float, default=0.0)
         s.add_argument("--margin", type=float, default=0.0)
+        s.add_argument("--buffer-x", type=float, default=0.0, help="extra buffer between pieces along the length (mm)")
+        s.add_argument("--buffer-y", type=float, default=0.0, help="extra buffer between pieces across the width (mm)")
+        s.add_argument("--shrink-x", type=float, default=0.0, help="shrinkage along the length (%%)")
+        s.add_argument("--shrink-y", type=float, default=0.0, help="shrinkage across the width (%%)")
         s.add_argument("--workers", type=int, default=None)
         s.add_argument("-o", "--output")
         s.set_defaults(fn=fn)

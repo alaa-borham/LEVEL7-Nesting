@@ -7,6 +7,13 @@ ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 ICON = os.path.join(ROOT, "level7", "resources", "level7.ico")
 datas = [(os.path.join(ROOT, "level7", "resources"), "level7/resources"),
          (os.path.join(ROOT, "docs"), "docs")]
+LICENSES = os.path.join(ROOT, "build-licenses")      # tools/collect_licenses.py (CI)
+if os.path.isdir(LICENSES):
+    datas.append((LICENSES, "licenses"))
+elif os.environ.get("CI"):
+    raise SystemExit("build-licenses missing: run tools/collect_licenses.py before PyInstaller")
+if os.environ.get("CI") and not os.path.isfile(os.path.join(ROOT, "engines", "sparrow.exe" if os.name == "nt" else "sparrow")):
+    raise SystemExit("engines/sparrow.exe missing: the release build must bundle the sparrow engine")
 hidden = ["shapely", "pyclipper", "ezdxf", "level7.nesting.parallel", "PySide6.QtNetwork", "openpyxl"]
 excl = ["PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.Qt3DCore", "PySide6.QtQuick",
         "PySide6.QtQml", "PySide6.QtMultimedia", "PySide6.QtPdf", "tkinter", "matplotlib"]

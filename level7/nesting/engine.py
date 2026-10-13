@@ -97,6 +97,24 @@ def grain_rotations(piece: Piece, mirrored: bool, settings: NestSettings) -> tup
     return out, None
 
 
+def _rescaled(pl: Placement, fabric: FabricSettings, project: Project) -> Placement:
+    """A pinned copy with the fabric's current shrinkage, kept at the same spot (its lower-left corner)."""
+    from dataclasses import replace
+    sx, sy = fabric.scale
+    if abs(pl.sx - sx) < 1e-12 and abs(pl.sy - sy) < 1e-12:
+        return pl
+    out = replace(pl, sx=sx, sy=sy)
+    try:
+        cut = project.piece(pl.piece_uid).sizes[pl.size].cut
+    except KeyError:
+        return out
+    a = bbox(transform_points(cut, pl.rotation, pl.mirrored, pl.x, pl.y, pl.sx, pl.sy))
+    b = bbox(transform_points(cut, out.rotation, out.mirrored, out.x, out.y, sx, sy))
+    out.x += a[0] - b[0]
+    out.y += a[1] - b[1]
+    return out
+
+
 def build_items(project: Project, sizes: dict[str, int], counts: dict[str, tuple[int, int]],
                 fabric: FabricSettings, settings: NestSettings, pinned: list[Placement] | None = None,
                 material: str | None = None) -> tuple[list[NestItem], list[Unplaced], list[str]]:
@@ -104,7 +122,11 @@ def build_items(project: Project, sizes: dict[str, int], counts: dict[str, tuple
     items: list[NestItem] = []
     unplaced: list[Unplaced] = []
     warnings: list[str] = []
-    pinned = list(pinned or [])
+    if any(abs(pl.sx - fabric.scale[0]) > 1e-12 or abs(pl.sy - fabric.scale[1]) > 1e-12 for pl in (pinned or [])):
+        warnings.append("pinned pieces were placed with a different shrinkage: they keep their spot but change size "
+                        "- unpin them if they now overlap")
+    pinned = [_rescaled(pl, fabric, project) for pl in (pinned or [])]
+    taken = {pl.uid for pl in pinned}           # new copies must never reuse a pinned placement's id
     uid_counter = 0
     for piece in project.pieces:
         n, m = counts.get(piece.uid, (0, 0))
@@ -131,6 +153,8 @@ def build_items(project: Project, sizes: dict[str, int], counts: dict[str, tuple
                 for mirrored, copies in ((False, n), (True, m)):
                     for _ in range(copies):
                         uid_counter += 1
+                        while f"i{uid_counter}" in taken:
+                            uid_counter += 1
                         rots, err = grain_rotations(piece, mirrored, settings)
                         uid = f"i{uid_counter}"
                         if err:
@@ -169,8 +193,8 @@ class NestEngine:
         self.y0 = fabric.margin_left - self.ey
         self.y1 = fabric.margin_left + fabric.usable_width + self.ey
         self.x0 = fabric.margin_start - self.ex
-        total = sum(max(bbox(it.cut)[2] - bbox(it.cut)[0], bbox(it.cut)[3] - bbox(it.cut)[1]) for it in items)
-        total *= max(self.sx, self.sy)
+        # length bound without a max length: every copy in a row, measured on its grown search shape
+        total = sum(max(self.oriented(it, it.rotations[0] if it.rotations else 0.0)[3:5]) for it in items)
         self.xmax = ((fabric.max_length - fabric.margin_end) if fabric.max_length else
                      fabric.margin_start + total * 1.2 + 1000.0) + self.ex
 

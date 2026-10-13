@@ -11,6 +11,7 @@ This module never talks to a machine.
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import asdict, dataclass, field
 
@@ -143,6 +144,14 @@ def _band_order(paths, band):
     return sorted(paths, key=key)
 
 
+def _write_atomic(path: str, text: str):
+    """Write the whole file or nothing (no half-written job on the cutter after an error)."""
+    tmp = path + ".part"
+    with open(tmp, "w", encoding="ascii", newline="") as fh:
+        fh.write(text)
+    os.replace(tmp, path)
+
+
 def _write_bullmer(scene: Scene, path: str, profile: MachineProfile, job_name: str) -> dict:
     u = profile.units_per_mm
 
@@ -154,7 +163,8 @@ def _write_bullmer(scene: Scene, path: str, profile: MachineProfile, job_name: s
             notches.setdefault(p.owner, []).append((p.points[0], p.points[1]))
     cuts = [p for p in scene.paths if p.layer in profile.layers_cut and p.closed and len(p.points) >= 3]
     cuts = _band_order(cuts, profile.band_width)
-    name = "".join(ch for ch in job_name.upper() if not ch.isspace())
+    # the controller header is ASCII only (Arabic marker names would break the file): keep printable ASCII
+    name = "".join(ch for ch in job_name.upper() if 32 < ord(ch) < 127 and ch not in "*/") or "LEVEL7"
     lines = ["H1*G71*M70*D2*M15*", f"M20*{name}/L={scene.length / 1000:.2f}m/B={scene.width / 1000:.2f}m*"]
     stats = {"pieces": 0, "notches": 0}
     for k, c in enumerate(cuts, 1):
@@ -175,8 +185,9 @@ def _write_bullmer(scene: Scene, path: str, profile: MachineProfile, job_name: s
         stats["notches"] += len(notches.get(c.owner, []))
     if lines[-1] == "M15*":
         lines[-1] = "M15*D4*M00*"
-    with open(path, "w", encoding="ascii", newline="") as fh:
-        fh.write("\r\n".join(lines) + "\r\n")
+    else:                                # no pieces: still end the job
+        lines.append("M15*D4*M00*")
+    _write_atomic(path, "\r\n".join(lines) + "\r\n")
     stats["diagnostic"] = False
     stats["device_tested"] = profile.device_tested
     return stats
@@ -225,8 +236,7 @@ def write_iso(scene: Scene, path: str, profile: MachineProfile | None = None, di
         lines.append(profile.tool_up)
         stats["cut_paths"] += 1
     lines += profile.footer
-    with open(path, "w", encoding="ascii", newline="\n") as fh:
-        fh.write("\n".join(lines) + "\n")
+    _write_atomic(path, "\n".join(lines) + "\n")
     stats["diagnostic"] = diagnostic or not profile.verified
     return stats
 
@@ -247,7 +257,9 @@ def simulate_iso(path: str, profile: MachineProfile | None = None) -> list[list[
     """Re-read a file produced by write_iso: returns tool-down polylines (for verification)."""
     profile = profile or MachineProfile()
     cuts, cur, pos, down = [], None, (0.0, 0.0), False
-    for ln in open(path, encoding="ascii"):
+    with open(path, encoding="ascii") as fh:
+        text = fh.read()
+    for ln in text.splitlines():
         ln = ln.strip()
         m = re.match(rf"^({profile.rapid}|{profile.feed})\s+X(-?[\d.]+)\s+Y(-?[\d.]+)", ln)
         if m:

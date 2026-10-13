@@ -7,8 +7,8 @@ T = {
     "app_title": ("LEVEL7 Nesting", "LEVEL7 Nesting"),
     "file": ("&File", "&ملف"),
     "open": ("Open MDL / SCB / DXF / Project…", "فتح MDL / SCB / DXF / مشروع…"),
-    "save": ("Save project", "حفظ المشروع"),
-    "save_as": ("Save project as…", "حفظ المشروع باسم…"),
+    "save": ("Save", "حفظ"),
+    "save_as": ("Save as…", "حفظ باسم…"),
     "export": ("&Export", "&تصدير"),
     "export_plt": ("Export PLT (HP-GL)…", "تصدير PLT (HP-GL)…"),
     "export_dxf": ("Export DXF…", "تصدير DXF…"),
@@ -172,6 +172,8 @@ T = {
     "upd_save_first": ("The program will close to install the update.\nSave the current project first?",
                        "سيُغلق البرنامج لتثبيت التحديث.\nهل تريد حفظ المشروع الحالي أولًا؟"),
     "pieces_table": ("Pieces && quantities table", "جدول القطع والكميات"),
+    "tab_props": ("Properties (fabric width, lay, material, nesting)", "الخصائص (العرض، نوع الفرد، الخامة، التعشيق)"),
+    "tb_tab_props": ("Properties", "الخصائص"),
     "tab_spacing": ("Margins, buffers and shrinkage", "الهوامش والبفر والانكماش"),
     "tb_tab_spacing": ("Margins", "الهوامش"),
     "measure_tool": ("Measure", "قياس"), "tb_measure_tool": ("Measure", "قياس"),
@@ -272,9 +274,9 @@ T = {
     "batch_time": ("Default time per marker:", "الوقت الافتراضي لكل ماركر:"),
     "batch_time_tip": ("Used when the list has no 'time' column value for a marker",
                        "يُستخدم إذا لم يكن في القائمة وقت للماركر"),
-    "batch_hint": ("Columns: marker, file, size, qty, width, material, formats (plt;dxf;iso), time, spacing — one "
+    "batch_hint": ("Columns: marker, file, size, qty, width, material, formats (plt;dxf;iso;scb), time, spacing; optional buffer_x, buffer_y, shrink_x, shrink_y — one "
                    "row per marker/file/size. Use 'Save example list' for a ready template.",
-                   "الأعمدة: ماركر، ملف، مقاس، كمية، عرض، خامة، صيغ (plt;dxf;iso)، وقت، مسافة — سطر لكل ماركر/ملف/مقاس. "
+                   "الأعمدة: ماركر، ملف، مقاس، كمية، عرض، خامة، صيغ (plt;dxf;iso;scb)، وقت، مسافة؛ واختياريًا: بفر طول، بفر عرض، انكماش طول، انكماش عرض — سطر لكل ماركر/ملف/مقاس. "
                    "استخدم «حفظ نموذج قائمة» للحصول على نموذج جاهز."),
     "batch_loaded": ("{n} markers in {p}. Output folder: {o}", "{n} ماركر في {p}. مجلد الحفظ: {o}"),
     "batch_close": ("Close", "إغلاق"),
@@ -300,6 +302,10 @@ T = {
                   "confirm (the first files are experimental until GRAFIS has opened them).",
                   "تم الحفظ بصيغة GRAFIS SCB:\n{p}\n\nأعاد LEVEL7 قراءته وهو مطابق. افتحه مرة في GRAFIS للتأكيد "
                   "(أول الملفات تجريبية حتى يفتحها GRAFIS)."),
+    "scb_one_marker": ("A GRAFIS SCB holds one marker: only the marker shown is saved; {n} other nested marker(s) "
+                       "of this session are not. Save the shown marker? (Use 'Save as…' → LEVEL7 project to keep all.)",
+                       "ملف GRAFIS SCB يحفظ ماركر واحد فقط: سيُحفظ الماركر المعروض فقط، و{n} ماركر آخر في هذه الجلسة لن يُحفظ. "
+                       "حفظ الماركر المعروض؟ (لحفظ الكل استخدم «حفظ باسم…» ← مشروع LEVEL7)."),
     "scb_not_possible": ("This session cannot be saved as GRAFIS SCB (several models, shrinkage, or no GRAFIS SCB template). "
                          "Choose the LEVEL7 project format.",
                          "لا يمكن حفظ هذه الجلسة بصيغة GRAFIS SCB (عدة موديلات، أو يوجد انكماش، أو لا يوجد ملف SCB من GRAFIS كقالب). "

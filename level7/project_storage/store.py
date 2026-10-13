@@ -9,8 +9,9 @@ never modified.
 from __future__ import annotations
 
 import json
+import os
 import zipfile
-from dataclasses import asdict
+from dataclasses import asdict, fields
 
 from ..model import (CutOrder, Drill, FabricSettings, Label, LayType, Marker, NestSettings, Notch, Piece,
                      PieceGeometry, Placement, Polyline, Project, SourceInfo)
@@ -29,8 +30,10 @@ def save_project(project: Project, path: str) -> None:
         m["fabric"]["lay_type"] = LayType(m["fabric"]["lay_type"]).value
     doc = {"format": FORMAT, "format_version": FORMAT_VERSION, "project": d}
     data = json.dumps(doc, ensure_ascii=False, indent=1)
-    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as z:
+    tmp = path + ".part"                     # never leave a half-written project behind
+    with zipfile.ZipFile(tmp, "w", compression=zipfile.ZIP_DEFLATED) as z:
         z.writestr("project.json", data)
+    os.replace(tmp, path)
 
 
 def load_project(path: str) -> Project:
@@ -43,7 +46,10 @@ def load_project(path: str) -> Project:
         raise ProjectFormatError("unknown project format")
     if doc.get("format_version", 0) > FORMAT_VERSION:
         raise ProjectFormatError(f"project format {doc['format_version']} is newer than supported {FORMAT_VERSION}")
-    return project_from_dict(doc["project"])
+    try:
+        return project_from_dict(doc["project"])
+    except (KeyError, TypeError, ValueError) as e:
+        raise ProjectFormatError(f"damaged or unsupported LEVEL7 project: {e}") from e
 
 
 def _pts(v):
@@ -70,6 +76,12 @@ def _geom(d) -> PieceGeometry:
         completeness=d.get("completeness", {}), source=d.get("source", ""))
 
 
+def _known(cls, d: dict) -> dict:
+    """Only the fields this version knows: files saved by a newer LEVEL7 still open."""
+    names = {f.name for f in fields(cls)}
+    return {k: v for k, v in d.items() if k in names}
+
+
 def project_from_dict(d: dict) -> Project:
     pieces = []
     for p in d.get("pieces", []):
@@ -85,8 +97,8 @@ def project_from_dict(d: dict) -> Project:
     for m in d.get("markers", []):
         f = dict(m["fabric"])
         f["lay_type"] = LayType(f.get("lay_type", "open"))
-        mk = Marker(name=m["name"], fabric=FabricSettings(**f),
-                    placements=[Placement(**pl) for pl in m.get("placements", [])],
+        mk = Marker(name=m["name"], fabric=FabricSettings(**_known(FabricSettings, f)),
+                    placements=[Placement(**_known(Placement, pl)) for pl in m.get("placements", [])],
                     length=m.get("length", 0.0), origin=m.get("origin", "nested"), seed=m.get("seed"),
                     compute_time=m.get("compute_time"), stats=m.get("stats", {}))
         markers.append(mk)
@@ -95,7 +107,7 @@ def project_from_dict(d: dict) -> Project:
                          piece_counts={k: tuple(v) for k, v in co.get("piece_counts", {}).items()},
                          material=co.get("material"))
     return Project(name=d.get("name", "untitled"), pieces=pieces, size_names=d.get("size_names", []),
-                   sources=[SourceInfo(**s) for s in d.get("sources", [])], cut_order=cut_order,
-                   nest_settings=NestSettings(**d.get("nest_settings", {})), markers=markers,
+                   sources=[SourceInfo(**_known(SourceInfo, s)) for s in d.get("sources", [])], cut_order=cut_order,
+                   nest_settings=NestSettings(**_known(NestSettings, d.get("nest_settings", {}))), markers=markers,
                    export_configs=d.get("export_configs", {}), reports=d.get("reports", {}),
                    sbinfo=d.get("sbinfo", {}))

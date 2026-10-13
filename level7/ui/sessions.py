@@ -69,17 +69,20 @@ class SessionManager(QObject):
     def _on_connection(self):
         while self.server.hasPendingConnections():
             sock = self.server.nextPendingConnection()
+            sock.setProperty("buf", b"")
             sock.readyRead.connect(lambda s=sock: self._read(s))
-            sock.disconnected.connect(lambda s=sock: (self._read(s), s.deleteLater()))
+            sock.disconnected.connect(lambda s=sock: (self._read(s, done=True), s.deleteLater()))
 
-    def _read(self, sock):
-        data = bytes(sock.readAll())
-        if not data:
-            return
+    def _read(self, sock, done=False):
+        # a long file list can arrive in several chunks: parse once it is complete
+        data = bytes(sock.property("buf") or b"") + bytes(sock.readAll())
         try:
             paths = json.loads(data.decode("utf-8")).get("open", [])
         except ValueError:
+            if not done:
+                sock.setProperty("buf", data)
             return
+        sock.setProperty("buf", b"")
         if paths:
             self.open_files(paths)
         elif self.windows:

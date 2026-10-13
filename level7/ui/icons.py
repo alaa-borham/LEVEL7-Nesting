@@ -187,6 +187,15 @@ def _draw(name: str, p: QPainter, fg: QColor):
             p.drawText(r, Qt.AlignCenter, lab)
         p.setPen(QPen(fg, 1.5))
         p.drawLine(QPointF(3, 27), QPointF(29, 27))
+    elif name == "properties":
+        # settings sliders
+        for k, (y, x) in enumerate(((8, 20), (16, 10), (24, 16))):
+            p.setPen(QPen(fg, 1.8, Qt.SolidLine, Qt.RoundCap))
+            p.drawLine(QPointF(4, y), QPointF(28, y))
+            p.setPen(QPen(fg, 1.4))
+            p.setBrush((ACCENT, BLUE, GREEN)[k])
+            p.drawEllipse(QPointF(x, y), 3.4, 3.4)
+            p.setBrush(Qt.NoBrush)
     elif name == "margins":
         # fabric with dashed margin line and two pieces kept apart by a buffer
         p.setBrush(QColor(ACCENT.red(), ACCENT.green(), ACCENT.blue(), 60))

@@ -161,9 +161,9 @@ def add_model(proj: Project, path: str) -> tuple[Project, list[str]]:
     """Add another model file (MDL / SCB / DXF / AAMA / project) to a session: its pieces, sizes (prefixed with
     the model tag), cut order and markers. Pieces of all models can then be nested into one marker."""
     tags = model_tags(proj)
-    if not tags:                                   # first addition: tag the models already in the session
+    first = not tags                               # first addition: the session's own model gets a tag too
+    if first:
         tags = [_make_tag(proj.name, [])]
-        namespace_project(proj, tags[0])
     other, issues = open_any(path)
     have = {src.sha256 for src in proj.sources if src.sha256}
     if any(src.sha256 in have for src in other.sources if src.sha256):
@@ -178,6 +178,8 @@ def add_model(proj: Project, path: str) -> tuple[Project, list[str]]:
         raise ValueError(f"model already in this session: {', '.join(sorted(clash))}")
     if len(tags) + len(new_tags) > MAX_MODELS:
         raise ValueError(f"at most {MAX_MODELS} model files per session")
+    if first:                                      # only now: a refused file leaves the session unchanged
+        namespace_project(proj, tags[0])
     proj.pieces.extend(other.pieces)
     proj.size_names.extend(s for s in other.size_names if s not in proj.size_names)
     proj.sources.extend(other.sources)
@@ -230,11 +232,15 @@ def _nest_with_sparrow(proj, items, fabric, settings, workers, progress, stop_ev
                       warm=start if not start.unplaced else None, workers=workers)
     if res is None:
         return start, "builtin"
+    allowed = {(it.piece_uid, it.mirrored): it.rotations for it in items}
     check = validate_marker(proj, Marker(name="check", fabric=fabric, placements=res.placements, length=res.length),
-                            allowed_rotations={(it.piece_uid, it.mirrored): it.rotations for it in items})
+                            allowed_rotations=allowed)
+    # compare true lengths (cut contours): the built-in length is measured on its grown search shapes
+    start_len = validate_marker(proj, Marker(name="start", fabric=fabric, placements=start.placements)).length
+    res.length = check.length
     # 90° turns were explicitly allowed by the user: their grain warnings do not disqualify sparrow's layout
     bad = [i for i in check.issues if not (i.kind == "grain" and settings.allow_rotation_90)]
-    if bad or (len(res.unplaced), res.length) >= (len(start.unplaced), start.length):
+    if bad or (len(res.unplaced), res.length) >= (len(start.unplaced), start_len):
         return start, "builtin"
     res.evaluations += start.evaluations
     return res, "sparrow"
@@ -286,6 +292,9 @@ def run_nesting(proj: Project, fabric: FabricSettings, settings: NestSettings, c
         if pl.pinned:
             allowed.setdefault((pl.piece_uid, pl.mirrored), []).append(pl.rotation)
     req = required_copies(items)
+    for u in unplaced:                           # copies refused before nesting (unknown grain, missing size)
+        key = (u.piece_uid, u.size, u.mirrored)
+        req[key] = req.get(key, 0) + 1
     v = validate_marker(proj, marker, required={k: n for k, n in req.items()}, allowed_rotations=allowed)
     st = marker_stats(proj, marker)
     marker.length = st["length_mm"]

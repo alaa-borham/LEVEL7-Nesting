@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 
 from .scene import Scene
 
@@ -236,7 +237,7 @@ def read_plt(path: str, cfg: PlotterConfig | None = None) -> tuple[list[PltPath]
     """HP-GL reader for verification (IN, PA, SP, PU, PD, SI, LB, LT, PG; ';' or newline separated).
     Coordinates are returned in mm."""
     cfg = cfg or PlotterConfig()
-    data = open(path, encoding="ascii").read()
+    data = Path(path).read_text(encoding="ascii")
     paths: list[PltPath] = []
     labels: list[tuple[int, str]] = []
     pen, down, cur, pos = 1, False, None, (0, 0)

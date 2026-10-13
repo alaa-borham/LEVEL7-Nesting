@@ -17,6 +17,7 @@ from __future__ import annotations
 import math
 import os
 import re
+from pathlib import Path
 
 import ezdxf
 
@@ -27,7 +28,7 @@ from ..model import CutOrder, Notch, Piece, PieceGeometry, Polyline, Project, So
 
 def read_rul(path: str):
     sizes, rules, sample, cur, vals = [], {}, None, None, []
-    for ln in open(path, encoding="latin-1").read().splitlines():
+    for ln in Path(path).read_text(encoding="latin-1").splitlines():
         if ln.startswith("SIZE LIST:"):
             sizes = ln.split(":", 1)[1].split()
         elif ln.startswith("SAMPLE SIZE:"):

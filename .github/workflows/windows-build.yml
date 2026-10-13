@@ -6,6 +6,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:              # a newer push replaces a running build: an older build can never publish last
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write          # publish the GitHub Release used by the in-app online update
 
@@ -41,7 +45,9 @@ jobs:
           SPARROW_COMMIT: 4629b22795ae6b25b3b460ccde6fb36a71292b6d
         run: |
           git clone --quiet https://github.com/JeroenGar/sparrow.git ..\sparrow-src
+          if ($LASTEXITCODE -ne 0) { throw "sparrow clone failed" }
           git -C ..\sparrow-src checkout --quiet $env:SPARROW_COMMIT
+          if ($LASTEXITCODE -ne 0) { throw "pinned sparrow commit not available" }
           Copy-Item packaging\sparrow\Cargo.lock ..\sparrow-src\Cargo.lock   # dependency versions as tested
           cargo build --release --locked --manifest-path ..\sparrow-src\Cargo.toml
           if ($LASTEXITCODE -ne 0) { throw "sparrow build failed" }
@@ -65,6 +71,15 @@ jobs:
           mkdir ui-shots
           python tests/ui_smoke.py ui-shots
 
+      - name: Third-party licence texts (bundled as _internal/licenses)
+        shell: pwsh
+        run: |
+          python tools/collect_licenses.py -o build-licenses
+          if ($LASTEXITCODE -ne 0) { throw "licence collection failed" }
+          New-Item -ItemType Directory -Force build-licenses/qt | Out-Null
+          Invoke-WebRequest https://www.gnu.org/licenses/lgpl-3.0.txt -OutFile build-licenses/qt/LGPL-3.0.txt
+          Invoke-WebRequest https://www.gnu.org/licenses/gpl-3.0.txt -OutFile build-licenses/qt/GPL-3.0.txt
+
       - name: PyInstaller build
         run: pyinstaller packaging/level7.spec --noconfirm --clean
 
@@ -79,6 +94,10 @@ jobs:
           & $exe nest "samples\Neay blue pants-44.scb" --width 1500 --time 25 --engine auto -o frozen_sparrow.l7n | Tee-Object -Variable out
           if ($LASTEXITCODE -ne 0) { throw "nest with sparrow failed / invalid marker" }
           if (-not ($out -match "engine: sparrow|engine: builtin")) { throw "engine not reported" }
+          $sp = "dist\LEVEL7Nesting\_internal\engines\sparrow.exe"
+          if (!(Test-Path $sp)) { throw "sparrow engine is not bundled" }
+          & $sp --help | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "bundled sparrow engine does not start" }
           & $exe export frozen.l7n --format dxf -o frozen.dxf
           & $exe export frozen.l7n --format plt -o frozen.plt
           if (!(Test-Path frozen.dxf) -or !(Test-Path frozen.plt)) { throw "export failed" }
@@ -139,8 +158,13 @@ jobs:
           $hash = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash.ToLower()
           "$hash  $($setup.Name)" | Out-File -Encoding ascii SHA256SUMS.txt
           git log -1 --pretty=%B | Where-Object { $_ -notmatch '^(Co-Authored-By|Claude-Session):' } | Out-File -Encoding utf8 notes.txt
-          gh release create "v$ver" $setup.FullName SHA256SUMS.txt --repo $env:GITHUB_REPOSITORY `
-            --title "LEVEL7 Nesting $ver" --notes-file notes.txt --target $env:GITHUB_SHA --latest
+          gh release view "v$ver" --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {         # re-run of a failed job: the release exists, refresh its files
+            gh release upload "v$ver" $setup.FullName SHA256SUMS.txt --repo $env:GITHUB_REPOSITORY --clobber
+          } else {
+            gh release create "v$ver" $setup.FullName SHA256SUMS.txt --repo $env:GITHUB_REPOSITORY `
+              --title "LEVEL7 Nesting $ver" --notes-file notes.txt --target $env:GITHUB_SHA --latest
+          }
           if ($LASTEXITCODE -ne 0) { throw "release failed" }
 
       - name: Publish to own download host (Cloudflare R2)
@@ -172,4 +196,6 @@ jobs:
           try {
             $m = Invoke-RestMethod "$u/latest.json" -Headers @{ "Cache-Control" = "no-cache" }
             Write-Host "published $($m.version) -> $u/index.html"
-          } catch { Write-Warning "uploaded, but $u/latest.json is not readable yet: $_" }
+          } catch { Write-Warning "uploaded, but $u/latest.json is not readable yet: $_"; $m = $null }
+          $ver = python -c "import level7; print(level7.__version__)"
+          if ($m -and $m.version -ne $ver) { throw "latest.json shows $($m.version), expected $ver" }

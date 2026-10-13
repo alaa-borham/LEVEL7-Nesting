@@ -129,22 +129,30 @@ class MainWindow(QMainWindow):
             self.updates.set_auto(on)
 
     def _before_update(self) -> bool:
-        if self.worker and self.worker.isRunning():
-            self.stop_nesting()
-            self.worker.wait(15000)
-        if self.project is None:
-            return True
-        r = QMessageBox.question(self, tr("updates"), tr("upd_save_first"),
-                                 QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel)
-        if r == QMessageBox.Cancel:
-            return False
-        if r == QMessageBox.Yes:
-            if self.project_path:
-                self.save()
-            else:
-                self.save_as()
-                if not self.project_path:
-                    return False
+        """Every session window: stop nesting / batch, offer to save; then they close without asking again."""
+        wins = self._all_windows()
+        for w in wins:
+            if w.worker and w.worker.isRunning():
+                w.worker.stop_event.set()
+                w.worker.wait()
+            dlg = getattr(w, "_batch_dlg", None)
+            try:
+                if dlg is not None:
+                    dlg.stop_and_wait()
+            except RuntimeError:
+                pass
+        for w in wins:
+            if w.project is None or not w.dirty:
+                continue
+            w.raise_()
+            r = QMessageBox.question(w, tr("updates"), tr("upd_save_first"),
+                                     QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel)
+            if r == QMessageBox.Cancel:
+                return False
+            if r == QMessageBox.Yes and not w.save():
+                return False
+        for w in wins:
+            w._closing_for_update = True
         return True
 
     # -- construction --------------------------------------------------------------------
@@ -251,9 +259,10 @@ class MainWindow(QMainWindow):
         btns.addWidget(self.btn_run)
         btns.addWidget(self.btn_stop)
         self.form.addRow(btns)
-        self.dock_fabric = QDockWidget(self)
-        self.dock_fabric.setWidget(w)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.dock_fabric)
+        # nesting properties: drop-down panel under the toolbar icon "Properties" (more room for the marker)
+        self.props_popup = TablePopup(self, w, _QSize(300, 370))
+        self.table_popups = self.table_popups + (self.props_popup,)
+        self.btn_run.clicked.connect(self.props_popup.hide)
 
         # results
         r = QWidget()
@@ -359,7 +368,7 @@ class MainWindow(QMainWindow):
     TOOLBAR = (("open", "open"), ("add_model", "add_model"), ("save", "save"), None, ("undo", None), ("redo", None), None,
                ("rotate180", "rotate180"), ("pin", "pin"), ("measure_tool", "measure"), None,
                ("zoom_fit", "zoom_fit"), ("display_options", "display"), None,
-               ("tab_pieces", "pieces"), ("tab_sizes", "sizes"), ("tab_spacing", "margins"), None,
+               ("tab_props", "properties"), ("tab_pieces", "pieces"), ("tab_sizes", "sizes"), ("tab_spacing", "margins"), None,
                ("run", "run"), ("stop", "stop"), ("batch", "batch"), None,
                ("export_plt", "plt"), ("export_dxf", "dxf"), ("export_iso", "iso"), None,
                ("language", "language"))
@@ -379,7 +388,8 @@ class MainWindow(QMainWindow):
         acts["tab_pieces"] = self._act("tab_pieces", lambda: self.show_table_tab(0), checkable=True)
         acts["tab_sizes"] = self._act("tab_sizes", lambda: self.show_table_tab(1), checkable=True)
         acts["tab_spacing"] = self._act("tab_spacing", lambda: self.show_table_tab(2), checkable=True)
-        self.tab_actions = (acts["tab_pieces"], acts["tab_sizes"], acts["tab_spacing"])
+        acts["tab_props"] = self._act("tab_props", lambda: self.show_table_tab(3), checkable=True)
+        self.tab_actions = (acts["tab_pieces"], acts["tab_sizes"], acts["tab_spacing"], acts["tab_props"])
         # one 'Measure' button: click = measure with the chosen kind, right-click = choose distance / curve
         acts["measure_tool"] = self.act_measure_tool = self._act("measure_tool", self.toggle_measure_tool,
                                                                  checkable=True)
@@ -400,6 +410,14 @@ class MainWindow(QMainWindow):
         self.m_measure = QMenu(self)
         self.m_measure.addAction(self.act_measure)
         self.m_measure.addAction(self.act_measure_curve)
+        # Save: right-click offers Save / Save as… (like Measure)
+        self.m_save = QMenu(self)
+        for a, k in self.actions_tr:
+            if k in ("save", "save_as", "save_scb"):
+                self.m_save.addAction(a)
+        sb = tb.widgetForAction(acts["save"])
+        sb.setContextMenuPolicy(Qt.CustomContextMenu)
+        sb.customContextMenuRequested.connect(lambda pos, b=sb: self.m_save.exec(b.mapToGlobal(pos)))
         mb = tb.widgetForAction(self.act_measure_tool)
         mb.setContextMenuPolicy(Qt.CustomContextMenu)
         mb.customContextMenuRequested.connect(lambda pos, b=mb: self.m_measure.exec(b.mapToGlobal(pos)))
@@ -418,6 +436,9 @@ class MainWindow(QMainWindow):
         tb.addWidget(self.theme_button)
         self.toolbar = tb
 
+    def createPopupMenu(self):
+        return None        # no toolbar/dock list on right-click: the toolbar buttons have their own menus
+
     def show_table_tab(self, index: int):
         """Toolbar 'Pieces' / 'Sizes': the table drops down under its icon; a second click closes it."""
         pop = self.table_popups[index]
@@ -435,10 +456,14 @@ class MainWindow(QMainWindow):
             a.setChecked(pop.isVisible())
 
     def set_theme(self, name):
-        from .icons import icon
         from .themes import apply_theme
         apply_theme(name)
         self.settings_store.setValue("theme", name)
+        for w in self._all_windows():
+            w._theme_changed()
+
+    def _theme_changed(self):
+        from .icons import icon
         for a, key in self.toolbar_items:
             a.setIcon(icon(dict((k, i) for k, i in (x for x in self.TOOLBAR if x)).get(key) or key))
         self._measure_icon()
@@ -480,7 +505,7 @@ class MainWindow(QMainWindow):
         self.sizes_popup.title.setText(tr("tab_sizes"))
         self.spacing_popup.title.setText(tr("tab_spacing"))
         self._measure_icon()
-        self.dock_fabric.setWindowTitle(tr("fabric"))
+        self.props_popup.title.setText(tr("fabric"))
         self.dock_results.setWindowTitle(tr("results"))
         self.pieces_table.setHorizontalHeaderLabels([tr(k) for k in ("col_use", "col_name", "col_mat", "col_sizes",
                                                                      "col_count", "col_mirror", "col_grain")])
@@ -526,7 +551,12 @@ class MainWindow(QMainWindow):
     def toggle_language(self):
         LANG["current"] = "en" if LANG["current"] == "ar" else "ar"
         self.settings_store.setValue("lang", LANG["current"])
-        self.retranslate()
+        for w in self._all_windows():
+            w.retranslate()
+
+    def _all_windows(self):
+        wins = list(self.sessions.windows) if self.sessions is not None else []
+        return wins if self in wins else wins + [self]
 
     def _mode_changed(self, i):
         self.f_time.setValue({0: 10, 1: 120, 2: 300}.get(i, 120))
@@ -631,11 +661,7 @@ class MainWindow(QMainWindow):
         self.undo.clear()
         self.load_tables()
         if proj.markers:
-            m = proj.markers[0]
-            self.f_width.setValue(m.fabric.width)
-            for f, v in ((self.f_sp, m.fabric.spacing), (self.f_bx, m.fabric.buffer_x), (self.f_by, m.fabric.buffer_y),
-                         (self.f_shx, m.fabric.shrink_x), (self.f_shy, m.fabric.shrink_y)):
-                f.setValue(v)
+            self.form_from_fabric(proj.markers[0].fabric)
         self.refresh_markers_list(select=0 if proj.markers else -1)
         msg = f"{os.path.basename(path)}: {len(proj.pieces)} pieces"
         if proj.sources and proj.sources[0].internal_model_name:
@@ -787,6 +813,16 @@ class MainWindow(QMainWindow):
         mat = self.f_material.currentData()
         co.material = None if mat in ("*", "", None) else mat
 
+    def form_from_fabric(self, f: FabricSettings):
+        """Show a marker's fabric settings in the form (so 'Nest' continues from what is on screen)."""
+        lay = {LayType.OPEN: 0, LayType.FACE_TO_FACE: 1, LayType.FOLDED: 2}.get(f.lay_type, 0)
+        for w, v in ((self.f_width, f.width), (self.f_ml, f.margin_left), (self.f_mr, f.margin_right),
+                     (self.f_ms, f.margin_start), (self.f_me, f.margin_end), (self.f_sp, f.spacing),
+                     (self.f_bx, f.buffer_x), (self.f_by, f.buffer_y), (self.f_shx, f.shrink_x),
+                     (self.f_shy, f.shrink_y), (self.f_maxlen, f.max_length or 0.0)):
+            w.setValue(v)
+        self.f_lay.setCurrentIndex(lay)
+
     def fabric_from_form(self) -> FabricSettings:
         lay = [LayType.OPEN, LayType.FACE_TO_FACE, LayType.FOLDED][max(0, self.f_lay.currentIndex())]
         return FabricSettings(width=self.f_width.value(), margin_left=self.f_ml.value(), margin_right=self.f_mr.value(),
@@ -839,6 +875,11 @@ class MainWindow(QMainWindow):
                 if template is None:
                     QMessageBox.warning(self, tr("save"), tr("scb_not_possible"))
                     return self.save_as()
+                others = [m for m in self.project.markers if m is not self.marker and m.origin != "original"]
+                if others and QMessageBox.question(self, tr("save"), tr("scb_one_marker", n=len(others)),
+                                                   QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+                    return False
+                tmp_t = None
                 if os.path.abspath(template) == os.path.abspath(self.project_path):
                     bak = self.project_path + ".bak"
                     if not os.path.exists(bak):            # keep GRAFIS' original once before overwriting it
@@ -848,7 +889,11 @@ class MainWindow(QMainWindow):
                     os.close(fd)
                     shutil.copy2(template, tmp_t)
                     template = tmp_t
-                write_scb(template, self.project, self.marker, self.project_path)
+                try:
+                    write_scb(template, self.project, self.marker, self.project_path)
+                finally:
+                    if tmp_t:
+                        os.remove(tmp_t)
             else:
                 from ..project_storage.store import save_project
                 save_project(self.project, self.project_path)
@@ -903,6 +948,7 @@ class MainWindow(QMainWindow):
         if prev is not None and prev is not self.project.markers[i] and "length_mm" in (prev.stats or {}):
             self.view.last_result = (prev.stats["length_mm"], prev.stats["efficiency_total_width_pct"])
         self.marker = self.project.markers[i]
+        self.form_from_fabric(self.marker.fabric)
         self.undo.clear()
         if "efficiency_total_width_pct" not in (self.marker.stats or {}):
             self.marker.stats = {**(self.marker.stats or {}), **marker_stats(self.project, self.marker)}
@@ -997,7 +1043,9 @@ class MainWindow(QMainWindow):
 
     # -- manual editing --------------------------------------------------------------------
     def on_moved(self, moves):
-        if not self.marker:
+        if not self.marker or self._busy():
+            if self._busy():
+                self.view.refresh()
             return
         changes = []
         for pl, dx, dy in moves:
@@ -1013,7 +1061,7 @@ class MainWindow(QMainWindow):
             self.view.refresh()
 
     def rotate_selected(self):
-        if not self.marker:
+        if not self.marker or self._busy():
             return
         changes = []
         for pl in self.view.selected_placements():
@@ -1032,7 +1080,7 @@ class MainWindow(QMainWindow):
             self.undo.push(PlacementStateCommand(self, changes, "rotate 180"))
 
     def pin_selected(self):
-        if not self.marker:
+        if not self.marker or self._busy():
             return
         changes = [(pl, PlacementStateCommand.state(pl), PlacementStateCommand.state(pl)[:4] + (not pl.pinned,))
                    for pl in self.view.selected_placements()]
@@ -1195,6 +1243,12 @@ class MainWindow(QMainWindow):
     def stop_nesting(self):
         if self.worker and self.worker.isRunning():
             self.worker.stop_event.set()
+        elif self.view.measure_mode:            # Esc is also 'clear measurement'
+            self.view.clear_measure()
+
+    def _busy(self) -> bool:
+        """Nesting runs: the canvas shows the live preview, which must not be edited."""
+        return bool(self.worker and self.worker.isRunning())
 
     PREVIEW_INTERVAL_MS = 600
 
@@ -1318,7 +1372,7 @@ class MainWindow(QMainWindow):
             "Nesting results are heuristic; no global optimum is claimed."))
 
     def closeEvent(self, ev):
-        if self.dirty and self.project is not None:
+        if self.dirty and self.project is not None and not getattr(self, "_closing_for_update", False):
             r = QMessageBox.question(self, tr("unsaved_title"), tr("unsaved_text", n=self.project.name),
                                      QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel, QMessageBox.Save)
             if r == QMessageBox.Cancel or (r == QMessageBox.Save and not self.save()):
@@ -1326,7 +1380,13 @@ class MainWindow(QMainWindow):
                 return
         if self.worker and self.worker.isRunning():
             self.worker.stop_event.set()
-            self.worker.wait(15000)
+            self.worker.wait()                  # a deleted running QThread would abort the application
+        dlg = getattr(self, "_batch_dlg", None)
+        try:
+            if dlg is not None:
+                dlg.stop_and_wait()
+        except RuntimeError:                    # dialog already deleted
+            pass
         if self.sessions is not None:
             self.sessions.remove(self)
         super().closeEvent(ev)

@@ -28,6 +28,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from pathlib import Path
 
 from shapely.geometry import Polygon
 
@@ -153,7 +154,7 @@ def _to_result(entries, groups, fabric, length_strip, seed, elapsed, stopped) ->
 def parse_svg(path, groups, fabric, seed=0, elapsed=0.0, stopped=False) -> NestResult | None:
     m = re.match(r"\d+_([\d.]+)_", os.path.basename(path))
     try:
-        txt = open(path, encoding="utf-8").read()
+        txt = Path(path).read_text(encoding="utf-8")
     except OSError:
         return None
     entries = [(int(a), float(b), float(c), float(d)) for a, b, c, d in _USE.findall(txt)]
@@ -162,7 +163,7 @@ def parse_svg(path, groups, fabric, seed=0, elapsed=0.0, stopped=False) -> NestR
 
 def parse_json(path, groups, fabric, seed=0, elapsed=0.0) -> NestResult | None:
     try:
-        sol = json.load(open(path, encoding="utf-8"))["solution"]
+        sol = json.loads(Path(path).read_text(encoding="utf-8"))["solution"]
     except (OSError, ValueError, KeyError):
         return None
     entries = [(p["item_id"], p["transformation"]["translation"][0], p["transformation"]["translation"][1],

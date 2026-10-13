@@ -15,8 +15,10 @@ Self-check: re-writing a GRAFIS marker unchanged reproduces the original file by
 """
 from __future__ import annotations
 
+import os
 import re
 import struct
+from pathlib import Path
 
 from ...geometry import bbox, placement_points, ring_area
 from .container import BLOCK_MARK, TRAILER, read_container
@@ -61,7 +63,7 @@ def write_scb(template_path: str, project, marker, out_path: str) -> dict:
     """Write ``marker`` of ``project`` (read from a GRAFIS file of the same model) as a GRAFIS SCB."""
     if any(p.model for p in project.pieces):
         raise ScbWriteError("an SCB holds one model; this session contains several models")
-    data = open(template_path, "rb").read()
+    data = Path(template_path).read_bytes()
     cont = read_container(template_path)
     blocks = cont.by_id()
     tb, mb = blocks.get((2, 1, 0, 0)), blocks.get((2, 8, 0, 0))
@@ -212,6 +214,8 @@ def write_scb(template_path: str, project, marker, out_path: str) -> dict:
         out += payload
     out += TRAILER
     struct.pack_into("<I", out, 4, (len(out) - 8) // 8)
-    with open(out_path, "wb") as fh:
+    tmp = out_path + ".part"                 # the GRAFIS file is replaced only once the new one is complete
+    with open(tmp, "wb") as fh:
         fh.write(out)
+    os.replace(tmp, out_path)
     return {"placements": len(recs), "length": length, "efficiency": eff, "bytes": len(out)}
