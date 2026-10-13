@@ -116,7 +116,9 @@ def parse_text(payload: bytes, encoding: str = DEFAULT_ENCODING) -> TextSections
     return ts
 
 
-_TL = re.compile(r"^\s*(\*?)\s*(\d{3})\s(x|\s)\s(.*?)\s+ID=([0-9A-Fa-f]+)\s*$")
+# leading flag: "*" (MDL, SCB of older GRAFIS) or ">" (SCB of newer GRAFIS); newer SCBs also append the model
+# path after the ID:  ' > 014   name   1 1 O  x O 01 01 ID=0060FB8A01DD5AA1 V="A:\\vest\\vest.mdl"'
+_TL = re.compile(r'^\s*([*>]?)\s*(\d{3})\s(x|\s)\s(.*?)\s+ID=([0-9A-Fa-f]+)(?:\s+V="[^"]*")?\s*$')
 
 
 def _parse_tlist_line(line: str) -> TListEntry | None:
@@ -131,6 +133,7 @@ def _parse_tlist_line(line: str) -> TListEntry | None:
     if prod:
         material, count, mirrored = prod.group(1), int(prod.group(2)), int(prod.group(3))
         body = body[:prod.start()]
-    # MDL: "name   83 510"   SCB: "name   1 1 O " or "name   -"
-    name = re.sub(r"\s+(-|\d+\s+\d+(\s+[A-Z])?)\s*$", "", body).strip()
+    # MDL: "name   83 510" (the two numbers run together when wide: "basic  2381152")
+    # SCB: "name   1 1 O " or "name   -"
+    name = re.sub(r"\s+(-|\d+(\s+\d+)?(\s+[A-Z])?)\s*$", "", body).strip()
     return TListEntry(number, name, flagged, prod is not None, material, count, mirrored, m.group(5), line)

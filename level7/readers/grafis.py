@@ -6,6 +6,7 @@ sections (#SBINFO, #SBGRLST, #SBTLIST) and the placement block (2,8,0,0).
 from __future__ import annotations
 
 import math
+import re
 import os
 from dataclasses import dataclass, field
 
@@ -33,6 +34,29 @@ class ReadResult:
 
 def _size_names(ts: TextSections) -> dict[int, str]:
     return {s.index: s.name for s in ts.sizes}
+
+
+_LETTER_SIZES = ["XXXS", "XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "XXXL", "3XL", "4XL", "5XL", "6XL"]
+
+
+def size_order_key(name: str):
+    """Garment order for size names: letter sizes XS < S < M < L < XL < 2XL …, numbers numerically."""
+    head = re.split(r"[-/ ]", name.strip().upper())[0]
+    if head in _LETTER_SIZES:
+        rank = {"XXL": "2XL", "XXXL": "3XL"}.get(head, head)
+        return (0, _LETTER_SIZES.index(rank), name)
+    m = re.match(r"\d+(?:\.\d+)?", name.strip())
+    return (1, float(m.group()), name) if m else (2, 0.0, name)
+
+
+def _base_index(ts: TextSections) -> int | None:
+    """GRDTAB index of the base (sample) grading entry, e.g. "__HN40_0". Older files put it first (index 1) and
+    let the real sizes reference it; newer SCBs list the entries alphabetically ("2XL", …, "XS", "__HN44_0")
+    without references, so the base is recognised by its "__" name, not by its position."""
+    for e in ts.sizes:
+        if e.name.startswith("__"):
+            return e.index
+    return None
 
 
 def _build_piece_geometry(payload: bytes, size_name: str, src: str, issues: list[str],
@@ -157,7 +181,10 @@ def read_grafis(path: str, encoding: str = DEFAULT_ENCODING, include_constructio
     sizes = _size_names(ts)
     blocks = cont.by_id()
     proj = Project(name=os.path.splitext(os.path.basename(path))[0])
-    proj.size_names = [sizes[i] for i in sorted(sizes) if i != 1]
+    base_idx = _base_index(ts)
+    proj.size_names = [sizes[i] for i in sorted(sizes) if i != base_idx]
+    if not any(e.ref for e in ts.sizes):            # newer SCB: alphabetical GRDTAB -> garment order
+        proj.size_names.sort(key=size_order_key)
     info = SourceInfo(path=os.path.abspath(path), kind=kind, sha256=cont.sha256, size=cont.size)
     if kind == "scb":
         info.internal_model_name = ts.sbinfo.get("MODEL")
@@ -178,15 +205,15 @@ def read_grafis(path: str, encoding: str = DEFAULT_ENCODING, include_constructio
             src = f"{kind.upper()} block (3,{t.number},7,{idx})"
             g = _build_piece_geometry(b.payload, sizes[idx], src, issues, hint)
             if g is not None:
-                key = sizes[idx] if idx != 1 else f"base:{sizes[idx]}"
+                key = sizes[idx] if idx != base_idx else f"base:{sizes[idx]}"
                 piece.sizes[key] = g
         # A size whose #GRDTAB reference is the base entry (index 1) IS the base size: GRAFIS may store only the
         # base block for it (sample: size 28 -> ref "__HN40_0" = base). Use the base geometry for that size.
-        base_entry = next((e for e in ts.sizes if e.index == 1), None)
+        base_entry = next((e for e in ts.sizes if e.index == base_idx), None)
         base_key = f"base:{base_entry.name}" if base_entry else None
         if base_key in piece.sizes:
             for e in ts.sizes:
-                if e.index != 1 and e.name not in piece.sizes and e.ref and e.ref == base_entry.name:
+                if e.index != base_idx and e.name not in piece.sizes and e.ref and e.ref == base_entry.name:
                     piece.sizes[e.name] = piece.sizes[base_key]
                     piece.notes.append(f"size {e.name}: geometry of the base entry {base_entry.name} "
                                        f"(GRDTAB reference), no separate block stored")
