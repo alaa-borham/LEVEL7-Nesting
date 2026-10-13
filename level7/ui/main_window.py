@@ -109,6 +109,7 @@ class MainWindow(QMainWindow):
         cl.addWidget(self.view, 1)
         self.setCentralWidget(central)
         self.view.moved.connect(self.on_moved)
+        self.view.scene().selectionChanged.connect(self._marker_selection_changed)
         self.view.dragging.connect(self._live_length)
         self.view.measured.connect(lambda d: self.statusBar().showMessage(tr("distance", d=d)))
         self._build_docks()
@@ -188,6 +189,7 @@ class MainWindow(QMainWindow):
         self.strip_area.setMinimumHeight(40)
         self.strip.open_table.connect(lambda: self.show_table_tab(0))
         self.strip.row_toggled.connect(self._toggle_strip_row)
+        self.strip.piece_clicked.connect(lambda uid: self._highlight_pieces({uid}))
         self.dock_strip = QDockWidget(self)
         self.dock_strip.setObjectName("piece_strip")
         self.dock_strip.setWidget(self.strip_area)
@@ -1072,6 +1074,32 @@ class MainWindow(QMainWindow):
         self.update_status_line()
         if fit:
             self.view.zoom_fit()
+
+    def _marker_selection_changed(self):
+        try:
+            uids = {pl.piece_uid for pl in self.view.selected_placements()}
+        except RuntimeError:                 # window being destroyed
+            return
+        self._highlight_pieces(uids)
+
+    def _highlight_pieces(self, uids):
+        """Pieces selected on the marker / clicked in the strip: their rows are highlighted in the pieces table."""
+        from PySide6.QtCore import QItemSelection, QItemSelectionModel
+        try:
+            t = self.pieces_table
+            t.rowCount()
+        except RuntimeError:                 # window being destroyed
+            return
+        sel = QItemSelection()
+        first = None
+        for r in range(t.rowCount()):
+            it = t.item(r, 0)
+            if it is not None and it.data(Qt.UserRole) in uids:
+                sel.select(t.model().index(r, 0), t.model().index(r, t.columnCount() - 1))
+                first = r if first is None else first
+        t.selectionModel().select(sel, QItemSelectionModel.ClearAndSelect)
+        if first is not None:
+            t.scrollToItem(t.item(first, 0))
 
     def _toggle_strip_row(self, size, bundle):
         """Strip check box: include / exclude this size+bundle in the next nesting run."""

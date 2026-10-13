@@ -1,17 +1,17 @@
-"""Drop-down panel under a toolbar button (pieces table / size quantities)."""
+"""Panel under a toolbar button (pieces table, sizes, properties, ...). It stays open while you work on the
+marker (closed by its icon, its × button or Esc) and can be dragged anywhere by its title."""
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, QPoint, QSize, Qt, Signal
 from PySide6.QtGui import QGuiApplication
-from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QToolButton, QVBoxLayout
 
 
 class TablePopup(QFrame):
     closed = Signal()
 
     def __init__(self, parent, widget, size: QSize):
-        super().__init__(parent, Qt.Popup)
-        self.setAttribute(Qt.WA_NoMouseReplay, True)     # clicking the icon again just closes the panel
+        super().__init__(parent, Qt.Tool | Qt.FramelessWindowHint)    # stays open, above the main window
         self.setFrameShape(QFrame.StyledPanel)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(6, 6, 6, 6)
@@ -24,7 +24,14 @@ class TablePopup(QFrame):
         self.title.installEventFilter(self)
         self._drag = None
         self.user_pos = None
-        lay.addWidget(self.title)
+        head = QHBoxLayout()
+        head.addWidget(self.title, 1)
+        self.close_btn = QToolButton()
+        self.close_btn.setText("✕")
+        self.close_btn.setAutoRaise(True)
+        self.close_btn.clicked.connect(self.hide)
+        head.addWidget(self.close_btn)
+        lay.addLayout(head)
         lay.addWidget(widget, 1)
         self.widget = widget
         self.resize(size)
@@ -75,6 +82,12 @@ class TablePopup(QFrame):
         self.move(x, y)
         self.raise_()
         self.activateWindow()
+
+    def keyPressEvent(self, ev):
+        if ev.key() == Qt.Key_Escape:
+            self.hide()
+            return
+        super().keyPressEvent(ev)
 
     def hideEvent(self, ev):
         super().hideEvent(ev)

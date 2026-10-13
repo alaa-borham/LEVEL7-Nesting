@@ -23,6 +23,7 @@ CHECK = 12            # include / exclude check box in the size column
 class PieceStrip(QWidget):
     open_table = Signal()
     row_toggled = Signal(str, int)      # (size, bundle): include / exclude this row from the marker
+    piece_clicked = Signal(str)         # piece uid (highlighted in the pieces table)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -205,6 +206,9 @@ class PieceStrip(QWidget):
         if row is not None and ev.button() == Qt.LeftButton and ev.position().x() < getattr(self, "head_w", HEAD_W):
             self.row_toggled.emit(row[0], row[1])
             return
+        pc = self._piece_at(ev.position())
+        if pc is not None and ev.button() == Qt.LeftButton:
+            self.piece_clicked.emit(pc.uid)
         super().mousePressEvent(ev)
 
     def mouseDoubleClickEvent(self, ev):
