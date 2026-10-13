@@ -232,6 +232,11 @@ T = {
     "sessions": ("Sessions", "الجلسات"),
     "sessions_max": ("At most {n} sessions can be open at the same time. Close one to open another file.",
                      "الحد الأقصى {n} جلسات مفتوحة في نفس الوقت. أغلق جلسة لفتح ملف آخر."),
+    "add_model": ("Add model to session…", "إضافة موديل للجلسة…"),
+    "tb_add_model": ("Add model", "إضافة موديل"),
+    "models_added": ("{n} model file(s) added; {t} models in this session. Set the quantities per model and size.",
+                     "تمت إضافة {n} ملف؛ عدد الموديلات في الجلسة {t}. اكتب الكميات لكل موديل ومقاس."),
+    "models_max": ("At most {n} model files per session.", "الحد الأقصى {n} ملف موديل في الجلسة الواحدة."),
     "cancel": ("Cancel", "إلغاء"),
 }
 

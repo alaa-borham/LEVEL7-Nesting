@@ -51,6 +51,15 @@ def _draw(name: str, p: QPainter, fg: QColor):
         p.setBrush(Qt.NoBrush)
         p.drawLine(QPointF(16, 23), QPointF(16, 15))
         _arrow_head(p, QPointF(16, 14), -90, 5)
+    elif name == "add_model":
+        _piece(p, QRectF(3, 9, 15, 12))
+        _piece(p, QRectF(9, 14, 15, 12), fill=BLUE)
+        p.setPen(Qt.NoPen)
+        p.setBrush(GREEN)
+        p.drawEllipse(QRectF(18, 2, 12, 12))
+        p.setPen(QPen(QColor("white"), 2))
+        p.drawLine(QPointF(24, 5), QPointF(24, 11))
+        p.drawLine(QPointF(21, 8), QPointF(27, 8))
     elif name == "save":
         p.drawRoundedRect(QRectF(5, 5, 22, 22), 2, 2)
         p.drawRect(QRectF(10, 5, 12, 7))

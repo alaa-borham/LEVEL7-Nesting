@@ -119,6 +119,8 @@ def build_items(project: Project, sizes: dict[str, int], counts: dict[str, tuple
         for size, qty in sizes.items():
             if qty <= 0:
                 continue
+            if piece.model and not size.startswith(piece.model + ":"):
+                continue                     # several models in one session: sizes belong to their own model
             if size not in piece.sizes:
                 unplaced.append(Unplaced("", piece.uid, size, False, f"size {size} geometry not available"))
                 continue

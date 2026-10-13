@@ -143,7 +143,8 @@ class PieceItem(QGraphicsPathItem):
             if d is not None:      # arrow as seen on screen (the view may be rotated in the display options)
                 v = self.view.base_transform().map(QPointF(float(d), 0.0))
                 arrow = (" →" if v.x() > 0 else " ←") if abs(v.x()) >= abs(v.y()) else (" ↓" if v.y() > 0 else " ↑")
-            lines.append(f"{pl.size}/{bundle_letter(pl.bundle)}{arrow}")
+            from ..service import size_label
+            lines.append(f"{size_label(self.view.model_tags, pl.size)}/{bundle_letter(pl.bundle)}{arrow}")
         if o["piece_names"]:
             lines.append(f"{self.piece.name}{' (M)' if pl.mirrored else ''}")
         if lines:
@@ -227,6 +228,7 @@ class MarkerView(QGraphicsView):
         self.items_by_uid: dict[str, PieceItem] = {}
         self.project = None
         self.marker = None
+        self.model_tags: list[str] = []
         self.measure_mode = False
         self._m_start = self._m_end = self._m_hover = None   # scene points (mm)
         self._m_fixed = False
@@ -243,6 +245,8 @@ class MarkerView(QGraphicsView):
         self.viewport().update()
 
     def show_marker(self, project, marker, bad=None):
+        from ..service import model_tags
+        self.model_tags = model_tags(project) if project is not None else []
         self.project, self.marker = project, marker
         self.bad = set(bad or [])
         sc = self.scene()

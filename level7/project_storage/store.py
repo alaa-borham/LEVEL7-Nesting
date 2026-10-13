@@ -74,7 +74,7 @@ def project_from_dict(d: dict) -> Project:
     pieces = []
     for p in d.get("pieces", []):
         pc = Piece(uid=p["uid"], source_id=p["source_id"], number=p.get("number"), name=p["name"],
-                   material=p.get("material"), production=p.get("production", True),
+                   material=p.get("material"), production=p.get("production", True), model=p.get("model", ""),
                    default_count=p.get("default_count", 1), default_mirrored=p.get("default_mirrored", 0),
                    sizes={k: _geom(v) for k, v in p.get("sizes", {}).items()},
                    allowed_rotations=p.get("allowed_rotations", [0.0, 180.0]),

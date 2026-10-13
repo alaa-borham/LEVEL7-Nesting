@@ -104,6 +104,93 @@ def supplement_from_model(proj: Project, mdl_path: str) -> int:
     return added
 
 
+MAX_MODELS = 15
+MODEL_SEP = ":"
+
+
+def model_tags(proj: Project) -> list[str]:
+    seen = []
+    for p in proj.pieces:
+        if p.model and p.model not in seen:
+            seen.append(p.model)
+    return seen
+
+
+def size_label(tags: list[str], size: str) -> str:
+    """Short display of a session size: "2·M" for size M of the 2nd model (full "tag:size" in tables)."""
+    if tags and MODEL_SEP in size:
+        tag, s = size.split(MODEL_SEP, 1)
+        if tag in tags:
+            return f"{tags.index(tag) + 1}·{s}"
+    return size
+
+
+def _make_tag(name: str, taken) -> str:
+    import re
+    base = re.sub(r"\s+", " ", re.sub(r"[:|]", " ", name)).strip()[:18] or "model"
+    tag, k = base, 2
+    while tag in taken:
+        tag, k = f"{base} {k}", k + 1
+    return tag
+
+
+def namespace_project(proj: Project, tag: str) -> None:
+    """Prefix every size of this model with its tag ("pants:44") so several models can share one session
+    even when their size names are equal. Base entries become "base:<tag>:<name>"."""
+    def ren(k: str) -> str:
+        return f"base:{tag}{MODEL_SEP}{k[5:]}" if k.startswith("base:") else f"{tag}{MODEL_SEP}{k}"
+    for p in proj.pieces:
+        if p.model:
+            continue
+        p.model = tag
+        p.sizes = {ren(k): g for k, g in p.sizes.items()}
+        for g in p.sizes.values():
+            g.size = ren(g.size) if g.size and not g.size.startswith(tag + MODEL_SEP) else g.size
+    proj.size_names = [s if s.startswith(tag + MODEL_SEP) else ren(s) for s in proj.size_names]
+    co = proj.cut_order
+    co.size_quantities = {(k if k.startswith(tag + MODEL_SEP) else ren(k)): v for k, v in co.size_quantities.items()}
+    for m in proj.markers:
+        for pl in m.placements:
+            if not pl.size.startswith(tag + MODEL_SEP):
+                pl.size = ren(pl.size)
+        if m.stats and isinstance(m.stats.get("by_size"), dict):
+            m.stats["by_size"] = {ren(k): v for k, v in m.stats["by_size"].items()}
+
+
+def add_model(proj: Project, path: str) -> tuple[Project, list[str]]:
+    """Add another model file (MDL / SCB / DXF / AAMA / project) to a session: its pieces, sizes (prefixed with
+    the model tag), cut order and markers. Pieces of all models can then be nested into one marker."""
+    tags = model_tags(proj)
+    if not tags:                                   # first addition: tag the models already in the session
+        tags = [_make_tag(proj.name, [])]
+        namespace_project(proj, tags[0])
+    other, issues = open_any(path)
+    have = {src.sha256 for src in proj.sources if src.sha256}
+    if any(src.sha256 in have for src in other.sources if src.sha256):
+        raise ValueError(f"model already in this session: {os.path.basename(path)}")
+    if any(p.model for p in other.pieces):         # a saved multi-model project: keep its tags, avoid clashes
+        new_tags = model_tags(other)
+    else:
+        new_tags = [_make_tag(other.name, tags)]
+        namespace_project(other, new_tags[0])
+    clash = set(new_tags) & set(tags)
+    if clash:
+        raise ValueError(f"model already in this session: {', '.join(sorted(clash))}")
+    if len(tags) + len(new_tags) > MAX_MODELS:
+        raise ValueError(f"at most {MAX_MODELS} model files per session")
+    proj.pieces.extend(other.pieces)
+    proj.size_names.extend(s for s in other.size_names if s not in proj.size_names)
+    proj.sources.extend(other.sources)
+    proj.markers.extend(other.markers)
+    proj.cut_order.size_quantities.update(other.cut_order.size_quantities)
+    proj.cut_order.piece_counts.update(other.cut_order.piece_counts)
+    if not proj.cut_order.material:
+        proj.cut_order.material = other.cut_order.material
+    if proj.name and other.name and other.name not in proj.name:
+        proj.name = f"{proj.name} + {other.name}" if " + " not in proj.name else proj.name
+    return other, issues
+
+
 def _is_aama(path: str) -> bool:
     """AAMA/ASTM DXF: a sibling .rul file or 'Piece Name:' annotations in blocks."""
     if os.path.exists(os.path.splitext(path)[0] + ".rul") or os.path.exists(os.path.splitext(path)[0] + ".RUL"):

@@ -155,6 +155,7 @@ class MainWindow(QMainWindow):
             lambda it: self._refresh_material_groups() if it.column() == 0 else None)
         self.sizes_table = QTableWidget(0, 2)
         self.sizes_table.verticalHeader().hide()
+        self.sizes_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         left = QTabWidget()
         left.addTab(self.pieces_table, "")
         left.addTab(self.sizes_table, "")
@@ -272,6 +273,7 @@ class MainWindow(QMainWindow):
                          (self.m_nest, "nesting"), (self.m_export, "export"), (self.m_help, "help")]
         self.m_file.addAction(self._act("open", self.open_dialog, "Ctrl+O"))
         self.m_file.addAction(self._act("new_session", self.new_session, "Ctrl+N"))
+        self.m_file.addAction(self._act("add_model", self.add_model_dialog, "Ctrl+Shift+O"))
         self.m_file.addAction(self._act("save", self.save, "Ctrl+S"))
         self.m_file.addAction(self._act("save_as", self.save_as, "Ctrl+Shift+S"))
         self.m_file.addSeparator()
@@ -319,7 +321,7 @@ class MainWindow(QMainWindow):
         self.m_help.addAction(self._act("about", self.about))
         self._build_toolbar(undo, redo)
 
-    TOOLBAR = (("open", "open"), ("save", "save"), None, ("undo", None), ("redo", None), None,
+    TOOLBAR = (("open", "open"), ("add_model", "add_model"), ("save", "save"), None, ("undo", None), ("redo", None), None,
                ("rotate180", "rotate180"), ("pin", "pin"), ("measure", "measure"), None,
                ("zoom_fit", "zoom_fit"), ("display_options", "display"), None,
                ("tab_pieces", "pieces"), ("tab_sizes", "sizes"), None,
@@ -496,6 +498,41 @@ class MainWindow(QMainWindow):
         else:
             self.sessions.open_files(paths, prefer=self)
 
+    def add_model_dialog(self):
+        """Add further model files to this session (pieces of all models can go into one marker)."""
+        from ..service import MAX_MODELS, add_model, model_tags
+        if self.project is None:
+            self.open_dialog()
+            return
+        ps, _ = QFileDialog.getOpenFileNames(self, tr("add_model"), self.settings_store.value("last_dir", ""),
+                                             "Patterns / markers (*.mdl *.MDL *.scb *.SCB *.dxf *.DXF *.l7n);;All (*)")
+        if not ps:
+            return
+        self.read_tables()
+        added, problems = [], []
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            for path in ps:
+                if len(model_tags(self.project) or [self.project.name]) >= MAX_MODELS:
+                    problems.append(tr("models_max", n=MAX_MODELS))
+                    break
+                try:
+                    other, issues = add_model(self.project, path)
+                    added.append(os.path.basename(path))
+                    self.issues_list.addItems([f"{os.path.basename(path)}: {i}" for i in issues[:100]])
+                except Exception as exc:
+                    problems.append(f"{os.path.basename(path)}: {exc}")
+        finally:
+            QApplication.restoreOverrideCursor()
+        self.load_tables()
+        self.refresh_markers_list(select=self.markers_list.currentRow() if self.markers_list.currentRow() >= 0 else -1)
+        self.retranslate()
+        msg = tr("models_added", n=len(added), t=len(model_tags(self.project)))
+        if problems:
+            QMessageBox.warning(self, tr("add_model"), msg + "\n\n" + "\n".join(problems))
+        self.statusBar().showMessage(msg)
+        self.show_table_tab(1)                 # choose the sizes of each model
+
     def new_session(self):
         if self.sessions is not None:
             self.sessions.new_window()
@@ -571,7 +608,8 @@ class MainWindow(QMainWindow):
         t.setRowCount(0)
         co = p.cut_order
         all_mats = sorted({pc.material for pc in p.pieces if pc.material} | {"O", "F"})
-        for pc in sorted(p.pieces, key=lambda q: (not q.production, q.number or 0)):
+        model_order = {m: i for i, m in enumerate(dict.fromkeys(q.model for q in p.pieces))}
+        for pc in sorted(p.pieces, key=lambda q: (model_order[q.model], not q.production, q.number or 0)):
             r = t.rowCount()
             t.insertRow(r)
             use = QTableWidgetItem()
@@ -579,7 +617,7 @@ class MainWindow(QMainWindow):
             use.setCheckState(Qt.Checked if (n or m) else Qt.Unchecked)
             use.setData(Qt.UserRole, pc.uid)
             t.setItem(r, 0, use)
-            t.setItem(r, 1, QTableWidgetItem(f"{pc.number or ''} {pc.name}"))
+            t.setItem(r, 1, QTableWidgetItem(f"{pc.number or ''} {pc.name}" + (f"   [{pc.model}]" if pc.model else "")))
             t.setItem(r, 2, QTableWidgetItem(""))
             mat = QComboBox()                       # material of the part: choose or type a new code
             mat.setEditable(True)
@@ -960,7 +998,9 @@ class MainWindow(QMainWindow):
         co = self.project.cut_order
         sizes = [s for s, q in co.size_quantities.items() if q > 0]
         used = {u for u, (n, m) in co.piece_counts.items() if n + m > 0}
-        miss = {s: [p.name for p in self.project.pieces if p.uid in used and s not in p.sizes] for s in sizes}
+        def wanted(p, s):          # several models in one session: a size belongs to its own model only
+            return p.uid in used and (not p.model or s.startswith(p.model + ":"))
+        miss = {s: [p.name for p in self.project.pieces if wanted(p, s) and s not in p.sizes] for s in sizes}
         miss = {s: v for s, v in miss.items() if v}
         if not miss:
             return True
@@ -981,7 +1021,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(tr("sizes_loaded", n=n, p=os.path.basename(path)))
             self.load_tables()
             self.read_tables()
-            left = {s for s in sizes for p in self.project.pieces if p.uid in used and s not in p.sizes}
+            left = {s for s in sizes for p in self.project.pieces if wanted(p, s) and s not in p.sizes}
             if left:
                 QMessageBox.warning(self, tr("run"), tr("missing_sizes_left", s=", ".join(sorted(left))))
         return True

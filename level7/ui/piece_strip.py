@@ -11,7 +11,7 @@ from .marker_view import bundle_letter
 
 THUMB_H = 26          # px available for the outline (compact: more room for the marker)
 ROW_H = THUMB_H + 18  # outline + count line
-HEAD_W = 54           # size / bundle column
+HEAD_W = 54           # size / bundle column (minimum; grows for "model:size" names)
 TOP = 14              # "Pc: placed/total" line
 MIN_CELL = 56
 MAX_CELL = 150
@@ -33,6 +33,8 @@ class PieceStrip(QWidget):
 
     # -- data ------------------------------------------------------------------------------
     def set_data(self, project, marker):
+        from ..service import model_tags
+        self.tags = model_tags(project) if project is not None else []
         self.rows, self.cols, self.counts, self.shapes = [], [], {}, {}
         self.placed = self.total = 0
         if project is None:
@@ -84,7 +86,14 @@ class PieceStrip(QWidget):
                 self.shapes[(size, p.uid)] = [(x - cx, y - cy) for x, y in pts]
                 maxw, maxh = max(maxw, x1 - x0), max(maxh, y1 - y0)
         self.scale = min((MAX_CELL - 16) / maxw, THUMB_H / maxh)
-        x = HEAD_W
+        from PySide6.QtGui import QFontMetrics
+        f = QFont(self.font())
+        f.setPointSizeF(8)
+        fm = QFontMetrics(f)
+        from ..service import size_label
+        self.head_w = min(220, max(HEAD_W, max((fm.horizontalAdvance(size_label(self.tags, sz)) + 26
+                                                for sz, _b in self.rows), default=0)))
+        x = self.head_w
         for p in pieces:
             w = max((bbox(s)[2] - bbox(s)[0] for (sz, u), s in self.shapes.items() if u == p.uid), default=0)
             cw = int(max(MIN_CELL, w * self.scale + 24))
@@ -112,15 +121,19 @@ class PieceStrip(QWidget):
         f.setPointSizeF(8)
         p.setFont(f)
         p.setPen(fg)
-        p.drawText(QPointF(4, 11), f"Pc: {self.placed}/ {self.total}")
-        p.drawLine(HEAD_W - 4, TOP, HEAD_W - 4, self.height())
+        legend = "    ".join(f"{k + 1} = {t}" for k, t in enumerate(getattr(self, "tags", [])))
+        p.drawText(QPointF(4, 11), f"Pc: {self.placed}/ {self.total}" + (f"      {legend}" if legend else ""))
+        hw = getattr(self, "head_w", HEAD_W)
+        p.drawLine(hw - 4, TOP, hw - 4, self.height())
         dim = QColor(fg)
         dim.setAlpha(140)
         for r, (size, b) in enumerate(self.rows):
             y = TOP + r * ROW_H
             p.setPen(fg)
-            p.drawText(QRectF(2, y + 2, HEAD_W - 8, ROW_H - 4), Qt.AlignLeft | Qt.AlignVCenter, size)
-            p.drawText(QRectF(2, y + 2, HEAD_W - 8, ROW_H - 4), Qt.AlignRight | Qt.AlignVCenter, bundle_letter(b))
+            from ..service import size_label
+            p.drawText(QRectF(2, y + 2, hw - 8, ROW_H - 4), Qt.AlignLeft | Qt.AlignVCenter,
+                       size_label(self.tags, size))
+            p.drawText(QRectF(2, y + 2, hw - 8, ROW_H - 4), Qt.AlignRight | Qt.AlignVCenter, bundle_letter(b))
             p.setPen(QPen(dim, 1))
             p.drawLine(0, y + ROW_H, self.width(), y + ROW_H)
             for piece, x, cw in self.cols:

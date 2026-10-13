@@ -91,6 +91,7 @@ class Piece:
     allow_mirror: bool = False
     grain_angle: float | None = None   # deg of grain line in pattern coordinates (None = unknown)
     notes: list[str] = field(default_factory=list)
+    model: str = ""                    # model (file) tag when several models share one session
 
     @staticmethod
     def new_uid() -> str:
