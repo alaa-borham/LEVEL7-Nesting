@@ -41,6 +41,13 @@ _USE = re.compile(r'<use href="#item_\d+_(\d+)" transform="translate\(([-\d.eE+]
                   r'rotate\(([-\d.eE+]+)\)"')
 
 
+def _nice():
+    try:
+        os.nice(5)
+    except OSError:
+        pass
+
+
 def find_binary() -> str | None:
     exe = "sparrow.exe" if os.name == "nt" else "sparrow"
     cands = [os.environ.get("LEVEL7_SPARROW", "")]
@@ -188,9 +195,10 @@ def run(items: list[NestItem], fabric, settings, time_limit: float, progress=Non
         workers = workers or max(1, (os.cpu_count() or 2) - 1)
         cmd = [exe, "-i", path, "-t", str(max(1, int(round(time_limit)))), "-s", str(int(settings.seed)),
                "--workers", str(workers)]
-        flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        # below normal priority (like LEVEL7's own search processes): the windows stay responsive
+        flags = (subprocess.CREATE_NO_WINDOW | subprocess.BELOW_NORMAL_PRIORITY_CLASS) if os.name == "nt" else 0
         proc = subprocess.Popen(cmd, cwd=work, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                creationflags=flags)
+                                creationflags=flags, preexec_fn=None if os.name == "nt" else _nice)
         sols = os.path.join(work, "output", "sols_level7")
         best, best_len, seen = None, None, set()
         stopped = False

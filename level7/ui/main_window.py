@@ -61,10 +61,18 @@ class PlacementStateCommand(QUndoCommand):
 
 
 # -------------------------------------------------------------------------------- worker
+# one nesting run at a time in the whole application: each run already uses every processor core (several
+# search processes + sparrow); runs in several sessions at once overloaded the machine and froze the windows.
+# Later runs wait for their turn; their time limit starts when they actually start.
+_NEST_SLOT = threading.Semaphore(1)
+
+
 class NestWorker(QThread):
     progress = Signal(dict)
     finished_ok = Signal(object, dict)
     failed = Signal(str)
+    waiting = Signal(bool)          # True: queued behind another session's run; False: started
+    cancelled = Signal()            # stopped while still waiting
 
     def __init__(self, project, fabric, settings, cut_order, pinned, placements=None, keep_out=None):
         super().__init__()
@@ -74,6 +82,22 @@ class NestWorker(QThread):
         self.stop_event = threading.Event()
 
     def run(self):
+        queued = False
+        while not _NEST_SLOT.acquire(timeout=0.3):
+            if not queued:
+                queued = True
+                self.waiting.emit(True)
+            if self.stop_event.is_set():
+                self.cancelled.emit()
+                return
+        try:
+            if queued:
+                self.waiting.emit(False)
+            self._run()
+        finally:
+            _NEST_SLOT.release()
+
+    def _run(self):
         from ..service import run_nesting
         try:
             marker, info = run_nesting(self.project, self.fabric, self.settings, self.cut_order, self.pinned,
@@ -1340,6 +1364,8 @@ class MainWindow(QMainWindow):
         self.worker.progress.connect(self.on_progress)
         self.worker.finished_ok.connect(self.on_finished)
         self.worker.failed.connect(lambda e: (self._nest_ui(False), QMessageBox.critical(self, tr("run"), e)))
+        self.worker.waiting.connect(self._nest_waiting)
+        self.worker.cancelled.connect(lambda: (self._nest_ui(False), self.statusBar().showMessage(tr("nest_cancelled"))))
         self._nest_ui(True)
         self.worker.start()
 
@@ -1363,6 +1389,8 @@ class MainWindow(QMainWindow):
         self.worker.progress.connect(self.on_progress)
         self.worker.finished_ok.connect(self.on_finished)
         self.worker.failed.connect(lambda e: (self._nest_ui(False), QMessageBox.critical(self, tr("run"), e)))
+        self.worker.waiting.connect(self._nest_waiting)
+        self.worker.cancelled.connect(lambda: (self._nest_ui(False), self.statusBar().showMessage(tr("nest_cancelled"))))
         self._nest_ui(True)
         self.worker.start()
 
@@ -1427,6 +1455,9 @@ class MainWindow(QMainWindow):
         self.btn_stop.setEnabled(running)
         self.progress_bar.setVisible(running)
         self.progress_bar.setRange(0, 0 if running else 1)
+
+    def _nest_waiting(self, on):
+        self.statusBar().showMessage(tr("nest_waiting") if on else tr("nest_started"))
 
     def stop_nesting(self):
         if self.worker and self.worker.isRunning():

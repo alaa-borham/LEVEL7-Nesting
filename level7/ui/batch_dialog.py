@@ -26,8 +26,10 @@ class BatchWorker(QThread):
         self.stop_event = threading.Event()
 
     def run(self):
+        from .main_window import _NEST_SLOT
         s = batch.run_batch(self.orders, self.outdir, self.plt_cfg, self.iso_cfg, self.default_time,
-                            on_order=lambda k, o: self.order_changed.emit(k), stop_event=self.stop_event)
+                            on_order=lambda k, o: self.order_changed.emit(k), stop_event=self.stop_event,
+                            slot=_NEST_SLOT)
         self.finished_all.emit(s)
 
 

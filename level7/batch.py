@@ -273,9 +273,20 @@ def _stem(name: str) -> str:
     return re.sub(r'[\\/:*?"<>|]+', "_", name).strip() or "marker"
 
 
+def _take_turn(slot, stop_event) -> bool:
+    """Wait until no other nesting run is active (``slot``); False when stopped while waiting."""
+    if slot is None:
+        return True
+    while not slot.acquire(timeout=0.3):
+        if stop_event is not None and stop_event.is_set():
+            return False
+    return True
+
+
 def run_batch(orders: list[MarkerOrder], outdir: str, plt_config=None, iso_config=None, default_time=120.0,
-              on_order=None, progress=None, stop_event=None) -> str:
-    """Process the orders in sequence; a failing order is reported and the next one continues."""
+              on_order=None, progress=None, stop_event=None, slot=None) -> str:
+    """Process the orders in sequence; a failing order is reported and the next one continues.
+    ``slot``: a semaphore shared with other nesting runs of the application (one run at a time)."""
     cache: dict = {}
     used: set = set()
     for o in orders:                   # 'A/B' and 'A:B' must not overwrite each other's files
@@ -291,10 +302,17 @@ def run_batch(orders: list[MarkerOrder], outdir: str, plt_config=None, iso_confi
         t0 = time.monotonic()
         if on_order:
             on_order(k, o)
+        got = _take_turn(slot, stop_event)
+        if not got:
+            o.status, o.message = "failed", "stopped"
+            continue
         try:
             run_order(o, outdir, plt_config, iso_config, default_time, progress, stop_event, cache)
         except Exception as exc:
             o.status, o.message = "failed", str(exc)
+        finally:
+            if slot is not None:
+                slot.release()
         o.message += f" · {time.monotonic() - t0:.0f} s"
         if on_order:
             on_order(k, o)
