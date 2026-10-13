@@ -20,7 +20,7 @@ from .. import __version__
 from ..geometry import bbox, lay_direction, placement_points
 from ..model import FabricSettings, LayType, Marker, NestSettings, Placement, Project
 from ..validation.checker import marker_stats, validate_marker
-from .i18n import LANG, tr
+from .i18n import LANG, T, tr
 from .marker_view import MarkerView
 from .piece_strip import make_strip_area
 from .updates import UpdateManager
@@ -1318,7 +1318,7 @@ class MainWindow(QMainWindow):
         self.marker.stats = {**(self.marker.stats or {}), **marker_stats(self.project, self.marker)}
         self.marker.length = self.marker.stats["length_mm"]
         self.issues_list.clear()
-        self.issues_list.addItems([i.message for i in v.issues][:500] or [v.summary()])
+        self.issues_list.addItems([i.message for i in v.issues][:500] or [self.issues_summary(v)])
         self.unplaced_list.clear()
         for pl in self.marker.placements:
             if not pl.placed:
@@ -1795,7 +1795,7 @@ class MainWindow(QMainWindow):
         self.project.markers.append(marker)
         self.refresh_markers_list(select=len(self.project.markers) - 1)
         v = info["validation"]
-        msg = tr("done", v=v.summary())
+        msg = tr("done", v=self.issues_summary(v, one_line=True))
         if info.get("attempts"):
             msg = tr("best_done", n=len(info["attempts"]),
                      l=" / ".join(f"{L:.0f}" for _s, L, _ok in info["attempts"]), b=marker.length) + " | " + msg
@@ -1803,14 +1803,46 @@ class MainWindow(QMainWindow):
             msg += " | " + "; ".join(info["warnings"])
         self.statusBar().showMessage(msg)
 
+    # -- validation messages -----------------------------------------------------------------
+    def issues_summary(self, v, one_line=False) -> str:
+        """Readable result of the marker check: 'valid' or one line per kind of problem with the pieces' names."""
+        if v.ok:
+            return tr("v_ok", n=v.checked)
+        names = {pl.uid: f"{self.project.piece(pl.piece_uid).name} {pl.size}" for pl in self.marker.placements} \
+            if self.marker else {}
+        lines = []
+        for kind in dict.fromkeys(i.kind for i in v.issues):
+            iss = [i for i in v.issues if i.kind == kind]
+            who = list(dict.fromkeys(names.get(u, u) for i in iss for u in i.placements))
+            more = f" … (+{len(who) - 6})" if len(who) > 6 else ""
+            lines.append(tr("v_line", what=tr("v_" + kind) if ("v_" + kind) in T else kind, n=len(iss))
+                         + (": " + tr("v_sep").join(who[:6]) + more if who else ""))
+        if one_line:
+            return tr("v_bad") + " " + " | ".join(lines)
+        return tr("v_bad") + "\n" + "\n".join("• " + ln for ln in lines)
+
+    def _confirm_invalid(self, v, title) -> bool:
+        """The marker has problems: show them (readable), offer to show the pieces on the marker or go on."""
+        box = QMessageBox(QMessageBox.Warning, title, self.issues_summary(v) + "\n\n" + tr("export_anyway"),
+                          parent=self)
+        b_yes = box.addButton(tr("v_export_anyway"), QMessageBox.AcceptRole)
+        b_show = box.addButton(tr("v_show"), QMessageBox.ActionRole)
+        box.addButton(tr("cancel"), QMessageBox.RejectRole)
+        box.setDefaultButton(b_show)
+        box.exec()
+        if box.clickedButton() is b_show:
+            uids = list(dict.fromkeys(u for i in v.issues for u in i.placements))
+            self.view.show_pieces(uids)
+            return False
+        return box.clickedButton() is b_yes
+
     # -- export ----------------------------------------------------------------------------
     def export(self, fmt):
         if not self.marker:
             return
         v = self.validate_current()
-        if v is not None and not v.ok:
-            if QMessageBox.question(self, tr("export"), v.summary() + "\n\n" + tr("export_anyway")) != QMessageBox.Yes:
-                return
+        if v is not None and not v.ok and not self._confirm_invalid(v, tr("export").replace("&", "")):
+            return
         from ..exporters.iso import MachineProfile
         from ..exporters.plt import PlotterConfig
         from ..service import export_marker
@@ -1848,14 +1880,14 @@ class MainWindow(QMainWindow):
                     return
         ext = {"plt": "PLT (*.plt)", "dxf": "DXF (*.dxf)", "iso": "ISO (*.iso)", "scb": "GRAFIS SCB (*.scb)"}[fmt]
         name = f"{self.project.name}_{self.marker.fabric.width:g}{'_DIAGNOSTIC' if diagnostic else ''}.{fmt}"
-        p, _ = QFileDialog.getSaveFileName(self, tr("export"),
+        p, _ = QFileDialog.getSaveFileName(self, tr("export").replace("&", ""),
                                            os.path.join(self.settings_store.value("export_dir", ""), name), ext)
         if not p:
             return
         try:
             export_marker(self.project, self.marker, fmt, p, cfg, diagnostic_iso=diagnostic)
         except Exception as e:
-            QMessageBox.critical(self, tr("export"), str(e))
+            QMessageBox.critical(self, tr("export").replace("&", ""), str(e))
             return
         self.settings_store.setValue("export_dir", os.path.dirname(p))
         self.statusBar().showMessage(tr("exported", p=p))

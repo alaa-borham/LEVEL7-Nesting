@@ -427,6 +427,19 @@ class MarkerView(QGraphicsView):
             self.horizontalScrollBar().setValue(self.horizontalScrollBar().minimum())
             self.verticalScrollBar().setValue(self.verticalScrollBar().maximum())
 
+    def show_pieces(self, uids):
+        """Select these pieces and bring them to the middle of the view (e.g. the overlapping ones)."""
+        items = [self.items_by_uid[u] for u in uids if u in self.items_by_uid]
+        if not items:
+            return
+        self.scene().clearSelection()
+        for it in items:
+            it.setSelected(True)
+        r = items[0].sceneBoundingRect()
+        for it in items[1:]:
+            r = r.united(it.sceneBoundingRect())
+        self.centerOn(r.center())
+
     def selected_placements(self):
         return [it.placement for it in self.scene().selectedItems() if isinstance(it, PieceItem)]
 
