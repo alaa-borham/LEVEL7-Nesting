@@ -1441,9 +1441,12 @@ class MainWindow(QMainWindow):
         self._show_status(s["length_mm"], s["efficiency_total_width_pct"],
                           s.get("length_per_garment_m", 0) * 1000, s["width_mm"])
 
+    def _fmt_len(self, v: float) -> str:
+        """Lengths in the status bar: one unit for everything (metres, or millimetres in the display options)."""
+        return f"{v:.1f} mm" if self.view.options.get("status_mm") else f"{v / 1000:.2f} m"
+
     def _show_status(self, length, eff, ub, width):
-        mm = self.view.options.get("status_mm")
-        f = (lambda v: f"{v:.1f} mm") if mm else (lambda v: f"{v / 1000:.2f} m")
+        f = self._fmt_len
         self.grafis_status.setText(f"L = {f(length)}   E = {eff:.1f} %   U/B = {f(ub)}   Wi = {f(width)}")
 
     def _live_length(self):
@@ -1607,7 +1610,7 @@ class MainWindow(QMainWindow):
         tot = getattr(self, "_nest_total", 0) or 0
         d = getattr(self, "_last_prog", {}) or {}
         L = d.get("length")
-        msg = tr("running_live", t=el, T=tot, len=f"{L:.1f}" if L else "—")
+        msg = tr("running_live", t=el, T=tot, len=self._fmt_len(L) if L else "—")
         if d.get("attempts", 1) > 1:
             msg = tr("attempt_of", k=d["attempt"], n=d["attempts"]) + "  " + msg
         if d.get("engine") == "sparrow":

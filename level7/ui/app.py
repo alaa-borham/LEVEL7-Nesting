@@ -56,6 +56,12 @@ def main(argv=None):
     from PySide6.QtWidgets import QApplication
 
     argv = sys.argv if argv is None else argv
+    from PySide6.QtCore import QLocale
+    # one number format everywhere (fields, progress, status): Latin digits and "." as decimal point, also in
+    # the Arabic interface (Windows' Arabic locale gave Arabic-Indic digits in some widgets only)
+    loc = QLocale.c()
+    loc.setNumberOptions(QLocale.OmitGroupSeparator)
+    QLocale.setDefault(loc)
     app = QApplication(argv)
     app.setApplicationName("LEVEL7 Nesting")
     app.setOrganizationName("LEVEL7")
