@@ -157,6 +157,17 @@ def _draw(name: str, p: QPainter, fg: QColor):
         f.setBold(True)
         p.setFont(f)
         p.drawText(QRectF(2, 15, 24, 10), Qt.AlignCenter, name.upper())
+    elif name == "results":
+        # bar chart with a check mark
+        for k, (h, col) in enumerate(((10, BLUE), (16, GREEN), (22, ACCENT))):
+            p.setPen(Qt.NoPen)
+            p.setBrush(col)
+            p.drawRect(QRectF(4 + k * 7, 28 - h, 5, h))
+        p.setPen(QPen(fg, 1.4))
+        p.drawLine(QPointF(3, 28.5), QPointF(29, 28.5))
+        p.setPen(QPen(GREEN, 2.4, Qt.SolidLine, Qt.RoundCap))
+        p.drawLine(QPointF(20, 8), QPointF(23, 11))
+        p.drawLine(QPointF(23, 11), QPointF(29, 4))
     elif name == "export":
         # sheet with an arrow leaving it, three format colours
         p.setBrush(QColor(255, 255, 255))

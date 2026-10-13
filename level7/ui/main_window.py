@@ -290,9 +290,9 @@ class MainWindow(QMainWindow):
         rl.addWidget(self.unplaced_list, 1)
         rl.addWidget(self.res_labels[2])
         rl.addWidget(self.issues_list, 1)
-        self.dock_results = QDockWidget(self)
-        self.dock_results.setWidget(r)
-        self.addDockWidget(Qt.RightDockWidgetArea, self.dock_results)
+        # results: drop-down under the toolbar icon "Results" (the marker gets the full width)
+        self.results_popup = TablePopup(self, r, _QSize(460, 640))
+        self.table_popups = self.table_popups + (self.results_popup,)
 
     @staticmethod
     def _dspin(lo, hi, val, dec=1):
@@ -377,7 +377,7 @@ class MainWindow(QMainWindow):
     TOOLBAR = (("open", "open"), ("add_model", "add_model"), ("save", "save"), None, ("undo", None), ("redo", None), None,
                ("rotate180", "rotate180"), ("pin", "pin"), ("measure_tool", "measure"), None,
                ("zoom_fit", "zoom_fit"), ("display_options", "display"), None,
-               ("tab_props", "properties"), ("tab_pieces", "pieces"), ("tab_sizes", "sizes"), ("tab_spacing", "margins"), ("tab_plaid", "plaid"), None,
+               ("tab_props", "properties"), ("tab_results", "results"), ("tab_pieces", "pieces"), ("tab_sizes", "sizes"), ("tab_spacing", "margins"), ("tab_plaid", "plaid"), None,
                ("run", "run"), ("stop", "stop"), ("batch", "batch"), None,
                ("export_menu", "export"), None,
                ("language", "language"))
@@ -402,8 +402,9 @@ class MainWindow(QMainWindow):
         acts["tab_spacing"] = self._act("tab_spacing", lambda: self.show_table_tab(2), checkable=True)
         acts["tab_props"] = self._act("tab_props", lambda: self.show_table_tab(3), checkable=True)
         acts["tab_plaid"] = self._act("tab_plaid", lambda: self.show_table_tab(4), checkable=True)
+        acts["tab_results"] = self._act("tab_results", lambda: self.show_table_tab(5), checkable=True)
         self.tab_actions = (acts["tab_pieces"], acts["tab_sizes"], acts["tab_spacing"], acts["tab_props"],
-                            acts["tab_plaid"])
+                            acts["tab_plaid"], acts["tab_results"])
         # one 'Measure' button: click = measure with the chosen kind, right-click = choose distance / curve
         acts["measure_tool"] = self.act_measure_tool = self._act("measure_tool", self.toggle_measure_tool,
                                                                  checkable=True)
@@ -523,7 +524,7 @@ class MainWindow(QMainWindow):
         self.plaid.retranslate()
         self._measure_icon()
         self.props_popup.title.setText(tr("fabric"))
-        self.dock_results.setWindowTitle(tr("results"))
+        self.results_popup.title.setText(tr("results"))
         self.pieces_table.setHorizontalHeaderLabels([tr(k) for k in ("col_use", "col_name", "col_mat", "col_sizes",
                                                                      "col_count", "col_mirror", "col_grain")])
         for c, k in enumerate(("col_use", "col_name", "col_mat", "col_sizes", "col_count", "col_mirror", "col_grain")):
@@ -1061,15 +1062,15 @@ class MainWindow(QMainWindow):
             return
         self._refresh_strip()
         s = self.marker.stats or marker_stats(self.project, self.marker)
-        lines = [f"{tr('width')}: {s['width_mm']:.1f}  ({s['usable_width_mm']:.1f} usable)",
-                 f"Length: {s['length_mm']:.1f} mm", f"Placed / unplaced: {s['placed']} / {s['unplaced']}",
-                 f"Pieces area: {s['pieces_area_m2']:.4f} m²",
-                 f"Utilisation (total width): {s['efficiency_total_width_pct']:.2f} %",
-                 f"Utilisation (usable width): {s['efficiency_usable_width_pct']:.2f} %",
-                 f"Waste: {s['waste_pct']:.2f} %",
-                 f"Consumption: {s['consumption_m']:.3f} m = {s['consumption_yd']:.3f} yd",
-                 f"Per garment (U/B): {s.get('length_per_garment_m', 0):.3f} m ({s.get('garments', 0)} garments)",
-                 "By size: " + ", ".join(f"{k}: {n}" for k, n in sorted(s["by_size"].items()))]
+        lines = [tr("r_width", w=s["width_mm"], u=s["usable_width_mm"]),
+                 tr("r_length", v=s["length_mm"]), tr("r_placed", p=s["placed"], u=s["unplaced"]),
+                 tr("r_area", v=s["pieces_area_m2"]),
+                 tr("r_eff_total", v=s["efficiency_total_width_pct"]),
+                 tr("r_eff_usable", v=s["efficiency_usable_width_pct"]),
+                 tr("r_waste", v=s["waste_pct"]),
+                 tr("r_consumption", m=s["consumption_m"], y=s["consumption_yd"]),
+                 tr("r_per_garment", v=s.get("length_per_garment_m", 0), n=s.get("garments", 0)),
+                 tr("r_by_size") + ", ".join(f"{k}: {n}" for k, n in sorted(s["by_size"].items()))]
         turned = total = 0
         pieces = {p.uid: p for p in self.project.pieces}
         for pl in self.marker.placements:
@@ -1081,17 +1082,17 @@ class MainWindow(QMainWindow):
         if total:
             lines.append(tr("turned_180", n=turned, t=total))
         if self.marker.compute_time:
-            lines.append(f"Compute time: {self.marker.compute_time:.1f} s, seed {self.marker.seed}")
+            lines.append(tr("r_time", t=self.marker.compute_time, s=self.marker.seed))
         if v is not None:
             lines.append(f"{tr('issues')}: {tr('valid') if v.ok else tr('invalid')}")
         orig = next((m for m in self.project.markers if m.origin == "original"), None)
         if orig is not None and orig is not self.marker:
             so = marker_stats(self.project, orig)
             lines += ["", tr("compare"),
-                      f"  length {so['length_mm']:.1f} → {s['length_mm']:.1f} mm ({s['length_mm'] - so['length_mm']:+.1f})",
-                      f"  width {so['width_mm']:.0f} → {s['width_mm']:.0f} mm",
-                      f"  utilisation {so['efficiency_total_width_pct']:.2f} → {s['efficiency_total_width_pct']:.2f} %",
-                      f"  pieces {so['placed']} → {s['placed']}"]
+                      tr("r_cmp_length", a=so["length_mm"], b=s["length_mm"], d=s["length_mm"] - so["length_mm"]),
+                      tr("r_cmp_width", a=so["width_mm"], b=s["width_mm"]),
+                      tr("r_cmp_eff", a=so["efficiency_total_width_pct"], b=s["efficiency_total_width_pct"]),
+                      tr("r_cmp_pieces", a=so["placed"], b=s["placed"])]
         if self.project.sbinfo:
             lines += ["", "GRAFIS: " + ", ".join(f"{k}={self.project.sbinfo[k]}" for k in
                                                  ("WIDTH", "LENGTH", "EFFCNCY", "USDAREA", "PCSTOTAL", "MODEL")
@@ -1351,7 +1352,7 @@ class MainWindow(QMainWindow):
             return
         v = self.validate_current()
         if v is not None and not v.ok:
-            if QMessageBox.question(self, tr("export"), v.summary() + "\n\nExport anyway?") != QMessageBox.Yes:
+            if QMessageBox.question(self, tr("export"), v.summary() + "\n\n" + tr("export_anyway")) != QMessageBox.Yes:
                 return
         from ..exporters.iso import MachineProfile
         from ..exporters.plt import PlotterConfig
