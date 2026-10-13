@@ -13,12 +13,12 @@ class TablePopup(QFrame):
     def __init__(self, parent, widget, size: QSize):
         super().__init__(parent, Qt.Tool | Qt.FramelessWindowHint)    # stays open, above the main window
         self.setFrameShape(QFrame.StyledPanel)
+        self.setObjectName("panel")                 # rounded panel (themes.py)
+        self.setAttribute(Qt.WA_StyledBackground, True)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(6, 6, 6, 6)
         self.title = QLabel()
-        f = self.title.font()
-        f.setBold(True)
-        self.title.setFont(f)
+        self.title.setObjectName("panelTitle")
         # the title is a handle: drag the panel anywhere on the screen; it reopens where it was left
         self.title.setCursor(Qt.SizeAllCursor)
         self.title.installEventFilter(self)

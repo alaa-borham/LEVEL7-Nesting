@@ -285,13 +285,13 @@ class MainWindow(QMainWindow):
                          ("margin_e", self.f_me), ("buffer_x", self.f_bx),
                          ("buffer_y", self.f_by), ("shrink_x", self.f_shx), ("shrink_y", self.f_shy)):
             lab = QLabel()
-            wid.setFixedWidth(118)
+            wid.setFixedWidth(140)
             self.form_spacing.addRow(lab, wid)
             self.form_fields[key] = wid
             self.form_rows.append((lab, key))
         from PySide6.QtCore import QSize as _QSize
         from .table_popup import TablePopup
-        self.spacing_popup = TablePopup(self, mw, _QSize(290, 290))
+        self.spacing_popup = TablePopup(self, mw, _QSize(320, 330))
         self.table_popups = self.table_popups + (self.spacing_popup,)
         # plaid / stripe matching: fabric repeat + match point per piece
         from .plaid_panel import PlaidPanel
@@ -309,13 +309,14 @@ class MainWindow(QMainWindow):
                          ("parallel", self.f_parallel)):
             lab = QLabel()
             if not isinstance(wid, QCheckBox):
-                wid.setFixedWidth(118)           # compact panel: full explanations are in the tooltips
+                wid.setFixedWidth(140)           # compact panel: full explanations are in the tooltips
             self.form.addRow(lab, wid)
             self.form_fields[key] = wid
             self.form_rows.append((lab, key))
         self.f_mode.currentIndexChanged.connect(self._mode_changed)
         btns = QHBoxLayout()
         self.btn_run = QPushButton()
+        self.btn_run.setObjectName("primary")
         self.btn_stop = QPushButton()
         self.btn_stop.setEnabled(False)
         self.btn_run.clicked.connect(lambda: self.run_nesting())
@@ -324,7 +325,7 @@ class MainWindow(QMainWindow):
         btns.addWidget(self.btn_stop)
         self.form.addRow(btns)
         # nesting properties: drop-down panel under the toolbar icon "Properties" (more room for the marker)
-        self.props_popup = TablePopup(self, w, _QSize(300, 370))
+        self.props_popup = TablePopup(self, w, _QSize(330, 420))
         self.table_popups = self.table_popups + (self.props_popup, self.plaid_popup)
         self.btn_run.clicked.connect(self.props_popup.hide)
 
@@ -448,8 +449,6 @@ class MainWindow(QMainWindow):
         tb.setMovable(False)
         tb.setIconSize(QSize(28, 28))
         tb.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
-        tb.setStyleSheet("QToolBar { spacing: 2px; padding: 2px 4px; }"
-                         "QToolButton { padding: 2px 6px; min-width: 46px; }")
         acts = {k: a for a, k in self.actions_tr}
         acts["undo"], acts["redo"] = undo, redo
         # one "Export" button: its menu holds PLT / DXF / ISO / GRAFIS SCB and the plotter settings
@@ -509,7 +508,6 @@ class MainWindow(QMainWindow):
             t.setMovable(False)
             t.setIconSize(QSize(28, 28))
             t.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
-            t.setStyleSheet(tb.styleSheet())
             rows.append(t)
         self.toolbar = tb
         self.toolbar2 = rows[1]
@@ -521,14 +519,14 @@ class MainWindow(QMainWindow):
     # -- toolbar wrapping ----------------------------------------------------------------------
     def _entry_width(self, e) -> int:
         if e[0] == "sep":
-            return 8
+            return 9
         if e[0] == "theme":
-            return 60
+            return 48
         a = e[1]
         w = self._tb_widths.get(id(a))
         if w is None:
             fm = self.toolbar.fontMetrics()
-            w = max(58, fm.horizontalAdvance(a.iconText().replace("&", "")) + 18)
+            w = max(40, fm.horizontalAdvance(a.iconText().replace("&", "")) + 12)
         return w + 1
 
     def _layout_toolbar(self, force=False):
@@ -536,7 +534,7 @@ class MainWindow(QMainWindow):
         possible); further rows (up to 3) are shown only when needed."""
         if not hasattr(self, "toolbars"):
             return
-        avail = max(200, self.width() - 12)
+        avail = max(200, self.width() - 12 - getattr(self, "_tb_slack", 0))
         rows, cur, acc, last_sep = [], [], 0, None
         for e in self._tb_entries:
             w = self._entry_width(e)
@@ -574,11 +572,25 @@ class MainWindow(QMainWindow):
                     self._add_theme_button(t)
             t.setVisible(bool(entries))
         self._decorate_toolbar()
-        for e in self._tb_entries:                        # real widths for the next layout
+        changed = False
+        for e in self._tb_entries:                        # real widths: lay out again if the estimate was off
             if e[0] == "act":
                 b = self._tool_button(e[1])
                 if b is not None:
-                    self._tb_widths[id(e[1])] = b.sizeHint().width()
+                    w = b.sizeHint().width()
+                    changed |= self._tb_widths.get(id(e[1])) != w
+                    self._tb_widths[id(e[1])] = w
+        # exact check: a row wider than the window would hide icons behind ">>" - move the last group down
+        over = max((t.sizeHint().width() - self.width() for t in self.toolbars if t.isVisible()), default=0)
+        if over > 0 and len(self._tb_entries) and getattr(self, "_tb_slack", 0) < 400:
+            self._tb_slack = getattr(self, "_tb_slack", 0) + over + 4
+            changed = True
+        if changed and not getattr(self, "_tb_again", False):
+            self._tb_again = True
+            try:
+                self._layout_toolbar(force=True)
+            finally:
+                self._tb_again = False
 
     def _add_theme_button(self, t):
         """Theme switch: its own button at the far end of its toolbar row (far left in Arabic)."""
@@ -612,6 +624,9 @@ class MainWindow(QMainWindow):
         b = self._tool_button(acts["export_menu"])
         if b is not None:
             b.setPopupMode(QToolButton.InstantPopup)
+        b = self._tool_button(acts["run"])
+        if b is not None:
+            b.setObjectName("primary")              # the main action stands out (themes.py)
         for action, menu in ((acts["run"], self.m_run), (acts["save"], self.m_save),
                              (self.act_measure_tool, self.m_measure)):
             b = self._tool_button(action)
