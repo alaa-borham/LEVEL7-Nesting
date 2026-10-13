@@ -311,6 +311,7 @@ class MainWindow(QMainWindow):
         self.m_help.addAction(self._act("check_updates", self.check_updates))
         self.act_auto_upd = self._act("auto_updates", self._set_auto_updates, checkable=True, checked=True)
         self.m_help.addAction(self.act_auto_upd)
+        self.m_help.addAction(self._act("compat_report", lambda: self.compatibility_report()))
         self.m_help.addAction(self._act("open_logs", self.open_logs))
         self.m_help.addSeparator()
         self.m_help.addAction(self._act("about", self.about))
@@ -495,6 +496,38 @@ class MainWindow(QMainWindow):
             self.issues_list.addItems(issues[:200])
         self.statusBar().showMessage(msg)
         self.retranslate()
+        compat = [i for i in issues if i.startswith("COMPAT:") or "geometry not available" in i]
+        if compat and path.lower().endswith((".mdl", ".scb")):
+            box = QMessageBox(QMessageBox.Warning, tr("compat_title"), tr("compat_text", n=len(compat)), parent=self)
+            box.setDetailedText("\n".join(compat[:50]))
+            rep = box.addButton(tr("compat_report"), QMessageBox.AcceptRole)
+            box.addButton(QMessageBox.Close)
+            box.exec()
+            if box.clickedButton() is rep:
+                self.compatibility_report(path)
+
+    def compatibility_report(self, path=None):
+        """Inspection report of a GRAFIS file (structure, sections, unknown parts) to send for support."""
+        import json
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        from ..diagnostics.inspector import inspect_file, to_markdown
+        from .app import log_dir
+        if path is None:
+            src = self.project.sources[0].path if self.project and self.project.sources else ""
+            path, _ = QFileDialog.getOpenFileName(self, tr("compat_report"), src, "GRAFIS (*.mdl *.scb *.MDL *.SCB)")
+            if not path:
+                return
+        out = os.path.join(os.path.dirname(log_dir()), "reports")
+        os.makedirs(out, exist_ok=True)
+        rep = inspect_file(path)
+        base = os.path.join(out, os.path.basename(path))
+        with open(base + ".report.json", "w", encoding="utf-8") as fh:
+            json.dump(rep, fh, ensure_ascii=False, indent=1, default=str)
+        with open(base + ".report.md", "w", encoding="utf-8") as fh:
+            fh.write(to_markdown(rep))
+        QMessageBox.information(self, tr("compat_report"), tr("compat_saved", p=base + ".report.md"))
+        QDesktopServices.openUrl(QUrl.fromLocalFile(out))
 
     def load_tables(self):
         p = self.project

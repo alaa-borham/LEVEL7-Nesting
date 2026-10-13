@@ -108,3 +108,15 @@ reconstruction from the SCB within 0.0008 mm; notches, seam lines and texts as d
 Open points (U): u32 check values, placement fields +28, +64..72, flag bit 0x40, blocks (2,4..9)
 except (2,8), construction blocks (3,k,1..6). Bundle 1 = "A", bundle 2 = "B" in the GRAFIS view (C).
 GRAFIS "U/B" = marker length / number of bundles (1.46 m, C).
+
+
+## Differences between GRAFIS versions (see GRAFIS_RELEASES.md)
+* Signature variants seen: VB, VD (earlier files), VA (GRAFIS 26 files, 10/2026). Unknown variants are read
+  block by block and reported as "COMPAT:" notes.
+* #TLIST: flag "*" (MDL, older SCB) or ">" (GRAFIS 26 SCB); GRAFIS 26 SCBs append ` V="<model path>"` after
+  the ID. MDL name column: the two numbers may run together when wide ("basic 2381152").
+* #GRDTAB: older files list the base entry ("__HN40_0") first and the sizes reference it ("28 => __HN40_0");
+  GRAFIS 26 SCBs list all entries alphabetically without references ("2XL" … "XS", "__HN44_0"). The base entry
+  is recognised by its "__" name; a size whose reference is the base entry uses the base geometry.
+* Lines of #TLIST / #GRDTAB / #SBTLIST in an unknown layout are no longer dropped silently: they are reported as
+  "COMPAT:" notes, the GUI warns and offers a compatibility report (Help menu).

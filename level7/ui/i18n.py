@@ -215,6 +215,16 @@ T = {
                         "لم يتم اختيار أي قطعة. فعّل «استخدام» واكتب عدد النسخ في جدول القطع."),
     "empty_material": ("No selected piece has material {m}. Choose another material or '* all materials'.",
                        "لا توجد قطعة مختارة من الخامة {m}. اختر خامة أخرى أو «* كل الخامات»."),
+    "compat_title": ("GRAFIS file version", "إصدار ملف GRAFIS"),
+    "compat_text": ("This file contains {n} part(s) that LEVEL7 has not seen in the GRAFIS versions tested so far "
+                    "(probably a newer GRAFIS version). Check the pieces before nesting.\n\nPlease create a "
+                    "compatibility report and send it together with the file so support can be added.",
+                    "هذا الملف يحتوي على {n} جزء لم يتعرف عليه LEVEL7 في إصدارات GRAFIS التي جُرّبت حتى الآن "
+                    "(غالبًا إصدار أحدث من GRAFIS). راجع القطع قبل التعشيق.\n\nمن فضلك أنشئ تقرير التوافق وأرسله "
+                    "مع الملف لإضافة الدعم."),
+    "compat_report": ("Create compatibility report…", "إنشاء تقرير توافق…"),
+    "compat_saved": ("Report saved:\n{p}\n\nSend it together with the GRAFIS file.",
+                     "تم حفظ التقرير:\n{p}\n\nأرسله مع ملف GRAFIS."),
     "cancel": ("Cancel", "إلغاء"),
 }
 

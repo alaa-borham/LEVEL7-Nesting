@@ -26,7 +26,12 @@ SIGNATURE = b"GRAFIS-Modelldatei"   # followed by a 2-letter variant, e.g. "VB",
 BLOCK_MARK = b"BLO5kenn"
 TRAILER = b"mdlEND_5"
 CHAIN_START = 80
-KNOWN_VARIANTS = ("VB", "VD")
+# signature variants seen in real files (the product version itself is not stored; #VERSION is 1000 in all)
+KNOWN_VARIANTS = {
+    "VA": "GRAFIS 26 (user files vest2027, 10/2026: '>' piece flags, model path, alphabetical size table)",
+    "VB": "earlier GRAFIS (user files Neay blue pants MDL/SCB)",
+    "VD": "earlier GRAFIS (user file Neay blue pants-44-1500.scb)",
+}
 
 
 class GrafisFormatError(Exception):

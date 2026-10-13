@@ -178,6 +178,12 @@ def read_grafis(path: str, encoding: str = DEFAULT_ENCODING, include_constructio
         raise ValueError("text block (2,1,0,0) missing")
     ts = parse_text(tb.payload, encoding)
     kind = "scb" if "SBINFO" in ts.sections else "mdl"
+    # compatibility notes ("COMPAT:"): something this reader has not seen in the tested GRAFIS versions
+    for w in cont.warnings:
+        issues.append(f"COMPAT: {w}")
+    for sec, lines in ts.unparsed.items():
+        issues.append(f"COMPAT: {len(lines)} line(s) of #{sec} in an unknown layout (newer GRAFIS version?), "
+                      f"e.g. {lines[0].strip()[:90]!r}")
     sizes = _size_names(ts)
     blocks = cont.by_id()
     proj = Project(name=os.path.splitext(os.path.basename(path))[0])

@@ -47,3 +47,21 @@ def test_mdl_names_with_merged_number_columns():
     p = read_grafis(MDL).project
     assert next(x for x in p.pieces if x.number == 2).name == "basic"
     assert p.size_names == ["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL"]
+
+
+def test_unknown_layout_is_reported_not_silently_dropped(tmp_path):
+    """A future GRAFIS version: unknown signature variant and an unknown piece-list line give COMPAT notes,
+    and everything that is still understood is read."""
+    from level7.formats.grafis.textsections import parse_text
+    ts = parse_text("#VERSION\r\n1000\r\n#TLIST\r\n ~ 001   name   1 1 O  x O 01 01 ID=0060FB8A01DD5AA1 NEW=\"x\"\r\n"
+                    "%% something new %%\r\n".encode("cp1256"))
+    assert len(ts.tlist) == 1 and ts.tlist[0].name == "name"          # any flag char, any key="value" after ID
+    assert ts.unparsed == {"TLIST": ["%% something new %%"]}
+    data = bytearray(open(SCB, "rb").read())
+    i = data.find(b"GRAFIS-Modelldatei") + len(b"GRAFIS-Modelldatei")
+    data[i:i + 2] = b"VZ"
+    f = tmp_path / "future.scb"
+    f.write_bytes(bytes(data))
+    r = read_grafis(str(f))
+    assert any(x.startswith("COMPAT:") and "VZ" in x for x in r.issues)
+    assert len(r.project.markers[0].placements) == 13                   # still fully read

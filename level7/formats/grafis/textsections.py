@@ -61,6 +61,7 @@ class TextSections:
     sbinfo: dict[str, str] = field(default_factory=dict)
     sbgrlst: list[tuple[int, str]] = field(default_factory=list)
     sbtlist: list[SBTListEntry] = field(default_factory=list)
+    unparsed: dict[str, list[str]] = field(default_factory=dict)   # section -> lines in an unknown layout
 
 
 _SEC = re.compile(r"^#([A-Z]+[A-Z0-9]*)\s*$")
@@ -86,10 +87,14 @@ def parse_text(payload: bytes, encoding: str = DEFAULT_ENCODING) -> TextSections
         m = re.match(r"\s*>\s*(\d+)\s+(\S+)(?:\s*=>\s*(\S+))?", line)
         if m:
             ts.sizes.append(SizeEntry(int(m.group(1)), m.group(2), m.group(3)))
+        elif line.strip():
+            ts.unparsed.setdefault("GRDTAB", []).append(line)
     for line in ts.sections.get("TLIST", []):
         e = _parse_tlist_line(line)
         if e:
             ts.tlist.append(e)
+        elif line.strip():
+            ts.unparsed.setdefault("TLIST", []).append(line)
     for key, lines in ts.sections.items():
         m = re.match(r"(TFLIST|BFLIST)(\d+)$", key)
         if m:
@@ -113,12 +118,14 @@ def parse_text(payload: bytes, encoding: str = DEFAULT_ENCODING) -> TextSections
         if m:
             ts.sbtlist.append(SBTListEntry(int(m.group(1)), m.group(2).strip(), int(m.group(3)), int(m.group(4)),
                                            m.group(5), m.group(6).split()))
+        elif line.strip():
+            ts.unparsed.setdefault("SBTLIST", []).append(line)
     return ts
 
 
 # leading flag: "*" (MDL, SCB of older GRAFIS) or ">" (SCB of newer GRAFIS); newer SCBs also append the model
 # path after the ID:  ' > 014   name   1 1 O  x O 01 01 ID=0060FB8A01DD5AA1 V="A:\\vest\\vest.mdl"'
-_TL = re.compile(r'^\s*([*>]?)\s*(\d{3})\s(x|\s)\s(.*?)\s+ID=([0-9A-Fa-f]+)(?:\s+V="[^"]*")?\s*$')
+_TL = re.compile(r'^\s*([^\w\s]?)\s*(\d{3})\s(x|\s)\s(.*?)\s+ID=([0-9A-Fa-f]+)(?:\s+[A-Z]+="[^"]*")*\s*$')
 
 
 def _parse_tlist_line(line: str) -> TListEntry | None:
