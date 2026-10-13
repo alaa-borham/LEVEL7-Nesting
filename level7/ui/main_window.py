@@ -214,6 +214,8 @@ class MainWindow(QMainWindow):
         from .row_select import RowSelect
         self._row_select = RowSelect(self.pieces_table)
         self.pieces_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.pieces_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.pieces_table.customContextMenuRequested.connect(self._pieces_menu)
         self.pieces_table.itemChanged.connect(
             lambda it: (self._refresh_material_groups(), self._table_edited()) if it.column() == 0 else None)
         self.sizes_table = QTableWidget(0, 2)
@@ -1071,13 +1073,10 @@ class MainWindow(QMainWindow):
             t.setItem(r, 0, use)
             t.setItem(r, 1, QTableWidgetItem(f"{pc.number or ''} {pc.name}" + (f"   [{pc.model}]" if pc.model else "")))
             t.setItem(r, 2, QTableWidgetItem(""))
-            mat = QComboBox()                       # material of the part: choose or type a new code
-            mat.setEditable(True)
-            mat.addItems(all_mats)
-            mat.setCurrentText(pc.material or "")
+            mat = QComboBox()                       # material of the part: a list (click opens it) + "New material…"
+            self._fill_material_box(mat, all_mats, pc.material)
             mat.setToolTip(tr("material_tip"))
-            mat.currentTextChanged.connect(lambda _t: self._refresh_material_groups())
-            mat.currentTextChanged.connect(self._table_edited)
+            mat.activated.connect(lambda _i, b=mat: self._material_chosen(b))
             t.setCellWidget(r, 2, mat)
             t.setItem(r, 3, QTableWidgetItem(str(len(pc.sizes))))
             for col, val in ((4, n or pc.default_count), (5, m if (n or m) else pc.default_mirrored)):
@@ -1110,6 +1109,73 @@ class MainWindow(QMainWindow):
             st.setCellWidget(r, 1, sp)
         self._refresh_material_groups(co.material)
 
+    # -- material of the parts (pieces table) ------------------------------------------------------
+    NEW_MATERIAL = "\x00new"
+
+    def _fill_material_box(self, box, codes, current):
+        box.blockSignals(True)
+        box.clear()
+        box.addItem(tr("mat_none"), "")
+        for c in codes:
+            box.addItem(c, c)
+        box.addItem(tr("mat_new"), self.NEW_MATERIAL)
+        box.setCurrentIndex(max(0, box.findData(current or "")))
+        box.setProperty("material", current or "")
+        box.blockSignals(False)
+
+    def _material_codes(self):
+        t = self.pieces_table
+        codes = {t.cellWidget(r, 2).property("material") for r in range(t.rowCount()) if t.cellWidget(r, 2)}
+        return sorted({c for c in codes if c} | {"O", "F"})
+
+    def _ask_material(self):
+        from PySide6.QtWidgets import QInputDialog
+        code, ok = QInputDialog.getText(self, tr("mat_new_title"), tr("mat_new_prompt"))
+        code = code.strip().upper() if ok else ""
+        return code[:8] or None
+
+    def _set_materials(self, rows, code):
+        """Give these rows of the pieces table the material code ('' = none); every list knows a new code."""
+        t = self.pieces_table
+        codes = sorted(set(self._material_codes()) | ({code} if code else set()))
+        for r in range(t.rowCount()):
+            b = t.cellWidget(r, 2)
+            if b is not None:
+                self._fill_material_box(b, codes, code if r in rows else b.property("material"))
+        self._refresh_material_groups()
+        self._table_edited()
+
+    def _material_chosen(self, box):
+        code = box.currentData()
+        if code == self.NEW_MATERIAL:
+            code = self._ask_material()
+            if code is None:                              # cancelled: back to the material it had
+                box.setCurrentIndex(max(0, box.findData(box.property("material") or "")))
+                return
+        self._set_materials({int(box.property("row"))} if box.property("row") is not None else
+                            {r for r in range(self.pieces_table.rowCount()) if self.pieces_table.cellWidget(r, 2) is box},
+                            code)
+
+    def _pieces_menu(self, pos):
+        """Right-click in the pieces table: material for all selected parts at once."""
+        from PySide6.QtWidgets import QMenu
+        t = self.pieces_table
+        rows = {i.row() for i in t.selectedIndexes()}
+        r0 = t.rowAt(pos.y())
+        if r0 >= 0 and r0 not in rows:
+            rows = {r0}
+            t.selectRow(r0)
+        if not rows:
+            return
+        m = QMenu(self)
+        sub = m.addMenu(tr("mat_set_selected", n=len(rows)))
+        for c in self._material_codes():
+            sub.addAction(c, lambda c=c: self._set_materials(rows, c))
+        sub.addAction(tr("mat_none"), lambda: self._set_materials(rows, ""))
+        sub.addSeparator()
+        sub.addAction(tr("mat_new"), lambda: (lambda c: c and self._set_materials(rows, c))(self._ask_material()))
+        m.exec(t.viewport().mapToGlobal(pos))
+
     def _refresh_material_groups(self, select=None):
         """Material to nest: the material codes used by the pieces of the file (as assigned in the pieces table),
         with the GRAFIS material name when the file has one (SCB: MATERIAL<code>) and the number of pieces."""
@@ -1117,8 +1183,9 @@ class MainWindow(QMainWindow):
         for r in range(self.pieces_table.rowCount()):
             w = self.pieces_table.cellWidget(r, 2)
             use = self.pieces_table.item(r, 0)
-            if w is not None and w.currentText().strip() and use is not None and use.checkState() == Qt.Checked:
-                counts[w.currentText().strip()] = counts.get(w.currentText().strip(), 0) + 1
+            code = w.property("material") if w is not None else None
+            if code and use is not None and use.checkState() == Qt.Checked:
+                counts[code] = counts.get(code, 0) + 1
         names = {k[len("MATERIAL"):]: v for k, v in ((self.project.sbinfo or {}) if self.project else {}).items()
                  if k.startswith("MATERIAL") and len(k) > len("MATERIAL")}
         cur = select if select is not None else self.f_material.currentData()
@@ -1141,7 +1208,7 @@ class MainWindow(QMainWindow):
             use = self.pieces_table.item(r, 0).checkState() == Qt.Checked
             mat_w = self.pieces_table.cellWidget(r, 2)
             if mat_w is not None:
-                pc.material = mat_w.currentText().strip() or None
+                pc.material = mat_w.property("material") or None
             n = self.pieces_table.cellWidget(r, 4).value()
             m = self.pieces_table.cellWidget(r, 5).value()
             co.piece_counts[uid] = (n, m) if use else (0, 0)

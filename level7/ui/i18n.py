@@ -316,8 +316,15 @@ T = {
                  "تشغيل أو إيقاف العناصر لا يغيّر صيغة الملف. لا تغيّر «إعدادات متقدمة» إلا إذا احتاجها برنامج البلوتر."),
     "plt_advanced": ("Advanced (file format)", "إعدادات متقدمة (صيغة الملف)"),
     "plt_reset": ("Recommended settings", "الإعدادات الموصى بها"),
-    "material_tip": ("Material of this part (O = upper fabric, F = lining …); choose or type a new code",
-                     "خامة هذه القطعة (O = القماش الأساسي، F = البطانة …)؛ اختر أو اكتب رمزًا جديدًا"),
+    "material_tip": ("Material of this part (O = upper fabric, F = lining …): click to choose, or 'New material…'. "
+                     "Right-click the table to set it for all selected parts.",
+                     "خامة هذه القطعة (O = القماش الأساسي، F = البطانة …): اضغط للاختيار أو «خامة جديدة…». "
+                     "الزر الأيمن على الجدول يعيّن الخامة لكل القطع المحددة مرة واحدة."),
+    "mat_none": ("— none —", "— بدون —"),
+    "mat_new": ("New material…", "خامة جديدة…"),
+    "mat_new_title": ("New material", "خامة جديدة"),
+    "mat_new_prompt": ("Material code (e.g. D, K, V):", "رمز الخامة (مثل D أو K أو V):"),
+    "mat_set_selected": ("Material for the {n} selected parts", "الخامة للقطع المحددة ({n})"),
     "engine": ("Nesting engine", "محرك التعشيق"),
     "engine_auto": ("Automatic (sparrow)", "تلقائي (sparrow)"),
     "engine_builtin": ("LEVEL7 only", "LEVEL7 فقط"),
