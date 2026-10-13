@@ -141,7 +141,8 @@ class MainWindow(QMainWindow):
         self._build_actions()
         from .status_bar import StatusBar
         self.setStatusBar(StatusBar(self))
-        self.grafis_status = QLabel()
+        from .status_bar import StatChips
+        self.grafis_status = StatChips()            # L / E / U/B / Wi, each in its own box
         self._load_display_options()
         self.progress_bar = QProgressBar()
         self.progress_bar.setMaximumWidth(220)
@@ -1457,7 +1458,7 @@ class MainWindow(QMainWindow):
     def update_status_line(self):
         """GRAFIS-style status: L, E, U/B, Wi (metres, or millimetres if chosen)."""
         if not self.marker or "length_mm" not in (self.marker.stats or {}):
-            self.grafis_status.setText("")
+            self.grafis_status.clear()
             return
         s = self.marker.stats
         self._show_status(s["length_mm"], s["efficiency_total_width_pct"],
@@ -1469,7 +1470,7 @@ class MainWindow(QMainWindow):
 
     def _show_status(self, length, eff, ub, width):
         f = self._fmt_len
-        self.grafis_status.setText(f"L = {f(length)}   E = {eff:.1f} %   U/B = {f(ub)}   Wi = {f(width)}")
+        self.grafis_status.set_values({"L": f(length), "E": f"{eff:.1f} %", "U/B": f(ub), "Wi": f(width)})
 
     def _live_length(self):
         """While a piece is dragged: L / E / U/B from the current piece positions (no validation)."""

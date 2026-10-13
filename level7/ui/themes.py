@@ -100,6 +100,8 @@ QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
 
 QStatusBar {{ background: {_rgb(c['panel'])}; border-top: 1px solid {_rgb(c['border'])}; color: {_rgb(txt)}; }}
 QStatusBar::item {{ border: none; }}
+QLabel#statChip {{ background: {_rgb(c['base'])}; border: 1px solid {_rgb(c['border'])}; border-radius: 7px;
+    padding: 2px 10px; margin: 2px 0; }}
 QProgressBar {{ background: {_rgb(c['base'])}; border: 1px solid {_rgb(c['border'])}; border-radius: 7px;
     text-align: center; color: {_rgb(txt)}; min-height: 16px; }}
 QProgressBar::chunk {{ background: {_rgb(acc)}; border-radius: 6px; }}
