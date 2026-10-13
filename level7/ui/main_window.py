@@ -115,6 +115,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.sessions = sessions          # SessionManager (several windows), None when used stand-alone
         self.settings_store = QSettings("LEVEL7", "Nesting")
+        from .wheel_guard import install as _wheel_guard
+        _wheel_guard()                            # the mouse wheel never changes a table value by accident
         LANG["current"] = self.settings_store.value("lang", "ar")
         self.project: Project | None = None
         self.project_path: str | None = None
@@ -1690,6 +1692,8 @@ class MainWindow(QMainWindow):
             return
         tmp = Marker(name="(running)", fabric=self.fabric_from_form(), placements=r.placements, length=r.length)
         self.view.show_marker(self.project, tmp)
+        self.strip.set_data(self.project, tmp)      # the strip follows the live result (placed = not to place)
+        self._strip_height()
 
     def on_finished(self, marker, info):
         self.mark_dirty()
