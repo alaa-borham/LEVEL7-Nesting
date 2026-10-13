@@ -469,17 +469,19 @@ class MainWindow(QMainWindow):
             pop.closed.connect(self._sync_tab_actions)
         self.m_view.addActions(list(self.tab_actions))
         self.toolbar_items = []
+        self._tb_entries = []                    # ("act", action) / ("sep",) / ("theme",), in toolbar order
         for item in self.TOOLBAR:
             if item is None:
-                tb.addSeparator()
+                self._tb_entries.append(("sep",))
                 continue
             key, ic = item
             a = acts[key]
             a.setIcon(icon(ic or key))
-            tb.addAction(a)
+            self._tb_entries.append(("act", a))
             self.toolbar_items.append((a, key))
-        from PySide6.QtWidgets import QMenu, QToolButton as _QTB
-        tb.widgetForAction(acts["export_menu"]).setPopupMode(_QTB.InstantPopup)
+        self._tb_entries.append(("theme",))
+        from PySide6.QtWidgets import QMenu
+        self._acts = acts
         self.m_measure = QMenu(self)
         self.m_measure.addAction(self.act_measure)
         self.m_measure.addAction(self.act_measure_curve)
@@ -491,34 +493,135 @@ class MainWindow(QMainWindow):
                                   "Ctrl+F5")
         self.m_run.addAction(self.act_best)
         self.m_nest.addAction(self.act_best)
-        rb = tb.widgetForAction(acts["run"])
-        rb.setContextMenuPolicy(Qt.CustomContextMenu)
-        rb.customContextMenuRequested.connect(lambda pos, b=rb: self.m_run.exec(b.mapToGlobal(pos)))
         # Save: right-click offers Save / Save as… (like Measure)
         self.m_save = QMenu(self)
         for a, k in self.actions_tr:
             if k in ("save", "save_as", "save_scb"):
                 self.m_save.addAction(a)
-        sb = tb.widgetForAction(acts["save"])
-        sb.setContextMenuPolicy(Qt.CustomContextMenu)
-        sb.customContextMenuRequested.connect(lambda pos, b=sb: self.m_save.exec(b.mapToGlobal(pos)))
-        mb = tb.widgetForAction(self.act_measure_tool)
-        mb.setContextMenuPolicy(Qt.CustomContextMenu)
-        mb.customContextMenuRequested.connect(lambda pos, b=mb: self.m_measure.exec(b.mapToGlobal(pos)))
         self.measure_kind = "curve" if self.settings_store.value("measure_kind", "line") == "curve" else "line"
-        # theme switch: its own button at the far end of the toolbar (far left in Arabic)
+        # extra rows: used only when the window is too narrow for one row (icons wrap instead of hiding)
+        rows = [tb]
+        for k in (2, 3):
+            self.addToolBarBreak(Qt.TopToolBarArea)
+            t = self.addToolBar(f"main{k}")
+            t.setObjectName(f"main{k}")
+            t.setMovable(False)
+            t.setIconSize(QSize(28, 28))
+            t.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+            t.setStyleSheet(tb.styleSheet())
+            rows.append(t)
+        self.toolbar = tb
+        self.toolbar2 = rows[1]
+        self.toolbars = rows
+        self._tb_split = None
+        self._tb_widths: dict = {}
+        self._layout_toolbar(force=True)
+
+    # -- toolbar wrapping ----------------------------------------------------------------------
+    def _entry_width(self, e) -> int:
+        if e[0] == "sep":
+            return 8
+        if e[0] == "theme":
+            return 60
+        a = e[1]
+        w = self._tb_widths.get(id(a))
+        if w is None:
+            fm = self.toolbar.fontMetrics()
+            w = max(58, fm.horizontalAdvance(a.iconText().replace("&", "")) + 18)
+        return w + 1
+
+    def _layout_toolbar(self, force=False):
+        """Fill each toolbar row with as many icons as fit the window width (cut at a group separator when
+        possible); further rows (up to 3) are shown only when needed."""
+        if not hasattr(self, "toolbars"):
+            return
+        avail = max(200, self.width() - 12)
+        rows, cur, acc, last_sep = [], [], 0, None
+        for e in self._tb_entries:
+            w = self._entry_width(e)
+            if acc + w > avail and cur and len(rows) < len(self.toolbars) - 1:
+                if last_sep is not None and last_sep > len(cur) // 2:     # wrap at the group boundary
+                    rows.append(cur[:last_sep])
+                    cur = cur[last_sep + 1:]
+                else:
+                    rows.append(cur)
+                    cur = []
+                acc = sum(self._entry_width(x) for x in cur)
+                last_sep = None
+            if e[0] == "sep":
+                if not cur:
+                    continue
+                last_sep = len(cur)
+            cur.append(e)
+            acc += w
+        rows.append(cur)
+        sig = tuple(len(r) for r in rows)
+        if sig == self._tb_split and not force:
+            return
+        self._tb_split = sig
+        for t in self.toolbars:
+            for a in t.actions():            # not clear(): that deleted the undo / redo actions
+                t.removeAction(a)
+        for i, t in enumerate(self.toolbars):
+            entries = rows[i] if i < len(rows) else []
+            for e in entries:
+                if e[0] == "sep":
+                    t.addSeparator()
+                elif e[0] == "act":
+                    t.addAction(e[1])
+                else:
+                    self._add_theme_button(t)
+            t.setVisible(bool(entries))
+        self._decorate_toolbar()
+        for e in self._tb_entries:                        # real widths for the next layout
+            if e[0] == "act":
+                b = self._tool_button(e[1])
+                if b is not None:
+                    self._tb_widths[id(e[1])] = b.sizeHint().width()
+
+    def _add_theme_button(self, t):
+        """Theme switch: its own button at the far end of its toolbar row (far left in Arabic)."""
+        from PySide6.QtCore import QSize
         from PySide6.QtWidgets import QSizePolicy, QToolButton
+
+        from .icons import icon
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        tb.addWidget(spacer)
+        t.addWidget(spacer)
         self.theme_button = QToolButton()
         self.theme_button.setIcon(icon("theme"))
         self.theme_button.setIconSize(QSize(28, 28))
         self.theme_button.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
         self.theme_button.setPopupMode(QToolButton.InstantPopup)
         self.theme_button.setMenu(self.m_theme)
-        tb.addWidget(self.theme_button)
-        self.toolbar = tb
+        self.theme_button.setText(tr("theme"))
+        self.theme_button.setToolTip(tr("theme"))
+        t.addWidget(self.theme_button)
+
+    def _tool_button(self, action):
+        for t in getattr(self, "toolbars", []):
+            if action in t.actions():
+                return t.widgetForAction(action)
+        return None
+
+    def _decorate_toolbar(self):
+        """Buttons are recreated when the rows change: menus / right-click menus again."""
+        from PySide6.QtWidgets import QToolButton
+        acts = self._acts
+        b = self._tool_button(acts["export_menu"])
+        if b is not None:
+            b.setPopupMode(QToolButton.InstantPopup)
+        for action, menu in ((acts["run"], self.m_run), (acts["save"], self.m_save),
+                             (self.act_measure_tool, self.m_measure)):
+            b = self._tool_button(action)
+            if b is not None and not b.property("l7_menu"):
+                b.setProperty("l7_menu", True)
+                b.setContextMenuPolicy(Qt.CustomContextMenu)
+                b.customContextMenuRequested.connect(lambda pos, b=b, m=menu: m.exec(b.mapToGlobal(pos)))
+
+    def resizeEvent(self, ev):
+        super().resizeEvent(ev)
+        self._layout_toolbar()
 
     def createPopupMenu(self):
         return None        # no toolbar/dock list on right-click: the toolbar buttons have their own menus
@@ -532,7 +635,7 @@ class MainWindow(QMainWindow):
             for other in self.table_popups:
                 other.hide()
             action = self.tab_actions[index]
-            pop.show_below(self.toolbar.widgetForAction(action) if hasattr(self, "toolbar") else None)
+            pop.show_below(self._tool_button(action) if hasattr(self, "toolbar") else None)
         self._sync_tab_actions()
 
     def _sync_tab_actions(self):
@@ -552,7 +655,8 @@ class MainWindow(QMainWindow):
             a.setIcon(icon(dict((k, i) for k, i in (x for x in self.TOOLBAR if x)).get(key) or key))
         self._measure_icon()
         self.theme_button.setIcon(icon("theme"))
-        self.toolbar.setStyleSheet(self.toolbar.styleSheet())   # re-polish with the new palette
+        for t in self.toolbars:
+            t.setStyleSheet(t.styleSheet())                     # re-polish with the new palette
         for w in QApplication.instance().allWidgets():
             w.update()
         self.view.apply_theme()
@@ -564,6 +668,8 @@ class MainWindow(QMainWindow):
             sc = a.shortcut().toString(QKeySequence.NativeText)
             a.setToolTip(a.text().replace("&", "") + (f"  ({sc})" if sc else ""))
         self._measure_icon()
+        self._tb_widths = {}                     # texts changed: measure again and re-wrap the rows
+        self._layout_toolbar(force=True)
 
     def retranslate(self):
         rtl = LANG["current"] == "ar"
