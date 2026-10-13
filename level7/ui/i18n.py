@@ -244,6 +244,14 @@ T = {
                     "Rule of thumb: about 3-4 cores per nesting.",
                     "عدد التعشيقات (الجلسات / قائمة الماركرات) التي تعمل في نفس الوقت. أنوية المعالج تُقسَّم بينها: "
                     "عدد أكبر = كل واحد أبطأ. الباقي ينتظر دوره. القاعدة: حوالي 3–4 أنوية لكل تعشيق."),
+    "best_of": ("Attempts (best result)", "محاولات (أفضل نتيجة)"),
+    "ft_best_of": ("Best result: nest this many times one after the other with different seeds (each with the full "
+                   "time limit) and keep the shortest valid marker. Total time = attempts x time.",
+                   "أفضل نتيجة: التعشيق بهذا العدد من المحاولات واحدة بعد الأخرى ببذور مختلفة (كل محاولة بزمن البحث "
+                   "كاملًا)، ويُحفظ أقصر ماركر صحيح. الوقت الكلي = المحاولات × زمن البحث."),
+    "best_result": ("Best result (several attempts, shortest wins)", "أفضل نتيجة (عدة محاولات، يُحفظ الأقصر)"),
+    "attempt_of": ("Attempt {k}/{n}:", "محاولة {k}/{n}:"),
+    "best_done": ("Best of {n} attempts ({l} mm) -> {b:.1f} mm", "أفضل {n} محاولات ({l} مم): الأقصر {b:.1f} مم"),
     "tab_spacing": ("Margins, buffers and shrinkage", "الهوامش والبفر والانكماش"),
     "tb_tab_spacing": ("Margins", "الهوامش"),
     "measure_tool": ("Measure", "قياس"), "tb_measure_tool": ("Measure", "قياس"),
@@ -344,9 +352,9 @@ T = {
     "batch_time": ("Default time per marker:", "الوقت الافتراضي لكل ماركر:"),
     "batch_time_tip": ("Used when the list has no 'time' column value for a marker",
                        "يُستخدم إذا لم يكن في القائمة وقت للماركر"),
-    "batch_hint": ("Columns: marker, file, size, qty, width, material, formats (plt;dxf;iso;scb), time, spacing; optional buffer_x, buffer_y, shrink_x, shrink_y — one "
+    "batch_hint": ("Columns: marker, file, size, qty, width, material, formats (plt;dxf;iso;scb), time, spacing; optional buffer_x, buffer_y, shrink_x, shrink_y, attempts — one "
                    "row per marker/file/size. Use 'Save example list' for a ready template.",
-                   "الأعمدة: ماركر، ملف، مقاس، كمية، عرض، خامة، صيغ (plt;dxf;iso;scb)، وقت، مسافة؛ واختياريًا: بفر طول، بفر عرض، انكماش طول، انكماش عرض — سطر لكل ماركر/ملف/مقاس. "
+                   "الأعمدة: ماركر، ملف، مقاس، كمية، عرض، خامة، صيغ (plt;dxf;iso;scb)، وقت، مسافة؛ واختياريًا: بفر طول، بفر عرض، انكماش طول، انكماش عرض، محاولات — سطر لكل ماركر/ملف/مقاس. "
                    "استخدم «حفظ نموذج قائمة» للحصول على نموذج جاهز."),
     "batch_loaded": ("{n} markers in {p}. Output folder: {o}", "{n} ماركر في {p}. مجلد الحفظ: {o}"),
     "batch_close": ("Close", "إغلاق"),

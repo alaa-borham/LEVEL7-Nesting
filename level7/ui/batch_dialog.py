@@ -19,17 +19,18 @@ class BatchWorker(QThread):
     order_changed = Signal(int)
     finished_all = Signal(str)
 
-    def __init__(self, orders, outdir, plt_cfg, iso_cfg, default_time):
+    def __init__(self, orders, outdir, plt_cfg, iso_cfg, default_time, default_attempts=1):
         super().__init__()
         self.orders, self.outdir = orders, outdir
         self.plt_cfg, self.iso_cfg, self.default_time = plt_cfg, iso_cfg, default_time
+        self.default_attempts = default_attempts
         self.stop_event = threading.Event()
 
     def run(self):
         from ..nesting.slots import NEST_SLOTS
         s = batch.run_batch(self.orders, self.outdir, self.plt_cfg, self.iso_cfg, self.default_time,
                             on_order=lambda k, o: self.order_changed.emit(k), stop_event=self.stop_event,
-                            slot=NEST_SLOTS)
+                            slot=NEST_SLOTS, default_attempts=self.default_attempts)
         self.finished_all.emit(s)
 
 
@@ -57,6 +58,12 @@ class BatchDialog(QDialog):
             top.addWidget(b)
         top.addWidget(QLabel(tr("batch_time")))
         top.addWidget(self.time)
+        self.attempts = QSpinBox()            # best result: attempts per marker, shortest kept
+        self.attempts.setRange(1, 10)
+        self.attempts.setValue(int(window.f_best.value()))
+        self.attempts.setToolTip(tr("ft_best_of"))
+        top.addWidget(QLabel(tr("best_of")))
+        top.addWidget(self.attempts)
         top.addStretch(1)
         v.addLayout(top)
         self.info = QLabel(tr("batch_hint"))
@@ -162,7 +169,7 @@ class BatchDialog(QDialog):
             o.status, o.message, o.length_mm, o.efficiency, o.outputs = "pending", "", None, None, []
         self.fill()
         self.worker = BatchWorker(self.orders, self.outdir, self.w.plt_config(), ISO_PRESETS["bullmer_grafis"](),
-                                  float(self.time.value()))
+                                  float(self.time.value()), int(self.attempts.value()))
         self.worker.order_changed.connect(lambda k: self.fill())
         self.worker.finished_all.connect(self._finished)
         self.worker.start()

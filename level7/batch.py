@@ -39,8 +39,9 @@ HEADERS = {
     "buffer_y": ("buffer_y", "بفر عرض", "بفر Y", "بفر_عرض"),
     "shrink_x": ("shrink_x", "انكماش طول", "انكماش_طول"),
     "shrink_y": ("shrink_y", "انكماش عرض", "انكماش_عرض"),
+    "attempts": ("attempts", "محاولات", "best_of"),
 }
-NUMERIC = ("width", "time", "spacing", "buffer_x", "buffer_y", "shrink_x", "shrink_y")
+NUMERIC = ("width", "time", "spacing", "buffer_x", "buffer_y", "shrink_x", "shrink_y", "attempts")
 FORMATS = ("plt", "dxf", "iso", "scb")
 
 
@@ -64,6 +65,7 @@ class MarkerOrder:
     buffer_y: float | None = None
     shrink_x: float | None = None          # %
     shrink_y: float | None = None
+    attempts: float | None = None          # best result: attempts per marker (shortest wins)
     engine: str | None = None
     file_stem: str = ""                    # output file name (unique within the batch)
     # results
@@ -221,7 +223,7 @@ def build_project(order: MarkerOrder, cache: dict | None = None):
 
 
 def run_order(order: MarkerOrder, outdir: str, plt_config=None, iso_config=None, default_time=120.0,
-              progress=None, stop_event=None, cache=None, workers=None):
+              progress=None, stop_event=None, cache=None, workers=None, default_attempts=1):
     from . import service
     from .model import FabricSettings, NestSettings
     from .project_storage.store import save_project
@@ -230,7 +232,8 @@ def run_order(order: MarkerOrder, outdir: str, plt_config=None, iso_config=None,
     fabric = FabricSettings(width=float(order.width), spacing=float(order.spacing or 0.0),
                             buffer_x=float(order.buffer_x or 0.0), buffer_y=float(order.buffer_y or 0.0),
                             shrink_x=float(order.shrink_x or 0.0), shrink_y=float(order.shrink_y or 0.0))
-    st = NestSettings(time_limit=float(order.time or default_time), seed=1, engine=order.engine or "auto")
+    st = NestSettings(time_limit=float(order.time or default_time), seed=1, engine=order.engine or "auto",
+                      best_of=max(1, int(order.attempts or default_attempts or 1)))
     marker, info = service.run_nesting(proj, fabric, st, progress=progress, stop_event=stop_event, name=order.name,
                                        workers=workers)
     unplaced = [p for p in marker.placements if not p.placed]
@@ -285,7 +288,7 @@ def _take_turn(slot, stop_event) -> bool:
 
 
 def run_batch(orders: list[MarkerOrder], outdir: str, plt_config=None, iso_config=None, default_time=120.0,
-              on_order=None, progress=None, stop_event=None, slot=None) -> str:
+              on_order=None, progress=None, stop_event=None, slot=None, default_attempts=1) -> str:
     """Process the orders in sequence; a failing order is reported and the next one continues.
     ``slot``: a semaphore shared with other nesting runs of the application (one run at a time)."""
     cache: dict = {}
@@ -309,7 +312,8 @@ def run_batch(orders: list[MarkerOrder], outdir: str, plt_config=None, iso_confi
             continue
         try:
             run_order(o, outdir, plt_config, iso_config, default_time, progress, stop_event, cache,
-                      workers=slot.workers() if slot is not None and hasattr(slot, "workers") else None)
+                      workers=slot.workers() if slot is not None and hasattr(slot, "workers") else None,
+                      default_attempts=default_attempts)
         except Exception as exc:
             o.status, o.message = "failed", str(exc)
         finally:

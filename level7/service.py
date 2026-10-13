@@ -263,7 +263,42 @@ def run_nesting(proj: Project, fabric: FabricSettings, settings: NestSettings, c
                 pinned=None, progress=None, stop_event: threading.Event | None = None, workers: int | None = None,
                 name: str | None = None, placements=None, keep_out=None) -> tuple[Marker, dict]:
     """Nest the cut order - or, with ``placements``, re-nest exactly those copies (pieces left in a marker);
-    ``keep_out`` (copies the user took out of the marker) stay in the result as not placed."""
+    ``keep_out`` (copies the user took out of the marker) stay in the result as not placed.
+
+    ``settings.best_of`` > 1 ("best result"): that many attempts one after the other with different seeds (each
+    with the full time limit); the valid marker with the fewest unplaced pieces and the shortest length wins."""
+    from dataclasses import replace
+    n = max(1, int(getattr(settings, "best_of", 1) or 1))
+    if n == 1:
+        return _run_once(proj, fabric, settings, cut_order, pinned, progress, stop_event, workers, name,
+                         placements, keep_out)
+    best = None
+    tried = []
+    for k in range(n):
+        if stop_event is not None and stop_event.is_set() and best is not None:
+            break
+        st = replace(settings, seed=settings.seed + 1000 * k, best_of=1)
+
+        def prog(d, k=k):
+            if progress:
+                progress({**d, "attempt": k + 1, "attempts": n, "final": False})
+        m, info = _run_once(proj, fabric, st, cut_order, pinned, prog, stop_event, workers, name, placements,
+                            keep_out)
+        unpl = sum(1 for p in m.placements if not p.placed)
+        tried.append((st.seed, round(m.length, 1), info["validation"].ok))
+        key = (not info["validation"].ok, unpl, m.length)
+        if best is None or key < best[0]:
+            best = (key, m, info)
+    _, m, info = best
+    info["attempts"] = tried
+    if progress:
+        progress({"elapsed": 0.0, "evaluations": info.get("evaluations", 0), "length": m.length, "unplaced": 0,
+                  "result": None, "final": True})
+    return m, info
+
+
+def _run_once(proj, fabric, settings, cut_order, pinned, progress, stop_event, workers, name, placements,
+              keep_out) -> tuple[Marker, dict]:
     from .nesting.parallel import run_parallel
     co = cut_order or proj.cut_order
     if placements is not None:

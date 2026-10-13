@@ -256,6 +256,9 @@ class MainWindow(QMainWindow):
         self.f_tol = self._dspin(0.01, 2.0, 0.2, 2)
         # application-wide: how many nestings may run at the same time (cores are divided between them)
         from ..nesting.slots import auto_limit
+        self.f_best = QSpinBox()                   # "best result": attempts with different seeds, shortest wins
+        self.f_best.setRange(1, 10)
+        self.f_best.setValue(1)
         self.f_parallel = QSpinBox()
         self.f_parallel.setRange(1, 16)
         try:
@@ -301,7 +304,8 @@ class MainWindow(QMainWindow):
         for key, wid in (("width", self.f_width), ("lay", self.f_lay),
                          ("max_len", self.f_maxlen), ("material", self.f_material), ("mode", self.f_mode), ("engine", self.f_engine),
                          ("time", self.f_time), ("seed", self.f_seed), ("rot180", self.f_rot180),
-                         ("rot90", self.f_rot90), ("tolerance", self.f_tol), ("parallel", self.f_parallel)):
+                         ("rot90", self.f_rot90), ("tolerance", self.f_tol), ("best_of", self.f_best),
+                         ("parallel", self.f_parallel)):
             lab = QLabel()
             if not isinstance(wid, QCheckBox):
                 wid.setFixedWidth(118)           # compact panel: full explanations are in the tooltips
@@ -483,6 +487,10 @@ class MainWindow(QMainWindow):
         self.m_run = QMenu(self)
         self.m_run.addAction(acts["run"])
         self.m_run.addAction(self.act_renest)
+        self.act_best = self._act("best_result", lambda: self.run_nesting(best_of=max(3, self.f_best.value())),
+                                  "Ctrl+F5")
+        self.m_run.addAction(self.act_best)
+        self.m_nest.addAction(self.act_best)
         rb = tb.widgetForAction(acts["run"])
         rb.setContextMenuPolicy(Qt.CustomContextMenu)
         rb.customContextMenuRequested.connect(lambda pos, b=rb: self.m_run.exec(b.mapToGlobal(pos)))
@@ -957,7 +965,7 @@ class MainWindow(QMainWindow):
                             engine="auto" if self.f_engine.currentIndex() <= 0 else "builtin",
                             time_limit=float(self.f_time.value()), seed=self.f_seed.value(),
                             allow_rotation_180=self.f_rot180.isChecked(), allow_rotation_90=self.f_rot90.isChecked(),
-                            curve_tolerance=self.f_tol.value())
+                            curve_tolerance=self.f_tol.value(), best_of=self.f_best.value())
 
     def mark_dirty(self, on: bool = True):
         try:
@@ -1348,7 +1356,7 @@ class MainWindow(QMainWindow):
         self._show_status(length, eff, (length / garments) if garments else 0.0, f.width)
 
     # -- nesting ---------------------------------------------------------------------------
-    def run_nesting(self, inside_only=None):
+    def run_nesting(self, inside_only=None, best_of=None):
         """inside_only: True = re-nest only the pieces still in the marker; None = ask when pieces were taken out."""
         if not self.project or (self.worker and self.worker.isRunning()):
             return
@@ -1361,13 +1369,15 @@ class MainWindow(QMainWindow):
                 return
             inside_only = r == QMessageBox.Yes
         if inside_only:
-            return self._renest_inside()
+            return self._renest_inside(best_of)
         if not self._check_cut_order():
             return
         if not self._ensure_geometry():
             return
         fabric = self.fabric_from_form()
         st = self.nest_settings_from_form()
+        if best_of:
+            st.best_of = best_of
         self.project.nest_settings = st
         pinned = [copy.copy(pl) for pl in (self.marker.placements if self.marker else [])
                   if pl.pinned and pl.placed and self.marker.origin != "original"]
@@ -1385,7 +1395,7 @@ class MainWindow(QMainWindow):
             self.read_tables()
             self._renest_inside()
 
-    def _renest_inside(self):
+    def _renest_inside(self, best_of=None):
         """Re-nest the pieces in the current marker only; pieces taken out stay in the strip (not placed)."""
         inside = [copy.copy(pl) for pl in self.marker.placements if pl.placed]
         keep_out = [copy.copy(pl) for pl in self.marker.placements if not pl.placed]
@@ -1394,6 +1404,8 @@ class MainWindow(QMainWindow):
             return
         fabric = self.fabric_from_form()
         st = self.nest_settings_from_form()
+        if best_of:
+            st.best_of = best_of
         self.project.nest_settings = st
         self.worker = NestWorker(self.project, fabric, st, self.project.cut_order, [], placements=inside,
                                  keep_out=keep_out)
@@ -1495,7 +1507,10 @@ class MainWindow(QMainWindow):
 
     def on_progress(self, d):
         """Live preview, coalesced: at most one redraw per PREVIEW_INTERVAL_MS however fast results arrive."""
-        self.statusBar().showMessage(tr("running", len=d["length"], ev=d["evaluations"], t=d["elapsed"]))
+        msg = tr("running", len=d["length"], ev=d["evaluations"], t=d["elapsed"])
+        if d.get("attempts", 1) > 1:
+            msg = tr("attempt_of", k=d["attempt"], n=d["attempts"]) + "  " + msg
+        self.statusBar().showMessage(msg)
         if d.get("result") is not None and not d.get("final"):
             first = getattr(self, "_pending_preview", None) is None
             self._pending_preview = d["result"]
@@ -1516,6 +1531,9 @@ class MainWindow(QMainWindow):
         self.refresh_markers_list(select=len(self.project.markers) - 1)
         v = info["validation"]
         msg = tr("done", v=v.summary())
+        if info.get("attempts"):
+            msg = tr("best_done", n=len(info["attempts"]),
+                     l=" / ".join(f"{L:.0f}" for _s, L, _ok in info["attempts"]), b=marker.length) + " | " + msg
         if info.get("warnings"):
             msg += " | " + "; ".join(info["warnings"])
         self.statusBar().showMessage(msg)
