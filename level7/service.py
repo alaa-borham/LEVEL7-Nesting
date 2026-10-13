@@ -232,7 +232,9 @@ def _nest_with_sparrow(proj, items, fabric, settings, workers, progress, stop_ev
         return start, "builtin"
     check = validate_marker(proj, Marker(name="check", fabric=fabric, placements=res.placements, length=res.length),
                             allowed_rotations={(it.piece_uid, it.mirrored): it.rotations for it in items})
-    if not check.ok or (len(res.unplaced), res.length) >= (len(start.unplaced), start.length):
+    # 90° turns were explicitly allowed by the user: their grain warnings do not disqualify sparrow's layout
+    bad = [i for i in check.issues if not (i.kind == "grain" and settings.allow_rotation_90)]
+    if bad or (len(res.unplaced), res.length) >= (len(start.unplaced), start.length):
         return start, "builtin"
     res.evaluations += start.evaluations
     return res, "sparrow"

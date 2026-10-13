@@ -15,7 +15,8 @@ set on the fabric); every returned layout is checked again by LEVEL7's validator
 
 Shrinkage and directional buffers act in marker axes, so for them each item type is given to sparrow already
 turned to its first allowed rotation, scaled and grown by the buffer rectangle; the remaining allowed turns
-must then be 0 / 180° (which commute with axis scaling); otherwise sparrow is not used for that job.
+keep only the turns that commute with it: all of them when shrinkage and buffer are the same in X and Y,
+otherwise 0 / 180° (the 90° turns are then left to LEVEL7's own engine; the shorter valid layout wins).
 """
 from __future__ import annotations
 
@@ -76,15 +77,23 @@ def _base_rot(its, fabric) -> float:
     return its[0].rotations[0] if _frame(fabric)[4] else 0.0
 
 
-def build_instance(items: list[NestItem], fabric, name="level7") -> tuple[dict | None, list]:
+def _rel_angles(its, fabric) -> list[float]:
+    """Allowed turns relative to the base rotation that sparrow may use for this item type."""
+    ex, ey, sx, sy, axes = _frame(fabric)
+    r0 = _base_rot(its, fabric)
+    rel = [round((r - r0) % 360.0, 6) for r in its[0].rotations]
+    if axes and not (abs(sx - sy) < 1e-12 and abs(ex - ey) < 1e-12):
+        rel = [r for r in rel if r in (0.0, 180.0)]   # 90° turns would swap the X / Y shrinkage and buffers
+    return rel
+
+
+def build_instance(items: list[NestItem], fabric, name="level7") -> tuple[dict, list]:
     groups = _groups(items)
     ex, ey, sx, sy, axes = _frame(fabric)
     out = []
     for k, its in enumerate(groups):
         r0 = _base_rot(its, fabric)
-        rel = [round((r - r0) % 360.0, 6) for r in its[0].rotations]
-        if axes and any(r not in (0.0, 180.0) for r in rel):
-            return None, groups                    # 90° turns do not commute with axis scaling / buffers
+        rel = _rel_angles(its, fabric)
         pts = transform_points(its[0].cut, r0, its[0].mirrored, sx=sx, sy=sy)
         if ex or ey:
             pts = list(grow_rect(Polygon(pts).buffer(0), ex, ey).exterior.coords)[:-1]
@@ -111,7 +120,9 @@ def warm_solution(inst: dict, groups: list, result: NestResult, fabric) -> dict 
         if k is None:
             return None
         ex, ey = _frame(fabric)[:2]
-        rel = (pl.rotation - _base_rot(groups[k], fabric)) % 360.0
+        rel = round((pl.rotation - _base_rot(groups[k], fabric)) % 360.0, 6)
+        if rel not in _rel_angles(groups[k], fabric):
+            return None                            # start layout uses a turn sparrow is not given: no warm start
         placed.append({"item_id": k, "transformation": {
             "rotation": float(rel), "translation": [pl.x - fabric.margin_start + ex, pl.y - fabric.margin_left + ey]}})
     sol = dict(inst)
@@ -169,8 +180,6 @@ def run(items: list[NestItem], fabric, settings, time_limit: float, progress=Non
     t0 = time.monotonic()
     try:
         inst, groups = build_instance(items, fabric)
-        if inst is None:
-            return None
         src = warm_solution(inst, groups, warm, fabric) if warm is not None else None
         path = os.path.join(work, "job.json")
         with open(path, "w", encoding="utf-8") as fh:

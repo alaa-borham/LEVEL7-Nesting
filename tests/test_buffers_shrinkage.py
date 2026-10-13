@@ -67,3 +67,34 @@ def test_shrinkage_not_written_to_scb(tmp_path):
     proj, m, _ = _nest(FabricSettings(width=1500.0, shrink_x=2.0))
     with pytest.raises(ScbWriteError):
         write_scb(SCB, proj, m, str(tmp_path / "x.scb"))
+
+
+def test_sparrow_gets_only_turns_that_commute_with_shrinkage():
+    from level7.nesting.engine import build_items
+    from level7.nesting.sparrow import build_instance
+    proj, _ = open_any(SCB)
+    st = NestSettings(allow_rotation_90=True)
+    co = proj.cut_order
+    for kw, want in ((dict(shrink_x=2.0), {0.0, 180.0}), (dict(buffer_y=4.0), {0.0, 180.0}),
+                     (dict(shrink_x=2.0, shrink_y=2.0, buffer_x=3.0, buffer_y=3.0), {0.0, 90.0, 180.0, 270.0})):
+        fab = FabricSettings(width=1500.0, **kw)
+        items, _, _ = build_items(proj, co.size_quantities, co.piece_counts, fab, st)
+        inst, _ = build_instance(items, fab)
+        for it in inst["items"]:
+            assert set(it["orientation"]["rotation"]["angles"]) == want
+
+
+def test_sparrow_runs_with_shrinkage_and_90_degrees(monkeypatch):
+    import pytest
+
+    from level7.nesting import sparrow
+    if not sparrow.available():
+        pytest.skip("sparrow executable not bundled")
+    monkeypatch.setenv("LEVEL7_ENGINE", "auto")
+    proj, _ = open_any(SCB)
+    fab = FabricSettings(width=1500.0, shrink_x=2.0, buffer_x=4.0)
+    m, info = run_nesting(proj, fab, NestSettings(time_limit=15, seed=1, allow_rotation_90=True), workers=1)
+    # 90° turns were allowed, so only grain warnings may remain
+    assert {i.kind for i in info["validation"].issues} <= {"grain"}
+    assert not [p for p in m.placements if not p.placed]
+    assert info["engine"] == "sparrow"
