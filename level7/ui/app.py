@@ -55,7 +55,6 @@ def main(argv=None):
     from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QApplication
 
-    from .main_window import MainWindow
     argv = sys.argv if argv is None else argv
     app = QApplication(argv)
     app.setApplicationName("LEVEL7 Nesting")
@@ -66,13 +65,19 @@ def main(argv=None):
     icon = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "level7.ico")
     if os.path.exists(icon):
         app.setWindowIcon(QIcon(icon))
+    files = [a for a in argv[1:] if os.path.isfile(a)]
+    from .sessions import SessionManager, acquire_primary, forward_to_primary
+    lock = acquire_primary()
+    if lock is None and forward_to_primary(files):
+        return 0                       # an open LEVEL7 takes the files (one session window per file)
     _install_diagnostics(app)
-    w = MainWindow()
-    w.show()
-    for a in argv[1:]:
-        if os.path.isfile(a):
-            w.open_path(a)
-            break
+    sessions = SessionManager(app)
+    app._level7 = (lock, sessions)     # keep the lock for the lifetime of the program
+    if lock is not None:
+        sessions.listen()
+    w = sessions.new_window()
+    if files:
+        sessions.open_files(files, prefer=w)
     return app.exec()
 
 

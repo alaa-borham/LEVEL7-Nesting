@@ -228,6 +228,10 @@ T = {
     "compat_report": ("Create compatibility report…", "إنشاء تقرير توافق…"),
     "compat_saved": ("Report saved:\n{p}\n\nSend it together with the GRAFIS file.",
                      "تم حفظ التقرير:\n{p}\n\nأرسله مع ملف GRAFIS."),
+    "new_session": ("New session (window)", "جلسة جديدة (نافذة)"),
+    "sessions": ("Sessions", "الجلسات"),
+    "sessions_max": ("At most {n} sessions can be open at the same time. Close one to open another file.",
+                     "الحد الأقصى {n} جلسات مفتوحة في نفس الوقت. أغلق جلسة لفتح ملف آخر."),
     "cancel": ("Cancel", "إلغاء"),
 }
 

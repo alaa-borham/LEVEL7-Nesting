@@ -59,6 +59,17 @@ def main(outdir):
     w.toggle_language()
     app.processEvents()
     w.grab().save(os.path.join(outdir, "ui_english.png"))
+    # several sessions: one window per file, at most MAX_WINDOWS
+    from PySide6.QtWidgets import QMessageBox
+    from level7.ui.sessions import MAX_WINDOWS, SessionManager
+    QMessageBox.information = staticmethod(lambda *a, **k: None)
+    sm = SessionManager(app)
+    first = sm.new_window(show=False)
+    sm.open_files([SCB] * (MAX_WINDOWS + 1), prefer=first)
+    app.processEvents()
+    assert len(sm.windows) == MAX_WINDOWS and all(x.project is not None for x in sm.windows), "sessions"
+    for x in list(sm.windows):
+        x.close()
     print("OK")
 
 

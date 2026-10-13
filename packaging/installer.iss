@@ -32,6 +32,7 @@ Name: "arabic"; MessagesFile: "compiler:Languages\Arabic.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
 Name: "assoc"; Description: "Open .l7n projects with LEVEL7 Nesting"; GroupDescription: "{cm:AdditionalIcons}"
+Name: "assocgrafis"; Description: "Open GRAFIS MDL / SCB files with LEVEL7 Nesting (double-click / Enter; several files = several sessions)"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
 Source: "..\dist\LEVEL7Nesting\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -46,6 +47,20 @@ Root: HKA; Subkey: "Software\Classes\.l7n"; ValueType: string; ValueName: ""; Va
 Root: HKA; Subkey: "Software\Classes\LEVEL7.Project"; ValueType: string; ValueName: ""; ValueData: "LEVEL7 Nesting project"; Flags: uninsdeletekey; Tasks: assoc
 Root: HKA; Subkey: "Software\Classes\LEVEL7.Project\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\LEVEL7Nesting.exe,0"; Tasks: assoc
 Root: HKA; Subkey: "Software\Classes\LEVEL7.Project\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\LEVEL7Nesting.exe"" ""%1"""; Tasks: assoc
+
+; GRAFIS files: LEVEL7 always appears under "Open with"; with the task it becomes the program for MDL / SCB
+Root: HKA; Subkey: "Software\Classes\LEVEL7.Grafis"; ValueType: string; ValueName: ""; ValueData: "GRAFIS file (LEVEL7 Nesting)"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\LEVEL7.Grafis\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\LEVEL7Nesting.exe,0"
+Root: HKA; Subkey: "Software\Classes\LEVEL7.Grafis\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\LEVEL7Nesting.exe"" ""%1"""
+Root: HKA; Subkey: "Software\Classes\.mdl\OpenWithProgids"; ValueType: string; ValueName: "LEVEL7.Grafis"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.scb\OpenWithProgids"; ValueType: string; ValueName: "LEVEL7.Grafis"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.dxf\OpenWithProgids"; ValueType: string; ValueName: "LEVEL7.Grafis"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\Applications\LEVEL7Nesting.exe\SupportedTypes"; ValueType: string; ValueName: ".mdl"; ValueData: ""; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\LEVEL7Nesting.exe\SupportedTypes"; ValueType: string; ValueName: ".scb"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\LEVEL7Nesting.exe\SupportedTypes"; ValueType: string; ValueName: ".dxf"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\LEVEL7Nesting.exe\SupportedTypes"; ValueType: string; ValueName: ".l7n"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.mdl"; ValueType: string; ValueName: ""; ValueData: "LEVEL7.Grafis"; Tasks: assocgrafis
+Root: HKA; Subkey: "Software\Classes\.scb"; ValueType: string; ValueName: ""; ValueData: "LEVEL7.Grafis"; Tasks: assocgrafis
 
 [Run]
 Filename: "{app}\LEVEL7Nesting.exe"; Description: "{cm:LaunchProgram,LEVEL7 Nesting}"; Flags: nowait postinstall skipifsilent

@@ -75,8 +75,9 @@ class NestWorker(QThread):
 
 # ---------------------------------------------------------------------------- main window
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, sessions=None, primary: bool = True):
         super().__init__()
+        self.sessions = sessions          # SessionManager (several windows), None when used stand-alone
         self.settings_store = QSettings("LEVEL7", "Nesting")
         LANG["current"] = self.settings_store.value("lang", "ar")
         self.project: Project | None = None
@@ -111,7 +112,7 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self.grafis_status)
         self.statusBar().addPermanentWidget(self.coord_label)
         self.updates = None
-        if not os.environ.get("LEVEL7_NO_UPDATE_CHECK"):
+        if primary and not os.environ.get("LEVEL7_NO_UPDATE_CHECK"):
             self.updates = UpdateManager(self, self.settings_store, self._before_update)
             self.act_auto_upd.setChecked(self.updates.auto_enabled())
         else:
@@ -270,6 +271,7 @@ class MainWindow(QMainWindow):
         self.menus_tr = [(self.m_file, "file"), (self.m_edit, "edit"), (self.m_view, "view"),
                          (self.m_nest, "nesting"), (self.m_export, "export"), (self.m_help, "help")]
         self.m_file.addAction(self._act("open", self.open_dialog, "Ctrl+O"))
+        self.m_file.addAction(self._act("new_session", self.new_session, "Ctrl+N"))
         self.m_file.addAction(self._act("save", self.save, "Ctrl+S"))
         self.m_file.addAction(self._act("save_as", self.save_as, "Ctrl+Shift+S"))
         self.m_file.addSeparator()
@@ -478,16 +480,30 @@ class MainWindow(QMainWindow):
             ev.acceptProposedAction()
 
     def dropEvent(self, ev):
-        for u in ev.mimeData().urls():
-            if u.isLocalFile():
-                self.open_path(u.toLocalFile())
-                break
+        paths = [u.toLocalFile() for u in ev.mimeData().urls() if u.isLocalFile()]
+        self.open_many(paths)
+
+    def open_many(self, paths):
+        """One file: into this window if it is empty, else a new session; several files: one session each."""
+        paths = [p for p in paths if p]
+        if not paths:
+            return
+        if self.sessions is None:
+            self.open_path(paths[0])
+            return
+        if len(paths) == 1 and self.project is None:
+            self.open_path(paths[0])
+        else:
+            self.sessions.open_files(paths, prefer=self)
+
+    def new_session(self):
+        if self.sessions is not None:
+            self.sessions.new_window()
 
     def open_dialog(self):
-        p, _ = QFileDialog.getOpenFileName(self, tr("open"), self.settings_store.value("last_dir", ""),
-                                           "Patterns / markers (*.mdl *.MDL *.scb *.SCB *.dxf *.DXF *.l7n);;All (*)")
-        if p:
-            self.open_path(p)
+        ps, _ = QFileDialog.getOpenFileNames(self, tr("open"), self.settings_store.value("last_dir", ""),
+                                             "Patterns / markers (*.mdl *.MDL *.scb *.SCB *.dxf *.DXF *.l7n);;All (*)")
+        self.open_many(ps)
 
     def open_path(self, path):
         from ..service import open_any
@@ -1093,6 +1109,8 @@ class MainWindow(QMainWindow):
         if self.worker and self.worker.isRunning():
             self.worker.stop_event.set()
             self.worker.wait(15000)
+        if self.sessions is not None:
+            self.sessions.remove(self)
         super().closeEvent(ev)
 
 
