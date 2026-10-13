@@ -277,8 +277,10 @@ class MarkerView(QGraphicsView):
         # the marker is a drawing: always left-to-right like GRAFIS (in the Arabic interface the mirrored scroll
         # bar showed the end of the marker and hid its start on the left)
         self.setLayoutDirection(Qt.LeftToRight)
-        # the marker stays at the bottom-left of the view; zoom buttons in the corner
-        self.setAlignment(Qt.AlignAbsolute | Qt.AlignLeft | Qt.AlignBottom)
+        # like GRAFIS: the whole marker fixed in the view, at the left, in the middle of the height; it is fitted
+        # again when the window is resized (until the user zooms himself); zoom buttons in the corner
+        self.setAlignment(Qt.AlignAbsolute | Qt.AlignLeft | Qt.AlignVCenter)
+        self._auto_fit = True
         from PySide6.QtWidgets import QToolButton
         self.zoom_buttons = []
         for txt, tip, fn in (("+", "zoom_in", lambda: self.zoom_step(1.25)), ("−", "zoom_out", lambda: self.zoom_step(0.8)),
@@ -340,8 +342,8 @@ class MarkerView(QGraphicsView):
             g = it.piece.sizes[it.placement.size]
             snaps.extend(placement_points(g.cut, it.placement))
         self._snap_pts = snaps
-        # little room below the fabric (the marker sits at the bottom of the view), more above it (pieces taken out)
-        sc.setSceneRect(QRectF(-60, -40, max(L, (self.last_result or (0,))[0]) + 260, W + 340))
+        # the same room below and above the fabric (the marker stays in the middle), there for pieces taken out
+        sc.setSceneRect(QRectF(-60, -300, max(L, (self.last_result or (0,))[0]) + 260, W + 600))
 
     def _draw_aux(self):
         sc = self.scene()
@@ -418,14 +420,20 @@ class MarkerView(QGraphicsView):
         return QTransform(1, 0, 0, -1, 0, 0) * QTransform().rotate(self.view_angle())   # Y up, then rotate
 
     def zoom_fit(self):
+        """The whole marker (length and width) in the view, at the left edge and in the middle of the height."""
         if self.marker:
+            self._auto_fit = True
             self.setTransform(self.base_transform())
-            # the fabric width fills the view (large, readable pieces); the length scrolls sideways. A short
-            # marker that fits completely keeps that size.
-            self.fitInView(QRectF(-50, -30, 1, self.marker.fabric.width + 100), Qt.KeepAspectRatio)   # + room for the ruler
-            # the marker sits at the bottom-left of the view (alignment + scroll to that corner)
-            self.horizontalScrollBar().setValue(self.horizontalScrollBar().minimum())
-            self.verticalScrollBar().setValue(self.verticalScrollBar().maximum())
+            L = max(self.marker.length or 0.0, max((it.sceneBoundingRect().right() for it in self.items_by_uid.values()
+                                                    if it.placement.placed), default=0.0), 100.0)
+            W = self.marker.fabric.width
+            self.fitInView(QRectF(-30, -30, L + 150, W + 60), Qt.KeepAspectRatio)   # + room for the length mark
+            if self.view_angle() == 0:
+                # fitInView centres the marker: move its start to the left edge (like GRAFIS)
+                dx = self.mapFromScene(QPointF(-30, 0)).x()
+                hb = self.horizontalScrollBar()
+                hb.setValue(hb.value() + dx)
+                self.centerOn(self.mapToScene(self.viewport().rect().center()).x(), W / 2)
 
     def show_pieces(self, uids):
         """Select these pieces and bring them to the middle of the view (e.g. the overlapping ones)."""
@@ -463,6 +471,7 @@ class MarkerView(QGraphicsView):
     def zoom_step(self, f: float):
         """Zoom buttons: around the measurement / selected pieces when there are any (they stay in the middle),
         otherwise around the marker's bottom-left corner, which stays at the bottom of the view."""
+        self._auto_fit = False
         c = self.focus_point()
         old = self.transformationAnchor()
         self.setTransformationAnchor(QGraphicsView.NoAnchor)
@@ -476,6 +485,8 @@ class MarkerView(QGraphicsView):
 
     def resizeEvent(self, ev):
         super().resizeEvent(ev)
+        if self._auto_fit and self.marker is not None:
+            self.zoom_fit()
         x = self.viewport().width() - 44
         y = self.viewport().height() - 44
         for k, b in enumerate(reversed(self.zoom_buttons)):
@@ -488,6 +499,7 @@ class MarkerView(QGraphicsView):
         if c is not None:                       # a measurement / selection: it stays in the middle
             self.zoom_step(f)
             return
+        self._auto_fit = False
         self.scale(f, f)                        # otherwise around the mouse pointer
 
     def mousePressEvent(self, ev):
