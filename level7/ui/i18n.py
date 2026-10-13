@@ -174,6 +174,32 @@ T = {
     "pieces_table": ("Pieces && quantities table", "جدول القطع والكميات"),
     "tab_props": ("Properties (fabric width, lay, material, nesting)", "الخصائص (العرض، نوع الفرد، الخامة، التعشيق)"),
     "tb_tab_props": ("Properties", "الخصائص"),
+    "tab_plaid": ("Plaid / stripe matching", "توافق الكاروهات والمقلّم"),
+    "tb_tab_plaid": ("Plaid", "الكاروهات"),
+    "plaid_rx": ("Repeat in length (X)", "تكرار في الطول X"),
+    "plaid_ry": ("Repeat in width (Y)", "تكرار في العرض Y"),
+    "plaid_ox": ("First line from start", "أول خط من البداية"),
+    "plaid_oy": ("First line from edge", "أول خط من الحافة"),
+    "ft_plaid_rx": ("Distance between the pattern's vertical lines along the marker length (mm); 0 = do not match "
+                    "along the length", "المسافة بين خطوط النقشة الرأسية على طول الماركر (مم)؛ 0 = بدون مطابقة في الطول"),
+    "ft_plaid_ry": ("Distance between the pattern's horizontal lines across the width (mm); 0 = do not match "
+                    "across the width", "المسافة بين خطوط النقشة الأفقية على عرض القماش (مم)؛ 0 = بدون مطابقة في العرض"),
+    "ft_plaid_ox": ("Where the first vertical pattern line lies, measured from the marker start (mm)",
+                    "مكان أول خط رأسي في النقشة مقاسًا من بداية الماركر (مم)"),
+    "ft_plaid_oy": ("Where the first horizontal pattern line lies, measured from the fabric edge (mm)",
+                    "مكان أول خط أفقي في النقشة مقاسًا من حافة القماش (مم)"),
+    "plaid_hint": ("Pick a match point on each piece that must match (a notch or corner - it exists in every size). "
+                   "The point is placed on a pattern line; X / Y choose the directions, dX / dY shift it inside the "
+                   "repeat (e.g. sleeve 20 mm below a line).",
+                   "حدّد نقطة مطابقة على كل قطعة لازم تتطابق (نوتش أو ركن - موجودة في كل المقاسات). النقطة توضع على خط "
+                   "من خطوط النقشة؛ X / Y لاختيار الاتجاه، و dX / dY لإزاحتها داخل التكرار (مثلًا الكم 20 مم تحت الخط)."),
+    "plaid_anchor": ("Match point", "نقطة المطابقة"), "plaid_mx": ("X", "X"), "plaid_my": ("Y", "Y"),
+    "plaid_dx": ("dX", "dX"), "plaid_dy": ("dY", "dY"),
+    "plaid_notch": ("notch {n}", "نوتش {n}"), "plaid_corner": ("corner {n}", "ركن {n}"),
+    "plaid_pick": ("Pick match point…", "تحديد نقطة مطابقة…"), "plaid_remove": ("Remove", "حذف"),
+    "plaid_pick_hint": ("Click a piece near the notch / corner to match (one per piece); right-click or Esc to finish",
+                        "اضغط على القطعة بجوار النوتش أو الركن المطلوب (نقطة لكل قطعة)؛ كليك يمين أو Esc للإنهاء"),
+    "plaid_picked": ("{p}: match point = {a}", "{p}: نقطة المطابقة = {a}"),
     "tab_spacing": ("Margins, buffers and shrinkage", "الهوامش والبفر والانكماش"),
     "tb_tab_spacing": ("Margins", "الهوامش"),
     "measure_tool": ("Measure", "قياس"), "tb_measure_tool": ("Measure", "قياس"),

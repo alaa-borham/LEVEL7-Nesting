@@ -141,6 +141,27 @@ class PieceItem(QGraphicsPathItem):
                 it.setPen(QPen(QColor(160, 0, 160), 0))
                 it.setAcceptedMouseButtons(Qt.NoButton)
                 self.children_items.append(it)
+        fab = self.view.marker.fabric if self.view.marker is not None else None
+        if fab is not None and self.piece.match:
+            from .. import matching
+            a = matching.anchor(self.piece, pl.size)
+            if a is not None:
+                (x, y), = placement_points([a], pl)
+                e = matching.placement_error(self.piece, pl, fab)
+                ok = e is None or all(v is None or abs(v) <= matching.TOL_MM for v in e)
+                p = QPainterPath()
+                r = 9.0
+                p.moveTo(x - r, y)
+                p.lineTo(x, y + r)
+                p.lineTo(x + r, y)
+                p.lineTo(x, y - r)
+                p.closeSubpath()
+                it = QGraphicsPathItem(p, self)
+                pen = QPen(QColor(0, 150, 60) if ok else QColor(230, 0, 0), 2.5)
+                pen.setCosmetic(True)
+                it.setPen(pen)
+                it.setAcceptedMouseButtons(Qt.NoButton)
+                self.children_items.append(it)
         lines = []
         if o["size_bundle"]:
             arrow = ""
@@ -223,6 +244,8 @@ class MarkerView(QGraphicsView):
     dragging = Signal()            # a piece is being moved (live length in the status bar)
     cursor_mm = Signal(float, float)
     measured = Signal(float)
+    match_picked = Signal(str, str, int)   # piece uid, "notch" / "corner", index
+    pick_finished = Signal()               # right-click ends picking match points
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -251,6 +274,7 @@ class MarkerView(QGraphicsView):
         self._snap_pts: list[tuple[float, float]] = []
         self._measure_item = None
         self._pan = None
+        self.pick_match = False            # plaid: next click on a piece picks its match point
 
     def apply_theme(self):
         from .themes import colours
@@ -321,6 +345,28 @@ class MarkerView(QGraphicsView):
             t.setPos(x, W + 60)
             sc.addItem(t)
             self._aux_items += [ln, t]
+        f = self.marker.fabric
+        if f.repeat_x > 0 or f.repeat_y > 0:
+            col = QColor(self.theme.get("pattern", QColor(60, 120, 220)))
+            col.setAlpha(110)
+            pen = QPen(col, 0)
+            L = max(self.marker.length, 1000.0) + 200.0
+            if f.repeat_x > 0:
+                k = math.ceil((0 - f.repeat_offset_x) / f.repeat_x)
+                x = f.repeat_offset_x + k * f.repeat_x
+                while x <= L and len(self._aux_items) < 4000:
+                    ln = sc.addLine(x, 0, x, W, pen)
+                    ln.setZValue(-1)
+                    self._aux_items.append(ln)
+                    x += f.repeat_x
+            if f.repeat_y > 0:
+                k = math.ceil((0 - f.repeat_offset_y) / f.repeat_y)
+                y = f.repeat_offset_y + k * f.repeat_y
+                while y <= W and len(self._aux_items) < 8000:
+                    ln = sc.addLine(0, y, L, y, pen)
+                    ln.setZValue(-1)
+                    self._aux_items.append(ln)
+                    y += f.repeat_y
         if o["efficiency_mark"]:
             eff = self.efficiency
             vline(self.marker.length, QPen(QColor(230, 30, 30), 0),
@@ -372,6 +418,12 @@ class MarkerView(QGraphicsView):
         if ev.button() == Qt.MiddleButton:
             self._pan = ev.position()
             self.setCursor(Qt.ClosedHandCursor)
+            return
+        if self.pick_match and ev.button() == Qt.LeftButton:
+            self._pick(self.mapToScene(ev.position().toPoint()))
+            return
+        if self.pick_match and ev.button() == Qt.RightButton:
+            self.pick_finished.emit()
             return
         if self.measure_mode and ev.button() == Qt.RightButton:
             self.clear_measure()
@@ -429,6 +481,35 @@ class MarkerView(QGraphicsView):
 
     # -- measure tool ------------------------------------------------------------------------
     SNAP_PX = 10
+
+    def set_pick_match(self, on: bool):
+        self.pick_match = on
+        self.setDragMode(QGraphicsView.NoDrag if on else QGraphicsView.RubberBandDrag)
+        self.viewport().setCursor(Qt.CrossCursor if on else Qt.ArrowCursor)
+
+    def _pick(self, p: QPointF):
+        """Nearest notch / corner (they exist in every size, so the rule fits all sizes): of the piece clicked,
+        else of any piece within a few millimetres on screen."""
+        t = self.transform()
+        radius = 25.0 / (math.hypot(t.m11(), t.m12()) or 1.0)
+        inside = {uid for uid, it in self.items_by_uid.items() if it.contains(it.mapFromScene(p))}
+        best = None
+        for uid, it in self.items_by_uid.items():
+            if inside and uid not in inside:
+                continue
+            pl = it.placement
+            g = it.piece.sizes.get(pl.size)
+            if g is None:
+                continue
+            cands = [("notch", i, n.position) for i, n in enumerate(g.notches)]
+            cands += [("corner", i, c) for i, c in enumerate(g.corners)]
+            for kind, i, pt in cands:
+                (x, y), = placement_points([pt], pl)
+                d = math.hypot(x - p.x(), y - p.y()) * (0.8 if kind == "notch" else 1.0)   # prefer notches
+                if (inside or d <= radius) and (best is None or d < best[0]):
+                    best = (d, it.piece.uid, kind, i)
+        if best is not None:
+            self.match_picked.emit(best[1], best[2], best[3])
 
     def set_measure_mode(self, on: bool, kind: str = "line"):
         self.measure_mode = on

@@ -270,7 +270,8 @@ def run_nesting(proj: Project, fabric: FabricSettings, settings: NestSettings, c
         raise ValueError("nothing to nest: set size quantities and piece counts")
     t0 = time.monotonic()
     engine_used = "builtin"
-    if items and _use_sparrow(settings, fabric, pinned):
+    if items and _use_sparrow(settings, fabric, pinned) and not any(it.match for it in items):
+        # (plaid matching: sparrow cannot keep pieces on pattern lines - the built-in engine does)
         res, engine_used = _nest_with_sparrow(proj, items, fabric, settings, workers, progress, stop_event)
     elif items:
         res = run_parallel(items, fabric, settings, workers=workers, progress=progress, stop_event=stop_event)

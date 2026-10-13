@@ -26,6 +26,9 @@ import threading
 import time
 from dataclasses import dataclass, field
 
+import pyclipper
+
+from .. import matching
 from ..geometry import bbox, search_polygon, transform_points
 from ..model import FabricSettings, LayType, NestSettings, Piece, Placement, Project
 from .nfp import NFP_SHRINK, SCALE, feasible_region, nfp, shrink, to_int, translate
@@ -48,6 +51,8 @@ class NestItem:
     deviation: float = 0.0
     pinned: Placement | None = None
     label: str = ""
+    # plaid matching: (match x, match y, anchor (pattern coords), target x, target y, repeat x, repeat y)
+    match: tuple | None = None
 
     @property
     def shape_key(self):
@@ -149,6 +154,14 @@ def build_items(project: Project, sizes: dict[str, int], counts: dict[str, tuple
                 unplaced.append(Unplaced("", piece.uid, size, False, f"size {size} geometry not available"))
                 continue
             g = piece.sizes[size]
+            match_rule = None
+            if matching.active(piece, fabric):
+                a = matching.anchor(piece, size)
+                if a is None:
+                    warnings.append(f"{piece.name} {size}: match point not found in this size - not matched")
+                else:
+                    match_rule = (*matching.rules(piece, fabric), a, *matching.targets(fabric, piece),
+                                  fabric.repeat_x, fabric.repeat_y)
             for bundle in range(1, qty + 1):
                 for mirrored, copies in ((False, n), (True, m)):
                     for _ in range(copies):
@@ -161,7 +174,8 @@ def build_items(project: Project, sizes: dict[str, int], counts: dict[str, tuple
                             unplaced.append(Unplaced(uid, piece.uid, size, mirrored, err))
                             continue
                         it = NestItem(uid, piece.uid, size, bundle, mirrored, rots, g.cut,
-                                      label=f"{piece.name} {size}{' (M)' if mirrored else ''} #{bundle}")
+                                      label=f"{piece.name} {size}{' (M)' if mirrored else ''} #{bundle}",
+                                      match=match_rule)
                         for pl in pinned:
                             if pl.piece_uid == piece.uid and pl.size == size and pl.mirrored == mirrored \
                                     and pl.bundle == bundle and pl.placed and getattr(pl, "_used", False) is False:
@@ -276,6 +290,8 @@ class NestEngine:
         return (result, failed, length)
 
     def _best_position(self, it, rot, placed, length, best):
+        if it.match is not None:
+            return self._best_matched(it, rot, placed, length, best)
         ip, bx0, by0, w, h = self.oriented(it, rot)
         if h > (self.y1 - self.y0) + 1e-6:
             return best
@@ -295,6 +311,74 @@ class NestEngine:
                 key = self._key(newlen, x, y, wi)
                 if best is None or key < best[0]:
                     best = (key, rot, (x, y), w)
+        return best
+
+    def _best_matched(self, it, rot, placed, length, best):
+        """Plaid matching: only positions where the anchor lies on its pattern line(s)."""
+        from shapely.geometry import LineString, Point, Polygon
+        from shapely.ops import unary_union
+        from shapely.prepared import prep
+        ip, bx0, by0, w, h = self.oriented(it, rot)
+        if h > (self.y1 - self.y0) + 1e-6:
+            return best
+        xa, xb = int(math.ceil(self.x0 * SCALE)), int(math.floor((self.xmax - w) * SCALE))
+        ya, yb = int(math.ceil(self.y0 * SCALE)), int(math.floor((self.y1 - h) * SCALE))
+        if xb < xa or yb < ya:
+            return best
+        rect = [(xa, ya), (xb, ya), (xb, yb), (xa, yb)]
+        forb = []
+        for (pit, prot, pt) in placed:
+            forb.extend(translate(self.nfp_rel(pit, prot, it, rot), pt[0], pt[1]))
+        paths = feasible_region(rect, forb)
+        outer = [Polygon(p) for p in paths if len(p) >= 3 and pyclipper.Orientation(p)]
+        holes = [Polygon(p) for p in paths if len(p) >= 3 and not pyclipper.Orientation(p)]
+        if not outer:
+            return best
+        region = unary_union(outer)
+        if holes:
+            region = region.difference(unary_union(holes))
+        if region.is_empty:
+            return best
+        pr = prep(region)
+        rx, ry, (ax, ay), tx, ty, rpx, rpy = it.match
+        (mx, my), = transform_points([(ax, ay)], rot, it.mirrored, sx=self.sx, sy=self.sy)
+        # translation t (search-shape frame) puts the anchor at t/SCALE - b0 + m: solve for the pattern lines
+        cx, cy = (tx - mx + bx0) * SCALE, (ty - my + by0) * SCALE
+        wi = int(round(w * SCALE))
+
+        def lines(c, lo, hi, rep):
+            r = rep * SCALE
+            k = math.ceil((lo - c) / r)
+            v = c + k * r
+            while v <= hi:
+                yield int(round(v))
+                v += r
+
+        def consider(x, y):
+            nonlocal best
+            newlen = max(length, (x + wi) / SCALE)
+            key = self._key(newlen, x, y, wi)
+            if best is None or key < best[0]:
+                best = (key, rot, (x, y), w)
+
+        minx, miny, maxx, maxy = region.bounds
+        if rx:
+            for x in lines(cx, max(xa, minx), min(xb, maxx), rpx):   # first column that fits is the shortest
+                if ry:
+                    ys = [y for y in lines(cy, max(ya, miny), min(yb, maxy), rpy) if pr.covers(Point(x, y))]
+                    if ys:
+                        consider(x, ys[0])
+                        break
+                else:
+                    seg = region.intersection(LineString([(x, miny - 1), (x, maxy + 1)]))
+                    if not seg.is_empty:
+                        consider(x, int(math.ceil(seg.bounds[1])))
+                        break
+        elif ry:
+            for y in lines(cy, max(ya, miny), min(yb, maxy), rpy):
+                seg = region.intersection(LineString([(minx - 1, y), (maxx + 1, y)]))
+                if not seg.is_empty:
+                    consider(int(math.ceil(seg.bounds[0])), y)
         return best
 
     def to_result(self, sol, evaluations, elapsed, stopped, history) -> NestResult:

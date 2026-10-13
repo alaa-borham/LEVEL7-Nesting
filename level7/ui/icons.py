@@ -196,6 +196,17 @@ def _draw(name: str, p: QPainter, fg: QColor):
             p.setBrush((ACCENT, BLUE, GREEN)[k])
             p.drawEllipse(QPointF(x, y), 3.4, 3.4)
             p.setBrush(Qt.NoBrush)
+    elif name == "plaid":
+        p.setBrush(QColor(ACCENT.red(), ACCENT.green(), ACCENT.blue(), 70))
+        p.drawRect(QRectF(3, 3, 26, 26))
+        p.setBrush(Qt.NoBrush)
+        for k, col in enumerate((RED, BLUE, RED)):
+            p.setPen(QPen(col, 2.0))
+            v = 9 + k * 7
+            p.drawLine(QPointF(v, 3), QPointF(v, 29))
+            p.drawLine(QPointF(3, v), QPointF(29, v))
+        p.setPen(QPen(GREEN, 2.2))
+        p.drawPolygon(QPolygonF([QPointF(16, 11), QPointF(21, 16), QPointF(16, 21), QPointF(11, 16)]))
     elif name == "margins":
         # fabric with dashed margin line and two pieces kept apart by a buffer
         p.setBrush(QColor(ACCENT.red(), ACCENT.green(), ACCENT.blue(), 60))

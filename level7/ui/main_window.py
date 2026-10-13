@@ -239,6 +239,15 @@ class MainWindow(QMainWindow):
         from .table_popup import TablePopup
         self.spacing_popup = TablePopup(self, mw, _QSize(290, 290))
         self.table_popups = self.table_popups + (self.spacing_popup,)
+        # plaid / stripe matching: fabric repeat + match point per piece
+        from .plaid_panel import PlaidPanel
+        self.plaid = PlaidPanel()
+        self.plaid_popup = TablePopup(self, self.plaid, _QSize(560, 420))
+        self.plaid.fabric_changed.connect(self._plaid_fabric_changed)
+        self.plaid.rules_changed.connect(self._plaid_rules_changed)
+        self.plaid.pick_toggled.connect(self._plaid_pick)
+        self.view.match_picked.connect(self._match_picked)
+        self.view.pick_finished.connect(lambda: self.plaid.b_pick.setChecked(False))
         for key, wid in (("width", self.f_width), ("lay", self.f_lay),
                          ("max_len", self.f_maxlen), ("material", self.f_material), ("mode", self.f_mode), ("engine", self.f_engine),
                          ("time", self.f_time), ("seed", self.f_seed), ("rot180", self.f_rot180),
@@ -261,7 +270,7 @@ class MainWindow(QMainWindow):
         self.form.addRow(btns)
         # nesting properties: drop-down panel under the toolbar icon "Properties" (more room for the marker)
         self.props_popup = TablePopup(self, w, _QSize(300, 370))
-        self.table_popups = self.table_popups + (self.props_popup,)
+        self.table_popups = self.table_popups + (self.props_popup, self.plaid_popup)
         self.btn_run.clicked.connect(self.props_popup.hide)
 
         # results
@@ -368,7 +377,7 @@ class MainWindow(QMainWindow):
     TOOLBAR = (("open", "open"), ("add_model", "add_model"), ("save", "save"), None, ("undo", None), ("redo", None), None,
                ("rotate180", "rotate180"), ("pin", "pin"), ("measure_tool", "measure"), None,
                ("zoom_fit", "zoom_fit"), ("display_options", "display"), None,
-               ("tab_props", "properties"), ("tab_pieces", "pieces"), ("tab_sizes", "sizes"), ("tab_spacing", "margins"), None,
+               ("tab_props", "properties"), ("tab_pieces", "pieces"), ("tab_sizes", "sizes"), ("tab_spacing", "margins"), ("tab_plaid", "plaid"), None,
                ("run", "run"), ("stop", "stop"), ("batch", "batch"), None,
                ("export_plt", "plt"), ("export_dxf", "dxf"), ("export_iso", "iso"), None,
                ("language", "language"))
@@ -389,7 +398,9 @@ class MainWindow(QMainWindow):
         acts["tab_sizes"] = self._act("tab_sizes", lambda: self.show_table_tab(1), checkable=True)
         acts["tab_spacing"] = self._act("tab_spacing", lambda: self.show_table_tab(2), checkable=True)
         acts["tab_props"] = self._act("tab_props", lambda: self.show_table_tab(3), checkable=True)
-        self.tab_actions = (acts["tab_pieces"], acts["tab_sizes"], acts["tab_spacing"], acts["tab_props"])
+        acts["tab_plaid"] = self._act("tab_plaid", lambda: self.show_table_tab(4), checkable=True)
+        self.tab_actions = (acts["tab_pieces"], acts["tab_sizes"], acts["tab_spacing"], acts["tab_props"],
+                            acts["tab_plaid"])
         # one 'Measure' button: click = measure with the chosen kind, right-click = choose distance / curve
         acts["measure_tool"] = self.act_measure_tool = self._act("measure_tool", self.toggle_measure_tool,
                                                                  checkable=True)
@@ -504,6 +515,8 @@ class MainWindow(QMainWindow):
         self.pieces_popup.title.setText(tr("tab_pieces"))
         self.sizes_popup.title.setText(tr("tab_sizes"))
         self.spacing_popup.title.setText(tr("tab_spacing"))
+        self.plaid_popup.title.setText(tr("tab_plaid"))
+        self.plaid.retranslate()
         self._measure_icon()
         self.props_popup.title.setText(tr("fabric"))
         self.dock_results.setWindowTitle(tr("results"))
@@ -705,6 +718,43 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, tr("compat_report"), tr("compat_saved", p=base + ".report.md"))
         QDesktopServices.openUrl(QUrl.fromLocalFile(out))
 
+    # -- plaid / stripe matching ------------------------------------------------------------
+    def _redraw_marker(self):
+        if self.marker is not None:
+            self.view.show_marker(self.project, self.marker, self.view.bad)
+            self.after_edit()
+
+    def _plaid_fabric_changed(self):
+        """The repeat applies to the marker on screen at once (lines, check) and to the next nesting run."""
+        if self.marker is not None:
+            for k, v in self.plaid.values().items():
+                setattr(self.marker.fabric, k, v)
+            self.mark_dirty()
+            self._redraw_marker()
+
+    def _plaid_rules_changed(self):
+        self.mark_dirty()
+        self._redraw_marker()
+
+    def _plaid_pick(self, on):
+        if on:
+            self.set_measure(None)
+            self.plaid_popup.hide()
+            self.statusBar().showMessage(tr("plaid_pick_hint"))
+        else:
+            self.statusBar().clearMessage()
+        self.view.set_pick_match(on)
+
+    def _match_picked(self, uid, kind, index):
+        pc = self.project.piece(uid)
+        old = pc.match or {}
+        pc.match = {"kind": kind, "index": index, "x": old.get("x", True), "y": old.get("y", True),
+                    "dx": old.get("dx", 0.0), "dy": old.get("dy", 0.0)}
+        self.plaid.fill()
+        self.statusBar().showMessage(tr("plaid_picked", p=pc.name, a=tr("plaid_notch" if kind == "notch"
+                                                                        else "plaid_corner", n=index + 1)))
+        self._plaid_rules_changed()
+
     def load_tables(self):
         self._loading_tables = True
         try:
@@ -718,6 +768,7 @@ class MainWindow(QMainWindow):
 
     def _load_tables(self):
         p = self.project
+        self.plaid.set_project(p)
         t = self.pieces_table
         t.setRowCount(0)
         co = p.cut_order
@@ -822,13 +873,15 @@ class MainWindow(QMainWindow):
                      (self.f_shy, f.shrink_y), (self.f_maxlen, f.max_length or 0.0)):
             w.setValue(v)
         self.f_lay.setCurrentIndex(lay)
+        if hasattr(self, "plaid"):
+            self.plaid.set_values(f)
 
     def fabric_from_form(self) -> FabricSettings:
         lay = [LayType.OPEN, LayType.FACE_TO_FACE, LayType.FOLDED][max(0, self.f_lay.currentIndex())]
         return FabricSettings(width=self.f_width.value(), margin_left=self.f_ml.value(), margin_right=self.f_mr.value(),
                               margin_start=self.f_ms.value(), margin_end=self.f_me.value(), spacing=self.f_sp.value(),
                               buffer_x=self.f_bx.value(), buffer_y=self.f_by.value(),
-                              shrink_x=self.f_shx.value(), shrink_y=self.f_shy.value(),
+                              shrink_x=self.f_shx.value(), shrink_y=self.f_shy.value(), **self.plaid.values(),
                               lay_type=lay, max_length=self.f_maxlen.value() or None)
 
     def nest_settings_from_form(self) -> NestSettings:
@@ -1048,10 +1101,17 @@ class MainWindow(QMainWindow):
                 self.view.refresh()
             return
         changes = []
+        from dataclasses import replace
+
+        from .. import matching
         for pl, dx, dy in moves:
             if pl.pinned:
                 continue
             old = PlacementStateCommand.state(pl)
+            pc = self.project.piece(pl.piece_uid)
+            if matching.active(pc, self.marker.fabric):       # plaid: snap the match point onto its line
+                sx, sy = matching.snap(pc, replace(pl, x=pl.x + dx, y=pl.y + dy), self.marker.fabric)
+                dx, dy = dx + sx, dy + sy
             new = (pl.x + dx, pl.y + dy) + old[2:]
             changes.append((pl, old, new))
         if changes:
@@ -1243,6 +1303,8 @@ class MainWindow(QMainWindow):
     def stop_nesting(self):
         if self.worker and self.worker.isRunning():
             self.worker.stop_event.set()
+        elif self.view.pick_match:              # Esc also ends picking plaid match points
+            self.plaid.b_pick.setChecked(False)
         elif self.view.measure_mode:            # Esc is also 'clear measurement'
             self.view.clear_measure()
 

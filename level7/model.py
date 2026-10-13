@@ -92,6 +92,9 @@ class Piece:
     grain_angle: float | None = None   # deg of grain line in pattern coordinates (None = unknown)
     notes: list[str] = field(default_factory=list)
     model: str = ""                    # model (file) tag when several models share one session
+    # plaid / stripe matching: {"kind": "notch"|"corner", "index": int, "x": bool, "y": bool, "dx": mm, "dy": mm}
+    # the anchor (a notch / corner, present in every size) must lie dx / dy after a pattern line
+    match: dict | None = None
 
     @staticmethod
     def new_uid() -> str:
@@ -127,6 +130,10 @@ class FabricSettings:
     buffer_y: float = 0.0          # extra distance between pieces across the marker width (mm)
     shrink_x: float = 0.0          # shrinkage along the length (%): +2 = pieces 2 % longer, -2 = 2 % shorter
     shrink_y: float = 0.0          # shrinkage across the width (%)
+    repeat_x: float = 0.0          # plaid / stripe repeat along the length (mm, 0 = no vertical lines to match)
+    repeat_y: float = 0.0          # repeat across the width (mm, 0 = no horizontal lines to match)
+    repeat_offset_x: float = 0.0   # position of the first pattern line from the fabric start (mm)
+    repeat_offset_y: float = 0.0   # position of the first pattern line from the fabric edge (mm)
     lay_type: LayType = LayType.OPEN
     max_length: float | None = None
 

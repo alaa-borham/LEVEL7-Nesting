@@ -91,7 +91,7 @@ def project_from_dict(d: dict) -> Project:
                    sizes={k: _geom(v) for k, v in p.get("sizes", {}).items()},
                    allowed_rotations=p.get("allowed_rotations", [0.0, 180.0]),
                    allow_mirror=p.get("allow_mirror", False), grain_angle=p.get("grain_angle"),
-                   notes=p.get("notes", []))
+                   notes=p.get("notes", []), match=p.get("match"))
         pieces.append(pc)
     markers = []
     for m in d.get("markers", []):

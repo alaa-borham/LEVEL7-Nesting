@@ -21,7 +21,7 @@ DIST_TOL = 0.02     # mm tolerance on spacing / borders
 
 @dataclass
 class Issue:
-    kind: str           # overlap / spacing / outside / rotation / mirror / count / geometry / grain
+    kind: str           # overlap / spacing / outside / rotation / mirror / count / geometry / grain / match
     message: str
     placements: list[str] = field(default_factory=list)
 
@@ -114,6 +114,18 @@ def validate_marker(project: Project, marker: Marker, required: dict | None = No
             allowed = allowed_rotations.get((pl.piece_uid, pl.mirrored))
             if allowed is not None and not any(abs(((pl.rotation - a + 180) % 360) - 180) < 1e-6 for a in allowed):
                 issues.append(Issue("rotation", f"{pl.uid} rotation {pl.rotation} not in {allowed}", [pl.uid]))
+    # plaid / stripe matching: matched anchors on their pattern lines
+    if f.repeat_x > 0 or f.repeat_y > 0:
+        from ..matching import TOL_MM, placement_error
+        for pl in marker.placements:
+            if not pl.placed:
+                continue
+            e = placement_error(project.piece(pl.piece_uid), pl, f)
+            if e is None:
+                continue
+            bad = [f"{n} {v:+.2f} mm" for n, v in zip(("X", "Y"), e) if v is not None and abs(v) > TOL_MM]
+            if bad:
+                issues.append(Issue("match", f"{pl.uid} not on the pattern: " + ", ".join(bad), [pl.uid]))
     # grain parallel to marker length (only when grain was read)
     for pl in marker.placements:
         if not pl.placed:
