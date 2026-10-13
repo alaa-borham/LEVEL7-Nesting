@@ -44,18 +44,17 @@ class PieceStrip(QWidget):
         co = project.cut_order
         pcs = {p.uid: p for p in project.pieces}
         groups: dict[tuple[str, int, str], list] = {}
+        marker_rows: set = set()
         if marker is not None and marker.placements:
             for pl in marker.placements:
                 groups.setdefault((pl.size, pl.bundle, pl.piece_uid), []).append(pl)
             self.placed = sum(1 for pl in marker.placements if pl.placed)
             self.total = len(marker.placements)
-            self.rows = sorted({(k[0], k[1]) for k in groups}, key=lambda r: (_size_key(r[0]), r[1]))
-            used = {k[2] for k in groups}
-        else:                    # project only: rows from the cut order, nothing placed yet
-            for s, q in sorted(co.size_quantities.items(), key=lambda x: _size_key(x[0])):
-                for b in range(1, q + 1):
-                    self.rows.append((s, b))
-            used = {u for u, (n, m) in co.piece_counts.items() if n + m > 0}
+            marker_rows = {(k[0], k[1]) for k in groups}
+        # sizes / quantities chosen in the cut order show up at once (still to place), like GRAFIS
+        order_rows = {(s, b) for s, q in co.size_quantities.items() for b in range(1, (q or 0) + 1)}
+        self.rows = sorted(marker_rows | order_rows, key=lambda r: (_size_key(r[0]), r[1]))
+        used = {k[2] for k in groups} | {u for u, (n, m) in co.piece_counts.items() if n + m > 0}
         pieces = [p for p in project.pieces if p.uid in used]
         pieces.sort(key=lambda p: (p.number if p.number is not None else 10 ** 6, p.name))
         for (size, b) in self.rows:
@@ -66,7 +65,8 @@ class PieceStrip(QWidget):
                     rn = sum(1 for pl in pls if not pl.placed and not pl.mirrored)
                     rm = sum(1 for pl in pls if not pl.placed and pl.mirrored)
                     has_m = m > 0 or any(pl.mirrored for pl in pls)
-                elif marker is not None and marker.placements:
+                elif (size, b) in marker_rows or n + m == 0 or size not in p.sizes \
+                        or (p.model and not size.startswith(p.model + ":")):
                     continue
                 else:
                     rn, rm, has_m = n, m, m > 0

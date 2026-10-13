@@ -767,6 +767,9 @@ class MainWindow(QMainWindow):
     def _table_edited(self, *_):
         if not getattr(self, "_loading_tables", False):
             self.mark_dirty()
+            if self.project is not None:          # the strip follows the chosen sizes / quantities at once
+                self.read_tables()
+                self._refresh_strip()
 
     def _load_tables(self):
         p = self.project
@@ -1050,7 +1053,7 @@ class MainWindow(QMainWindow):
         from .piece_strip import ROW_H, TOP
         rows = max(1, len(self.strip.rows))
         extra = 16 if rows > 2 or self.strip.sizeHint().width() > self.strip_area.width() else 4   # scroll bars
-        self.strip_area.setFixedHeight(TOP + min(rows, 2) * ROW_H + extra)
+        self.strip_area.setFixedHeight(TOP + min(rows, 3) * ROW_H + extra)
 
     def update_results(self, v=None):
         if not self.marker or not self.project:
