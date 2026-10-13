@@ -671,8 +671,7 @@ class MarkerView(QGraphicsView):
         vw, vh = self.viewport().width(), self.viewport().height()
         rb = QColor(self.theme["ruler"])
         rb.setAlpha(235)
-        painter.fillRect(0, 0, vw, 18, rb)
-        painter.fillRect(0, 0, 40, vh, rb)
+        painter.fillRect(0, 0, vw, 18, rb)          # top ruler only (the side ruler was removed)
         painter.setPen(self.theme["ruler_text"])
         painter.setFont(QFont("Segoe UI", 7))
         t = self.transform()
@@ -696,10 +695,7 @@ class MarkerView(QGraphicsView):
         for v, q in ticks((0, 0), (vw, 0)):
             painter.drawLine(q.x(), 12, q.x(), 18)
             painter.drawText(q.x() + 2, 11, f"{v:g}")
-        for v, q in ticks((0, 0), (0, vh)):
-            painter.drawLine(34, q.y(), 40, q.y())
-            painter.drawText(2, q.y() - 2, f"{v:g}")
-        painter.drawText(44, 11, "mm")
+        painter.drawText(4, 11, "mm")
         if self.measure_mode:
             painter.setRenderHint(QPainter.Antialiasing)
             self._draw_measure(painter)
