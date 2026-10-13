@@ -200,15 +200,21 @@ def write_scb(template_path: str, project, marker, out_path: str) -> dict:
     new_text = _replace_section(new_text, "SBTLIST", tl_lines)
     new_text_bytes = new_text.encode(ENC) + b"\x00"
 
-    # rebuild the container: same order; changed blocks get new payloads and a recomputed check value (GRAFIS
-    # verifies it: a stale value made GRAFIS report "Style cannot be read ... corrupt file")
+    new = {(2, 8, 0, 0): new_marker}
+    if new_text_bytes.rstrip(b"\x00") != tb.payload.rstrip(b"\x00"):
+        new[(2, 1, 0, 0)] = new_text_bytes
+    out = rebuild_container(data, cont, new, ScbWriteError)
+    write_atomic(out_path, out)
+    return {"placements": len(recs), "length": length, "efficiency": eff, "bytes": len(out)}
+
+
+def rebuild_container(data: bytes, cont, new_payloads: dict, error=ScbWriteError) -> bytes:
+    """The container again, same block order; blocks in ``new_payloads`` get the new payload and a recomputed
+    check value (GRAFIS verifies it: a stale value made GRAFIS report "Style cannot be read ... corrupt file").
+    Every other block is copied byte for byte."""
     out = bytearray(data[:80])
     for b in cont.blocks:
-        payload = b.payload
-        if b.bid == (2, 8, 0, 0):
-            payload = new_marker
-        elif b.bid == (2, 1, 0, 0) and new_text_bytes.rstrip(b"\x00") != b.payload.rstrip(b"\x00"):
-            payload = new_text_bytes
+        payload = new_payloads.get(b.bid, b.payload)
         pad = (-(32 + len(payload))) % 8
         payload = payload + b"\x00" * pad
         head = struct.pack("<II", 0, (32 + len(payload)) // 8) + BLOCK_MARK + struct.pack("<4I", *b.bid)
@@ -216,18 +222,21 @@ def write_scb(template_path: str, project, marker, out_path: str) -> dict:
         if head[4:] + payload != data[b.offset + 4:b.offset + b.size]:          # block changed
             original = b"\0\0\0\0" + data[b.offset + 4:b.offset + b.size]
             if grafis_check(original) != b.check:
-                raise ScbWriteError(f"cannot compute the GRAFIS check value of block {b.bid} - not written")
+                raise error(f"cannot compute the GRAFIS check value of block {b.bid} - not written")
             check = grafis_check(head + payload)
         out += struct.pack("<I", check) + head[4:] + payload
     out += TRAILER
     struct.pack_into("<I", out, 4, (len(out) - 8) // 8)
     original_head = b"\0\0\0\0" + data[4:80]
     if grafis_check(original_head) != struct.unpack_from("<I", data, 0)[0]:
-        raise ScbWriteError("cannot compute the GRAFIS file header check value - not written")
+        raise error("cannot compute the GRAFIS file header check value - not written")
     struct.pack_into("<I", out, 0, 0)
     struct.pack_into("<I", out, 0, grafis_check(bytes(out[:80])))
-    tmp = out_path + ".part"                 # the GRAFIS file is replaced only once the new one is complete
+    return bytes(out)
+
+
+def write_atomic(path: str, data: bytes) -> None:
+    tmp = path + ".part"                 # the GRAFIS file is replaced only once the new one is complete
     with open(tmp, "wb") as fh:
-        fh.write(out)
-    os.replace(tmp, out_path)
-    return {"placements": len(recs), "length": length, "efficiency": eff, "bytes": len(out)}
+        fh.write(data)
+    os.replace(tmp, path)

@@ -320,6 +320,8 @@ T = {
                      "Right-click the table to set it for all selected parts.",
                      "خامة هذه القطعة (O = القماش الأساسي، F = البطانة …): اضغط للاختيار أو «خامة جديدة…». "
                      "الزر الأيمن على الجدول يعيّن الخامة لكل القطع المحددة مرة واحدة."),
+    "mdl_not_possible": ("Saving as GRAFIS MDL needs a session opened from one GRAFIS MDL (one model).",
+                         "الحفظ بصيغة MDL جرافس يحتاج جلسة مفتوحة من ملف MDL واحد (موديل واحد)."),
     "mat_none": ("— none —", "— بدون —"),
     "mat_new": ("New material…", "خامة جديدة…"),
     "mat_new_title": ("New material", "خامة جديدة"),
@@ -406,6 +408,9 @@ T = {
     "unsaved_title": ("Unsaved session", "جلسة غير محفوظة"),
     "unsaved_text": ("'{n}' has unsaved changes (markers, edits or quantities).\nSave before closing?",
                      "«{n}» بها تغييرات غير محفوظة (ماركرات أو تعديلات أو كميات).\nهل تريد الحفظ قبل الإغلاق؟"),
+    "save_mdl": ("Save model as GRAFIS MDL…", "حفظ الموديل بصيغة MDL جرافس…"),
+    "mdl_saved": ("Saved as GRAFIS MDL (materials / copies of the parts): {p} - experimental, check it in GRAFIS",
+                  "حُفظ بصيغة MDL جرافس (خامات القطع وعدد النسخ): {p} — تجريبي، افحصه في جرافس"),
     "save_scb": ("Save marker as GRAFIS SCB…", "حفظ الماركر بصيغة GRAFIS SCB…"),
     "export_scb": ("GRAFIS SCB (marker file)…", "GRAFIS SCB (ملف ماركر)…"),
     "scb_pick_template": ("An SCB is written into a copy of a GRAFIS SCB of the same model (all unknown GRAFIS data is "

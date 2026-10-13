@@ -385,6 +385,16 @@ def export_marker(proj: Project, marker: Marker, fmt: str, path: str, config=Non
     raise ValueError(fmt)
 
 
+def mdl_template(proj: Project) -> str | None:
+    """The GRAFIS MDL this session was read from (template for writing MDL), single-model sessions only."""
+    if any(p.model for p in proj.pieces):
+        return None
+    for src in proj.sources:
+        if src.kind == "mdl" and os.path.isfile(src.path):
+            return src.path
+    return None
+
+
 def scb_template(proj: Project) -> str | None:
     """The GRAFIS SCB this session was read from (template for writing SCB), if any and still on disk."""
     for src in proj.sources:

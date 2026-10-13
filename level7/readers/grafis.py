@@ -170,6 +170,18 @@ def _build_piece_geometry(payload: bytes, size_name: str, src: str, issues: list
     return g
 
 
+def _block_material(block) -> str | None:
+    """Material code of the part's material record (MDL block (3, part, 6, 6), see mdl_writer)."""
+    if block is None:
+        return None
+    from ..formats.grafis.mdl_writer import MdlWriteError, decode_material, material_record
+    try:
+        rec = material_record(block.payload, block.bid)
+    except MdlWriteError:
+        return None
+    return decode_material(rec)["material"] if rec is not None else None
+
+
 def read_grafis(path: str, encoding: str = DEFAULT_ENCODING, include_construction: bool = True) -> ReadResult:
     cont = read_container(path)
     issues = list(cont.errors)
@@ -199,8 +211,11 @@ def read_grafis(path: str, encoding: str = DEFAULT_ENCODING, include_constructio
     for t in ts.tlist:
         if not include_construction and not t.production:
             continue
+        material = t.material
+        if material is None and kind == "mdl":     # parts not produced: the material GRAFIS keeps for them
+            material = _block_material(blocks.get((3, t.number, 6, 6)))
         piece = Piece(uid=Piece.new_uid(), source_id=t.piece_id, number=t.number, name=t.name,
-                      material=t.material, production=t.production,
+                      material=material, production=t.production,
                       default_count=t.count if t.count is not None else 1,
                       default_mirrored=t.mirrored if t.mirrored is not None else 0)
         hint: dict = {}

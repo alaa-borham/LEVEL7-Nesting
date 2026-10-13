@@ -122,6 +122,15 @@ GRAFIS "U/B" = marker length / number of bundles (1.46 m, C).
   "COMPAT:" notes, the GUI warns and offers a compatibility report (Help menu).
 
 
+## Part material record — MDL block (3, part, 6, 6) (C for the fields LEVEL7 writes)
+The block is a list of records `u16 units, u16 type`, each `8 * units` bytes. Type 1 = material record:
+`+4 u8` 0xFF produced / 0x00 not produced, `+5` material code (" " = none), `+6 u16` copies in total
+(normal + mirrored), `+8 u16` mirrored copies, `+10 u16` unknown, constant per material (O 2, F/E/S 1, none 0),
+`+12 u16` 1 = produced, `+14 u16` 0, `+16` material name NUL terminated, space padded ("upper fabric",
+"lining", "fuse", "template"). Parts that are not produced keep their material here (#TLIST shows it only for
+produced parts). Some parts have no type-1 record (no material). Verified on both sample MDLs (116 parts):
+#TLIST production column = flag / code / copies of this record. Written by formats/grafis/mdl_writer.py.
+
 ## Check values (C)
 The u32 at file offset 0 (over the 80-byte header) and the first u32 of every block (over the whole block)
 are check values that GRAFIS verifies — a stale value makes GRAFIS report "Style cannot be read (GRAFIS installed

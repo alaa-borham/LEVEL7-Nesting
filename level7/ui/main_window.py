@@ -401,6 +401,7 @@ class MainWindow(QMainWindow):
         self.m_file.addAction(self._act("save", self.save, "Ctrl+S"))
         self.m_file.addAction(self._act("save_as", self.save_as, "Ctrl+Shift+S"))
         self.m_file.addAction(self._act("save_scb", lambda: self.export("scb"), "Ctrl+Alt+S"))
+        self.m_file.addAction(self._act("save_mdl", self.save_mdl_as))
         self.m_file.addSeparator()
         self.m_file.addAction(self._act("language", self.toggle_language))
         undo = self.undo.createUndoAction(self, "")
@@ -515,7 +516,7 @@ class MainWindow(QMainWindow):
         # Save: right-click offers Save / Save as… (like Measure)
         self.m_save = QMenu(self)
         for a, k in self.actions_tr:
-            if k in ("save", "save_as", "save_scb"):
+            if k in ("save", "save_as", "save_scb", "save_mdl"):
                 self.m_save.addAction(a)
         self.measure_kind = "curve" if self.settings_store.value("measure_kind", "line") == "curve" else "line"
         # extra rows: used only when the window is too narrow for one row (icons wrap instead of hiding)
@@ -1302,6 +1303,8 @@ class MainWindow(QMainWindow):
                 finally:
                     if tmp_t:
                         os.remove(tmp_t)
+            elif self.project_path.lower().endswith(".mdl"):
+                self._save_mdl(self.project_path)
             else:
                 from ..project_storage.store import save_project
                 save_project(self.project, self.project_path)
@@ -1312,20 +1315,70 @@ class MainWindow(QMainWindow):
         self.mark_dirty(False)
         return True
 
+    def _save_mdl(self, path):
+        """GRAFIS MDL: the model file this session was read from, with the parts' material / production /
+        copies from the pieces table (geometry copied unchanged). The original is kept once as .bak."""
+        import shutil
+        import tempfile
+
+        from ..formats.grafis.mdl_writer import write_mdl
+        from ..service import mdl_template
+        template = mdl_template(self.project)
+        if template is None:
+            raise ValueError(tr("mdl_not_possible"))
+        tmp_t = None
+        if os.path.abspath(template) == os.path.abspath(path):
+            if not os.path.exists(path + ".bak"):
+                shutil.copy2(path, path + ".bak")
+            fd, tmp_t = tempfile.mkstemp(suffix=".mdl")
+            os.close(fd)
+            shutil.copy2(template, tmp_t)
+            template = tmp_t
+        try:
+            write_mdl(template, self.project, path)
+        finally:
+            if tmp_t:
+                os.remove(tmp_t)
+
+    def save_mdl_as(self):
+        """File > Save as GRAFIS MDL…: the model with the parts' material / production / copies."""
+        from ..service import mdl_template
+        if not self.project:
+            return
+        template = mdl_template(self.project)
+        if template is None:
+            QMessageBox.warning(self, tr("save_mdl"), tr("mdl_not_possible"))
+            return
+        self.read_tables()
+        p, _ = QFileDialog.getSaveFileName(self, tr("save_mdl"), template, "GRAFIS MDL (*.mdl)")
+        if not p:
+            return
+        if not p.lower().endswith(".mdl"):
+            p += ".mdl"
+        try:
+            self._save_mdl(p)
+        except Exception as e:
+            QMessageBox.critical(self, tr("save_mdl"), str(e))
+            return
+        self.statusBar().showMessage(tr("mdl_saved", p=p))
+
     def save_as(self) -> bool:
         """Default: GRAFIS SCB when the session allows it (like GRAFIS), else the LEVEL7 project format."""
         if not self.project:
             return True
+        from ..service import mdl_template
         template = self._scb_possible()
-        f_scb, f_l7n = "GRAFIS SCB (*.scb)", "LEVEL7 project (*.l7n)"
+        f_scb, f_l7n, f_mdl = "GRAFIS SCB (*.scb)", "LEVEL7 project (*.l7n)", "GRAFIS MDL (*.mdl)"
         filters = f"{f_scb};;{f_l7n}" if template else f_l7n
+        if mdl_template(self.project):
+            filters += f";;{f_mdl}"
         start_dir = os.path.dirname(template) if template else self.settings_store.value("last_dir", "")
         name = self.project.name + (".scb" if template else ".l7n")
         p, chosen = QFileDialog.getSaveFileName(self, tr("save_as"), os.path.join(start_dir, name), filters,
                                                 f_scb if template else f_l7n)
         if not p:
             return False
-        ext = ".scb" if chosen == f_scb else ".l7n"
+        ext = ".scb" if chosen == f_scb else ".mdl" if chosen == f_mdl else ".l7n"
         if not p.lower().endswith(ext):
             p = os.path.splitext(p)[0] + ext
         if ext == ".scb":
