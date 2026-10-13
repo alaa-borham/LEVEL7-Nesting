@@ -77,8 +77,8 @@ jobs:
           python tools/collect_licenses.py -o build-licenses
           if ($LASTEXITCODE -ne 0) { throw "licence collection failed" }
           New-Item -ItemType Directory -Force build-licenses/qt | Out-Null
-          Invoke-WebRequest https://www.gnu.org/licenses/lgpl-3.0.txt -OutFile build-licenses/qt/LGPL-3.0.txt
-          Invoke-WebRequest https://www.gnu.org/licenses/gpl-3.0.txt -OutFile build-licenses/qt/GPL-3.0.txt
+          # FSF texts kept in the repository (downloading them from gnu.org timed out and failed the build)
+          Copy-Item packaging/licenses/LGPL-3.0.txt, packaging/licenses/GPL-3.0.txt build-licenses/qt/
 
       - name: PyInstaller build
         run: pyinstaller packaging/level7.spec --noconfirm --clean

@@ -6,7 +6,7 @@ Output (default build-licenses/, shipped as <app>/_internal/licenses):
                               the local cargo registry the build just used)
   README.txt                  overview, Qt / PySide6 LGPL-3.0 note and source locations
 
-The LGPL-3.0 / GPL-3.0 texts for Qt are downloaded by the CI step into licenses/qt/.
+The LGPL-3.0 / GPL-3.0 texts for Qt (packaging/licenses/) are copied by the CI step into licenses/qt/.
 Exit code 1 when a Rust crate's licence file cannot be found (so a release never ships without it).
 """
 from __future__ import annotations
