@@ -150,6 +150,8 @@ class MainWindow(QMainWindow):
         self.pieces_table = QTableWidget(0, 7)
         self.pieces_table.verticalHeader().hide()
         self.pieces_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.pieces_table.itemChanged.connect(
+            lambda it: self._refresh_material_groups() if it.column() == 0 else None)
         self.sizes_table = QTableWidget(0, 2)
         self.sizes_table.verticalHeader().hide()
         left = QTabWidget()
@@ -545,19 +547,25 @@ class MainWindow(QMainWindow):
         self._refresh_material_groups(co.material)
 
     def _refresh_material_groups(self, select=None):
-        """Material-group choice for nesting = the materials currently assigned in the pieces table."""
-        mats = set()
+        """Material to nest: the material codes used by the pieces of the file (as assigned in the pieces table),
+        with the GRAFIS material name when the file has one (SCB: MATERIAL<code>) and the number of pieces."""
+        counts: dict[str, int] = {}
         for r in range(self.pieces_table.rowCount()):
             w = self.pieces_table.cellWidget(r, 2)
-            if w is not None and w.currentText().strip():
-                mats.add(w.currentText().strip())
-        cur = select if select is not None else self.f_material.currentText()
+            use = self.pieces_table.item(r, 0)
+            if w is not None and w.currentText().strip() and use is not None and use.checkState() == Qt.Checked:
+                counts[w.currentText().strip()] = counts.get(w.currentText().strip(), 0) + 1
+        names = {k[len("MATERIAL"):]: v for k, v in ((self.project.sbinfo or {}) if self.project else {}).items()
+                 if k.startswith("MATERIAL") and len(k) > len("MATERIAL")}
+        cur = select if select is not None else self.f_material.currentData()
         self.f_material.blockSignals(True)
         self.f_material.clear()
-        self.f_material.addItem("*")
-        self.f_material.addItems(sorted(mats))
-        if cur in mats:
-            self.f_material.setCurrentText(cur)
+        self.f_material.addItem(tr("mat_all"), "*")
+        for code in sorted(counts):
+            label = f"{code} — {names[code]}" if names.get(code) else code
+            self.f_material.addItem(f"{label}   ({tr('n_pieces', n=counts[code])})", code)
+        i = self.f_material.findData(cur)
+        self.f_material.setCurrentIndex(i if i >= 0 else 0)
         self.f_material.blockSignals(False)
 
     def read_tables(self):
@@ -577,8 +585,8 @@ class MainWindow(QMainWindow):
             pc.grain_angle = None if g < 0 else g
         co.size_quantities = {self.sizes_table.item(r, 0).text(): self.sizes_table.cellWidget(r, 1).value()
                               for r in range(self.sizes_table.rowCount())}
-        mat = self.f_material.currentText()
-        co.material = None if mat in ("*", "") else mat
+        mat = self.f_material.currentData()
+        co.material = None if mat in ("*", "", None) else mat
 
     def fabric_from_form(self) -> FabricSettings:
         lay = [LayType.OPEN, LayType.FACE_TO_FACE, LayType.FOLDED][max(0, self.f_lay.currentIndex())]
@@ -837,6 +845,8 @@ class MainWindow(QMainWindow):
         if not self.project or (self.worker and self.worker.isRunning()):
             return
         self.read_tables()
+        if not self._check_cut_order():
+            return
         if not self._ensure_geometry():
             return
         fabric = self.fabric_from_form()
@@ -850,6 +860,30 @@ class MainWindow(QMainWindow):
         self.worker.failed.connect(lambda e: (self._nest_ui(False), QMessageBox.critical(self, tr("run"), e)))
         self._nest_ui(True)
         self.worker.start()
+
+    def _check_cut_order(self) -> bool:
+        """Explain an empty cut order instead of failing: no size quantity, no piece, or the material filter."""
+        co = self.project.cut_order
+        sizes = [s for s, q in co.size_quantities.items() if q > 0]
+        used = [p for p in self.project.pieces if sum(co.piece_counts.get(p.uid, (0, 0))) > 0]
+        in_mat = [p for p in used if not co.material or p.material == co.material]
+        reason = None
+        if not self.project.pieces or not any(p.sizes for p in self.project.pieces):
+            reason = tr("empty_no_geometry", n=len(self.project.pieces))
+        elif not sizes:
+            reason = tr("empty_no_sizes")
+        elif not used:
+            reason = tr("empty_no_pieces")
+        elif not in_mat:
+            reason = tr("empty_material", m=co.material)
+        if reason is None:
+            return True
+        QMessageBox.information(self, tr("run"), reason)
+        if not sizes or not used:
+            self.dock_left.show()
+            self.dock_left.raise_()
+            self.left_tabs.setCurrentIndex(1 if not sizes else 0)
+        return False
 
     def _ensure_geometry(self) -> bool:
         """Selected sizes without geometry (an SCB holds only some sizes): offer to load them from the MDL."""

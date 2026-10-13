@@ -203,6 +203,18 @@ T = {
     "opt_view_rotation": ("Screen rotation (display only)", "تدوير العرض (الشاشة فقط)"),
     "opt_view_rot180": ("Rotate view 180°", "تدوير العرض 180°"),
     "opt_view_rot90": ("Rotate view 90° (vertical marker)", "تدوير العرض 90° (ماركر رأسي)"),
+    "mat_all": ("* all materials", "* كل الخامات"),
+    "n_pieces": ("{n} pieces", "{n} قطعة"),
+    "empty_no_geometry": ("No piece geometry could be read from this file ({n} pieces listed). See 'Issues' in the results "
+                          "panel; please send the file so the reader can be extended.",
+                          "لم يتمكن البرنامج من قراءة أشكال القطع من هذا الملف ({n} قطعة مسجلة). راجع «المشاكل» في لوحة "
+                          "النتائج، وأرسل الملف لتطوير القارئ."),
+    "empty_no_sizes": ("No size quantity is set. Open 'Size quantities' and enter how many garments per size.",
+                       "لم يتم تحديد كمية لأي مقاس. افتح تبويب «كميات المقاسات» واكتب عدد القطع لكل مقاس."),
+    "empty_no_pieces": ("No piece is selected. Tick 'Use' and set copies in the pieces table.",
+                        "لم يتم اختيار أي قطعة. فعّل «استخدام» واكتب عدد النسخ في جدول القطع."),
+    "empty_material": ("No selected piece has material {m}. Choose another material or '* all materials'.",
+                       "لا توجد قطعة مختارة من الخامة {m}. اختر خامة أخرى أو «* كل الخامات»."),
     "cancel": ("Cancel", "إلغاء"),
 }
 
