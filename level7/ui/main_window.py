@@ -96,10 +96,9 @@ class MainWindow(QMainWindow):
         cl.setContentsMargins(0, 0, 0, 0)
         cl.setSpacing(0)
         cl.addWidget(self.view, 1)
-        self.info_bar = self._make_info_bar()
-        cl.addWidget(self.info_bar)
         self.setCentralWidget(central)
         self.view.moved.connect(self.on_moved)
+        self.view.dragging.connect(self._live_length)
         self.view.cursor_mm.connect(lambda x, y: self.coord_label.setText(f"x {x:.1f}  y {y:.1f} mm"))
         self.view.measured.connect(lambda d: self.statusBar().showMessage(tr("distance", d=d)))
         self._build_docks()
@@ -943,48 +942,35 @@ class MainWindow(QMainWindow):
             self.view.set_options(**opts)
             self.update_status_line()
 
-    INFO_FIELDS = ("L", "E", "U/B", "Wi", "Pc", "Mat")
-
-    def _make_info_bar(self):
-        """GRAFIS-like marker information directly under the marker."""
-        bar = QWidget()
-        bar.setObjectName("infobar")
-        hl = QHBoxLayout(bar)
-        hl.setContentsMargins(8, 4, 8, 4)
-        hl.setSpacing(18)
-        self.info_labels = {}
-        for key in self.INFO_FIELDS:
-            lab = QLabel()
-            lab.setTextFormat(Qt.RichText)
-            f = lab.font()
-            f.setPointSizeF(f.pointSizeF() + 1.5)
-            lab.setFont(f)
-            hl.addWidget(lab)
-            self.info_labels[key] = lab
-        hl.addStretch(1)
-        return bar
-
-    def _set_info(self, values: dict):
-        for key, lab in self.info_labels.items():
-            v = values.get(key)
-            lab.setText(f"{key} = <b>{v}</b>" if v not in (None, "") else "")
-
     def update_status_line(self):
         """GRAFIS-style status: L, E, U/B, Wi (metres, or millimetres if chosen)."""
         if not self.marker or "length_mm" not in (self.marker.stats or {}):
             self.grafis_status.setText("")
-            self._set_info({})
             return
         s = self.marker.stats
+        self._show_status(s["length_mm"], s["efficiency_total_width_pct"],
+                          s.get("length_per_garment_m", 0) * 1000, s["width_mm"])
+
+    def _show_status(self, length, eff, ub, width):
         mm = self.view.options.get("status_mm")
         f = (lambda v: f"{v:.1f} mm") if mm else (lambda v: f"{v / 1000:.2f} m")
-        self.grafis_status.setText(f"L = {f(s['length_mm'])}   E = {s['efficiency_total_width_pct']:.1f} %   "
-                                   f"U/B = {f(s.get('length_per_garment_m', 0) * 1000)}   Wi = {f(s['width_mm'])}")
-        mats = sorted({(self.project.piece(pl.piece_uid).material or "?") for pl in self.marker.placements
-                       if pl.placed and self.project.piece(pl.piece_uid)})
-        self._set_info({"L": f(s["length_mm"]), "E": f"{s['efficiency_total_width_pct']:.1f} %",
-                        "U/B": f(s.get("length_per_garment_m", 0) * 1000), "Wi": f(s["width_mm"]),
-                        "Pc": f"{s['placed']} / {s['placed'] + s['unplaced']}", "Mat": ", ".join(mats)})
+        self.grafis_status.setText(f"L = {f(length)}   E = {eff:.1f} %   U/B = {f(ub)}   Wi = {f(width)}")
+
+    def _live_length(self):
+        """While a piece is dragged: L / E / U/B from the current piece positions (no validation)."""
+        if not self.marker or not self.marker.stats:
+            return
+        items = list(self.view.items_by_uid.values())
+        if not items:
+            return
+        f = self.marker.fabric
+        right = max(it.mapToScene(it.path().boundingRect()).boundingRect().right() for it in items)
+        length = right + f.margin_end
+        s = self.marker.stats
+        area = s.get("pieces_area_m2", 0.0) * 1e6
+        eff = 100.0 * area / (f.width * length) if f.width and length > 0 else 0.0
+        garments = s.get("garments") or 0
+        self._show_status(length, eff, (length / garments) if garments else 0.0, f.width)
 
     # -- nesting ---------------------------------------------------------------------------
     def run_nesting(self):

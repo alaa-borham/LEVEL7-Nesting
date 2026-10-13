@@ -198,6 +198,11 @@ class PieceItem(QGraphicsPathItem):
             pen = QPen(QColor(255, 255, 255) if o["white_marking"] else QColor(0, 0, 0), 0)
         self.setPen(pen)
 
+    def itemChange(self, change, value):
+        if change == QGraphicsItem.ItemPositionHasChanged and self.view is not None:
+            self.view.dragging.emit()
+        return super().itemChange(change, value)
+
     def mouseReleaseEvent(self, ev):
         super().mouseReleaseEvent(ev)
         d = self.pos()
@@ -209,6 +214,7 @@ class PieceItem(QGraphicsPathItem):
 
 class MarkerView(QGraphicsView):
     moved = Signal(list)           # [(placement, dx, dy)]
+    dragging = Signal()            # a piece is being moved (live length in the status bar)
     cursor_mm = Signal(float, float)
     measured = Signal(float)
 
