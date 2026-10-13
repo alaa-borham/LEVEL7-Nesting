@@ -105,6 +105,20 @@ def _draw(name: str, p: QPainter, fg: QColor):
         for i in range(-10, 12, 4):
             p.drawLine(QPointF(i, -5), QPointF(i, -1 if i % 8 else 1))
         p.restore()
+    elif name == "measure_curve":
+        path = QPainterPath()
+        path.moveTo(4, 24)
+        path.cubicTo(8, 4, 24, 4, 28, 22)
+        p.setPen(QPen(QColor(255, 0, 200), 2.4, Qt.SolidLine, Qt.RoundCap))
+        p.drawPath(path)
+        p.setBrush(QColor(255, 0, 200))
+        p.setPen(Qt.NoPen)
+        p.drawEllipse(QPointF(4, 24), 2.6, 2.6)
+        p.drawEllipse(QPointF(28, 22), 2.6, 2.6)
+        p.setBrush(Qt.NoBrush)
+        p.setPen(QPen(fg, 1.2))
+        for x in (9, 14, 19, 24):
+            p.drawLine(QPointF(x, 28), QPointF(x, 30))
     elif name == "zoom_fit":
         p.drawEllipse(QRectF(5, 5, 16, 16))
         p.drawLine(QPointF(19, 19), QPointF(28, 28))

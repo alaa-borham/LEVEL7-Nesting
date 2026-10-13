@@ -276,6 +276,12 @@ T = {
                          "Choose the LEVEL7 project format.",
                          "لا يمكن حفظ هذه الجلسة بصيغة GRAFIS SCB (عدة موديلات أو لا يوجد ملف SCB من GRAFIS كقالب). "
                          "اختر صيغة مشروع LEVEL7."),
+    "measure_curve": ("Measure curve (length along a piece edge)", "قياس كرف (الطول على حافة القطعة)"),
+    "tb_measure_curve": ("Curve", "قياس كرف"),
+    "measure_curve_hint": ("Curve: click two points on the same piece edge; the shorter arc is measured (Shift = the "
+                           "other arc); right-click / Esc clears",
+                           "قياس الكرف: انقر نقطتين على حافة نفس القطعة؛ يُقاس الطول على الحافة (Shift = الجزء الآخر)؛ "
+                           "الزر الأيمن أو Esc للمسح"),
     "cancel": ("Cancel", "إلغاء"),
 }
 

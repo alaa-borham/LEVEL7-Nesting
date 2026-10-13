@@ -238,6 +238,10 @@ class MarkerView(QGraphicsView):
         self.measure_mode = False
         self._m_start = self._m_end = self._m_hover = None   # scene points (mm)
         self._m_fixed = False
+        self.measure_kind = "line"          # "line" (straight) or "curve" (along a piece contour)
+        self._c_start = self._c_end = None   # (item uid, arc position, point) on the contour
+        self._c_arc: list = []               # scene points of the measured arc
+        self._c_len = None
         self._snap_pts: list[tuple[float, float]] = []
         self._measure_item = None
         self._pan = None
@@ -364,6 +368,18 @@ class MarkerView(QGraphicsView):
         if self.measure_mode and ev.button() == Qt.RightButton:
             self.clear_measure()
             return
+        if self.measure_mode and self.measure_kind == "curve" and ev.button() == Qt.LeftButton:
+            hit = self._on_contour(self.mapToScene(ev.position().toPoint()))
+            if hit is None:
+                return
+            if self._c_start is None or self._c_end is not None or hit[0] != self._c_start[0]:
+                self._c_start, self._c_end, self._c_arc, self._c_len = hit, None, [], None
+            else:
+                self._c_end = hit
+                self._update_arc(hit, ev.modifiers() & Qt.ShiftModifier)
+                self.measured.emit(self._c_len or 0.0)
+            self.viewport().update()
+            return
         if self.measure_mode and ev.button() == Qt.LeftButton:
             p = self._snap(self.mapToScene(ev.position().toPoint()))
             if self._m_start is None or self._m_fixed:
@@ -384,6 +400,16 @@ class MarkerView(QGraphicsView):
             return
         p = self.mapToScene(ev.position().toPoint())
         self.cursor_mm.emit(p.x(), p.y())
+        if self.measure_mode and self.measure_kind == "curve":
+            hit = self._on_contour(p)
+            self._m_hover = QPointF(*hit[2]) if hit else None
+            if self._c_start is not None and self._c_end is None:
+                if hit and hit[0] == self._c_start[0]:
+                    self._update_arc(hit, ev.modifiers() & Qt.ShiftModifier)
+                else:
+                    self._c_arc, self._c_len = [], None
+            self.viewport().update()
+            return
         if self.measure_mode:
             q = self._snap(p)
             self._m_hover = q
@@ -396,14 +422,17 @@ class MarkerView(QGraphicsView):
     # -- measure tool ------------------------------------------------------------------------
     SNAP_PX = 10
 
-    def set_measure_mode(self, on: bool):
+    def set_measure_mode(self, on: bool, kind: str = "line"):
         self.measure_mode = on
+        self.measure_kind = kind
         self.setDragMode(QGraphicsView.NoDrag if on else QGraphicsView.RubberBandDrag)
         self.viewport().setCursor(Qt.CrossCursor if on else Qt.ArrowCursor)
         if not on:
             self.clear_measure()
 
     def clear_measure(self):
+        self._c_start = self._c_end = None
+        self._c_arc, self._c_len = [], None
         self._m_start = self._m_end = None
         self._m_fixed = False
         self.viewport().update()
@@ -421,6 +450,62 @@ class MarkerView(QGraphicsView):
         q.snapped = best is not None        # type: ignore[attr-defined]
         return q
 
+    # -- curve measuring ----------------------------------------------------------------------
+    def _contour(self, uid):
+        it = self.items_by_uid.get(uid)
+        if it is None:
+            return None
+        return placement_points(it.piece.sizes[it.placement.size].cut, it.placement)
+
+    def _on_contour(self, p: QPointF):
+        """Nearest point on a piece contour within SNAP_PX: (uid, arc position from vertex 0, (x, y))."""
+        scale = math.hypot(self.transform().m11(), self.transform().m12()) or 1.0
+        tol = 2 * self.SNAP_PX / scale
+        best = None
+        px, py = p.x(), p.y()
+        for uid, it in self.items_by_uid.items():
+            r = it.mapToScene(it.path().boundingRect()).boundingRect()
+            if not r.adjusted(-tol, -tol, tol, tol).contains(p):
+                continue
+            pts = self._contour(uid)
+            acc = 0.0
+            n = len(pts)
+            for i in range(n):
+                (ax, ay), (bx, by) = pts[i], pts[(i + 1) % n]
+                dx, dy = bx - ax, by - ay
+                L2 = dx * dx + dy * dy
+                t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / L2))
+                qx, qy = ax + t * dx, ay + t * dy
+                d = math.hypot(px - qx, py - qy)
+                if d <= tol and (best is None or d < best[0]):
+                    best = (d, uid, acc + t * math.sqrt(L2), (qx, qy))
+                acc += math.sqrt(L2)
+        return None if best is None else best[1:]
+
+    def _update_arc(self, end, other_way=False):
+        """Arc along the contour between the start and ``end``: the shorter one (Shift: the other one)."""
+        uid, s1, p1 = self._c_start
+        _, s2, p2 = end
+        pts = self._contour(uid)
+        n = len(pts)
+        seg = [math.dist(pts[i], pts[(i + 1) % n]) for i in range(n)]
+        per = sum(seg)
+        fwd = (s2 - s1) % per
+        forward = fwd <= per - fwd
+        if other_way:
+            forward = not forward
+        a, b = (s1, s2) if forward else (s2, s1)          # walk forward from a to b
+        length = (b - a) % per
+        cum = [0.0]
+        for L in seg[:-1]:
+            cum.append(cum[-1] + L)               # arc position of every vertex
+        arc = [p1 if forward else p2]
+        for i in sorted(range(n), key=lambda i: (cum[i] - a) % per):
+            if 1e-9 < (cum[i] - a) % per < length - 1e-9:
+                arc.append(pts[i])
+        arc.append(p2 if forward else p1)
+        self._c_arc, self._c_len = arc, length
+
     def keyPressEvent(self, ev):
         if self.measure_mode and ev.key() == Qt.Key_Escape:
             self.clear_measure()
@@ -429,6 +514,26 @@ class MarkerView(QGraphicsView):
 
     def _draw_measure(self, painter: QPainter):
         accent = QColor(255, 0, 200)
+        if self.measure_kind == "curve":
+            if self._m_hover is not None:
+                h = self.mapFromScene(self._m_hover)
+                painter.setPen(QPen(accent, 1.5))
+                painter.setBrush(Qt.NoBrush)
+                painter.drawEllipse(QPointF(h), 5, 5)
+            if self._c_start is not None:
+                painter.setBrush(accent)
+                painter.setPen(Qt.NoPen)
+                painter.drawEllipse(QPointF(self.mapFromScene(QPointF(*self._c_start[2]))), 4, 4)
+            if len(self._c_arc) >= 2:
+                painter.setPen(QPen(accent, 3, Qt.SolidLine if self._c_end is not None else Qt.DashLine))
+                painter.setBrush(Qt.NoBrush)
+                pts = [QPointF(self.mapFromScene(QPointF(x, y))) for x, y in self._c_arc]
+                painter.drawPolyline(QPolygonF(pts))
+                painter.setBrush(accent)
+                painter.drawEllipse(pts[-1], 4, 4)
+                mid = pts[len(pts) // 2]
+                self._label(painter, f"{self._c_len:.1f} mm", mid.x() + 12, mid.y() - 30)
+            return
         if self._m_hover is not None and getattr(self._m_hover, "snapped", False):
             h = self.mapFromScene(self._m_hover)
             painter.setPen(QPen(accent, 1.5))
@@ -445,12 +550,15 @@ class MarkerView(QGraphicsView):
         for pt in (a, b):
             painter.drawEllipse(QPointF(pt), 3.5, 3.5)
         txt = f"{d:.1f} mm"                     # only the distance between the two points
+        self._label(painter, txt, (a.x() + b.x()) / 2 + 12, (a.y() + b.y()) / 2 - 30)
+
+    def _label(self, painter, txt, x, y):
         f = QFont("Segoe UI", 10)
         f.setBold(True)
         painter.setFont(f)
         fm = painter.fontMetrics()
         w, h = fm.horizontalAdvance(txt) + 16, fm.height() + 8
-        mx, my = (a.x() + b.x()) / 2 + 12, (a.y() + b.y()) / 2 - h - 6
+        mx, my = x, y
         mx = max(44, min(mx, self.viewport().width() - w - 4))
         my = max(22, min(my, self.viewport().height() - h - 4))
         painter.setPen(Qt.NoPen)

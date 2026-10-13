@@ -288,6 +288,8 @@ class MainWindow(QMainWindow):
         self.m_edit.addAction(self._act("pin", self.pin_selected, "P"))
         self.act_measure = self._act("measure", self.toggle_measure, "M", checkable=True)
         self.m_edit.addAction(self.act_measure)
+        self.act_measure_curve = self._act("measure_curve", self.toggle_measure_curve, "Shift+M", checkable=True)
+        self.m_edit.addAction(self.act_measure_curve)
         self.m_view.addAction(self._act("zoom_fit", self.view.zoom_fit, "F"))
         self.m_view.addAction(self._act("display_options", self.display_options, "Ctrl+D"))
         self.m_theme = self.m_view.addMenu("")
@@ -322,7 +324,7 @@ class MainWindow(QMainWindow):
         self._build_toolbar(undo, redo)
 
     TOOLBAR = (("open", "open"), ("add_model", "add_model"), ("save", "save"), None, ("undo", None), ("redo", None), None,
-               ("rotate180", "rotate180"), ("pin", "pin"), ("measure", "measure"), None,
+               ("rotate180", "rotate180"), ("pin", "pin"), ("measure", "measure"), ("measure_curve", "measure_curve"), None,
                ("zoom_fit", "zoom_fit"), ("display_options", "display"), None,
                ("tab_pieces", "pieces"), ("tab_sizes", "sizes"), None,
                ("run", "run"), ("stop", "stop"), ("batch", "batch"), None,
@@ -968,7 +970,16 @@ class MainWindow(QMainWindow):
         if changes:
             self.undo.push(PlacementStateCommand(self, changes, "pin"))
 
+    def toggle_measure_curve(self, on):
+        if on and self.act_measure.isChecked():
+            self.act_measure.setChecked(False)
+        self.view.set_measure_mode(on, "curve")
+        if on:
+            self.statusBar().showMessage(tr("measure_curve_hint"))
+
     def toggle_measure(self, on):
+        if on and self.act_measure_curve.isChecked():
+            self.act_measure_curve.setChecked(False)
         self.view.set_measure_mode(on)
         if on:
             self.statusBar().showMessage(tr("measure_hint"))
