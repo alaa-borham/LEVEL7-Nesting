@@ -274,6 +274,9 @@ class MarkerView(QGraphicsView):
         self._snap_pts: list[tuple[float, float]] = []
         self._measure_item = None
         self._pan = None
+        # the marker is a drawing: always left-to-right like GRAFIS (in the Arabic interface the mirrored scroll
+        # bar showed the end of the marker and hid its start on the left)
+        self.setLayoutDirection(Qt.LeftToRight)
         # the marker stays at the bottom-left of the view; zoom buttons in the corner
         self.setAlignment(Qt.AlignAbsolute | Qt.AlignLeft | Qt.AlignBottom)
         from PySide6.QtWidgets import QToolButton
@@ -419,7 +422,7 @@ class MarkerView(QGraphicsView):
             self.setTransform(self.base_transform())
             # the fabric width fills the view (large, readable pieces); the length scrolls sideways. A short
             # marker that fits completely keeps that size.
-            self.fitInView(QRectF(-50, -30, 1, self.marker.fabric.width + 60), Qt.KeepAspectRatio)
+            self.fitInView(QRectF(-50, -30, 1, self.marker.fabric.width + 100), Qt.KeepAspectRatio)   # + room for the ruler
             # the marker sits at the bottom-left of the view (alignment + scroll to that corner)
             self.horizontalScrollBar().setValue(self.horizontalScrollBar().minimum())
             self.verticalScrollBar().setValue(self.verticalScrollBar().maximum())
