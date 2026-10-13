@@ -189,6 +189,7 @@ class MainWindow(QMainWindow):
         self.strip_area.setMinimumHeight(40)
         self.strip.open_table.connect(lambda: self.show_table_tab(0))
         self.strip.row_toggled.connect(self._toggle_strip_row)
+        self.strip.relayout.connect(self._strip_height)
         self.strip.piece_clicked.connect(lambda uid: self._highlight_pieces({uid}))
         self.dock_strip = QDockWidget(self)
         self.dock_strip.setObjectName("piece_strip")
@@ -1117,9 +1118,12 @@ class MainWindow(QMainWindow):
 
     def _refresh_strip(self):
         self.strip.set_data(self.project, self.marker)
+        self._strip_height()
+
+    def _strip_height(self):
         from .piece_strip import ROW_H, TOP
-        rows = max(1, len(self.strip.rows))
-        extra = 16 if rows > 2 or self.strip.sizeHint().width() > self.strip_area.width() else 4   # scroll bars
+        rows = self.strip.lines()                 # size rows are laid side by side, wrapped into lines
+        extra = 16 if rows > 3 or self.strip.sizeHint().width() > self.strip_area.width() else 4   # scroll bars
         self.strip_area.setFixedHeight(TOP + min(rows, 3) * ROW_H + extra)
 
     def update_results(self, v=None):

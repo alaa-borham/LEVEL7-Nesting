@@ -13,7 +13,7 @@ THUMB_H = 26          # px available for the outline (compact: more room for the
 ROW_H = THUMB_H + 18  # outline + count line
 HEAD_W = 54           # size / bundle column (minimum; grows for "model:size" names)
 TOP = 14              # "Pc: placed/total" line
-MIN_CELL = 56
+MIN_CELL = 44
 MAX_CELL = 150
 
 
@@ -23,6 +23,7 @@ CHECK = 12            # include / exclude check box in the size column
 class PieceStrip(QWidget):
     open_table = Signal()
     row_toggled = Signal(str, int)      # (size, bundle): include / exclude this row from the marker
+    relayout = Signal()                 # number of strip lines changed (window adjusts the strip height)
     piece_clicked = Signal(str)         # piece uid (highlighted in the pieces table)
 
     def __init__(self, parent=None):
@@ -35,6 +36,8 @@ class PieceStrip(QWidget):
         self.shapes = {}          # (size, piece_uid) -> outline points in strip mm, origin at its bbox centre
         self.scale = 1.0
         self.placed = self.total = 0
+        self.block_w = 200        # one size row: check box, size, bundle, every piece
+        self.ncols = 1            # size rows side by side (as many as fit the width)
 
     # -- data ------------------------------------------------------------------------------
     def set_data(self, project, marker):
@@ -103,18 +106,46 @@ class PieceStrip(QWidget):
         x = self.head_w
         for p in pieces:
             w = max((bbox(s)[2] - bbox(s)[0] for (sz, u), s in self.shapes.items() if u == p.uid), default=0)
-            cw = int(max(MIN_CELL, w * self.scale + 24))
+            cw = int(max(MIN_CELL, w * self.scale + 12))
             self.cols.append((p, x, cw))
             x += cw
+        self.block_w = (x + 10) if self.cols else 200
+        self._fit()
         self.updateGeometry()
-        self.resize(self.sizeHint())
         self.update()
 
-    def sizeHint(self):
-        w = (self.cols[-1][1] + self.cols[-1][2] + 8) if self.cols else 200
-        return QSize(w, TOP + max(1, len(self.rows)) * ROW_H + 4)
+    # -- layout: size rows side by side, wrapped into lines -----------------------------------------
+    def lines(self) -> int:
+        return max(1, -(-len(self.rows) // max(1, self.ncols)))
 
-    minimumSizeHint = sizeHint
+    def _fit(self):
+        avail = self.parentWidget().width() if self.parentWidget() is not None else self.width()
+        n = max(1, min(len(self.rows) or 1, int(max(avail, self.width()) // max(1, self.block_w))))
+        if n != self.ncols:
+            self.ncols = n
+            self.updateGeometry()
+            self.relayout.emit()
+
+    def resizeEvent(self, ev):
+        super().resizeEvent(ev)
+        self._fit()
+
+    def _origin(self, r):
+        return (r % self.ncols) * self.block_w, TOP + (r // self.ncols) * ROW_H
+
+    def _hit(self, pos):
+        """(row index, x inside its block) at ``pos`` or (None, 0)."""
+        col, line = int(pos.x() // self.block_w), int((pos.y() - TOP) // ROW_H)
+        r = line * self.ncols + col
+        if pos.y() < TOP or col >= self.ncols or not 0 <= r < len(self.rows):
+            return None, 0.0
+        return r, pos.x() - col * self.block_w
+
+    def sizeHint(self):
+        return QSize(self.block_w, TOP + self.lines() * ROW_H + 4)
+
+    def minimumSizeHint(self):
+        return QSize(self.block_w, TOP + self.lines() * ROW_H + 4)
 
     # -- painting ----------------------------------------------------------------------------
     def paintEvent(self, ev):
@@ -131,14 +162,23 @@ class PieceStrip(QWidget):
         legend = "    ".join(f"{k + 1} = {t}" for k, t in enumerate(getattr(self, "tags", [])))
         p.drawText(QPointF(4, 11), f"Pc: {self.placed}/ {self.total}" + (f"      {legend}" if legend else ""))
         hw = getattr(self, "head_w", HEAD_W)
-        p.drawLine(hw - 4, TOP, hw - 4, self.height())
         dim = QColor(fg)
         dim.setAlpha(140)
+        p.setPen(QPen(dim, 1))
+        for line in range(self.lines()):                   # grid: one line per row of blocks
+            p.drawLine(0, TOP + (line + 1) * ROW_H, self.width(), TOP + (line + 1) * ROW_H)
+        for col in range(min(self.ncols, len(self.rows))):
+            bx = col * self.block_w
+            p.setPen(QPen(fg, 1))
+            p.drawLine(int(bx + hw - 4), TOP, int(bx + hw - 4), TOP + self.lines() * ROW_H)
+            if col:
+                p.setPen(QPen(dim, 1))
+                p.drawLine(int(bx - 3), TOP, int(bx - 3), TOP + self.lines() * ROW_H)
         for r, (size, b) in enumerate(self.rows):
-            y = TOP + r * ROW_H
+            bx, y = self._origin(r)
             off = (size, b) in getattr(self, "excluded", set())
             # include / exclude check box
-            box = QRectF(3, y + (ROW_H - CHECK) / 2, CHECK, CHECK)
+            box = QRectF(bx + 3, y + (ROW_H - CHECK) / 2, CHECK, CHECK)
             p.setPen(QPen(fg, 1.2))
             p.setBrush(Qt.NoBrush)
             p.drawRect(box)
@@ -149,13 +189,12 @@ class PieceStrip(QWidget):
             p.setPen(dim if off else fg)
             from ..service import size_label
             tx = CHECK + 8
-            p.drawText(QRectF(tx, y + 2, hw - 8 - tx, ROW_H - 4), Qt.AlignLeft | Qt.AlignVCenter,
+            p.drawText(QRectF(bx + tx, y + 2, hw - 8 - tx, ROW_H - 4), Qt.AlignLeft | Qt.AlignVCenter,
                        size_label(self.tags, size))
-            p.drawText(QRectF(tx, y + 2, hw - 8 - tx, ROW_H - 4), Qt.AlignRight | Qt.AlignVCenter,
+            p.drawText(QRectF(bx + tx, y + 2, hw - 8 - tx, ROW_H - 4), Qt.AlignRight | Qt.AlignVCenter,
                        bundle_letter(b))
-            p.setPen(QPen(dim, 1))
-            p.drawLine(0, y + ROW_H, self.width(), y + ROW_H)
             for piece, x, cw in self.cols:
+                x = bx + x
                 c = self.counts.get(((size, b), piece.uid))
                 shape = self.shapes.get((size, piece.uid))
                 if c is None:
@@ -180,13 +219,20 @@ class PieceStrip(QWidget):
         p.end()
 
     def _piece_at(self, pos):
+        r, lx = self._hit(pos)
+        if r is None:
+            return None
         for piece, x, cw in self.cols:
-            if x <= pos.x() < x + cw:
+            if x <= lx < x + cw:
                 return piece
         return None
 
+    def _in_head(self, pos) -> bool:
+        r, lx = self._hit(pos)
+        return r is not None and lx < getattr(self, "head_w", HEAD_W)
+
     def mouseMoveEvent(self, ev):
-        if ev.position().x() < getattr(self, "head_w", HEAD_W) and self._row_at(ev.position()) is not None:
+        if self._in_head(ev.position()):
             from .i18n import tr
             QToolTip.showText(ev.globalPosition().toPoint(), tr("strip_toggle_tip"), self)
             return
@@ -198,12 +244,12 @@ class PieceStrip(QWidget):
             QToolTip.hideText()
 
     def _row_at(self, pos):
-        r = int((pos.y() - TOP) // ROW_H)
-        return self.rows[r] if pos.y() >= TOP and 0 <= r < len(self.rows) else None
+        r, _lx = self._hit(pos)
+        return self.rows[r] if r is not None else None
 
     def mousePressEvent(self, ev):
         row = self._row_at(ev.position())
-        if row is not None and ev.button() == Qt.LeftButton and ev.position().x() < getattr(self, "head_w", HEAD_W):
+        if row is not None and ev.button() == Qt.LeftButton and self._in_head(ev.position()):
             self.row_toggled.emit(row[0], row[1])
             return
         pc = self._piece_at(ev.position())
@@ -212,7 +258,7 @@ class PieceStrip(QWidget):
         super().mousePressEvent(ev)
 
     def mouseDoubleClickEvent(self, ev):
-        if ev.position().x() < getattr(self, "head_w", HEAD_W):
+        if self._in_head(ev.position()):
             return                                       # a quick second click on the box just toggles again
         self.open_table.emit()
 
