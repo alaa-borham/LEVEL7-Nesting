@@ -5,6 +5,7 @@ import copy
 import math
 import os
 import threading
+import time
 import traceback
 
 from PySide6.QtCore import QSettings, Qt, QThread, QTimer, Signal
@@ -1583,7 +1584,37 @@ class MainWindow(QMainWindow):
         self.btn_run.setEnabled(not running)
         self.btn_stop.setEnabled(running)
         self.progress_bar.setVisible(running)
-        self.progress_bar.setRange(0, 0 if running else 1)
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        if not hasattr(self, "_nest_timer"):
+            self._nest_timer = QTimer(self)
+            self._nest_timer.timeout.connect(self._nest_tick)
+        if running:
+            # live clock: the status changes every second even while the engine finds nothing shorter
+            st = self.project.nest_settings if self.project else None
+            self._nest_total = (st.time_limit if st else 0) * max(1, getattr(st, "best_of", 1) or 1)
+            self._nest_t0 = time.monotonic()
+            self._last_prog = {}
+            self._nest_timer.start(1000)
+            self._nest_tick()
+        else:
+            self._nest_timer.stop()
+
+    def _nest_tick(self):
+        if getattr(self, "_nest_t0", None) is None:            # queued behind another session
+            return
+        el = time.monotonic() - self._nest_t0
+        tot = getattr(self, "_nest_total", 0) or 0
+        d = getattr(self, "_last_prog", {}) or {}
+        L = d.get("length")
+        msg = tr("running_live", t=el, T=tot, len=f"{L:.1f}" if L else "—")
+        if d.get("attempts", 1) > 1:
+            msg = tr("attempt_of", k=d["attempt"], n=d["attempts"]) + "  " + msg
+        if d.get("engine") == "sparrow":
+            msg += "  · sparrow"
+        self.statusBar().showMessage(msg)
+        if tot > 0:
+            self.progress_bar.setValue(min(99, int(100 * el / tot)))
 
     def _set_parallel(self, n):
         NEST_SLOTS.set_limit(n)
@@ -1595,7 +1626,12 @@ class MainWindow(QMainWindow):
                 w.f_parallel.blockSignals(False)
 
     def _nest_waiting(self, on):
-        self.statusBar().showMessage(tr("nest_waiting") if on else tr("nest_started"))
+        if on:                                   # the clock starts when the run really starts
+            self._nest_t0 = None
+            self.statusBar().showMessage(tr("nest_waiting"))
+        else:
+            self._nest_t0 = time.monotonic()
+            self.statusBar().showMessage(tr("nest_started"))
 
     def stop_nesting(self):
         if self.worker and self.worker.isRunning():
@@ -1613,10 +1649,9 @@ class MainWindow(QMainWindow):
 
     def on_progress(self, d):
         """Live preview, coalesced: at most one redraw per PREVIEW_INTERVAL_MS however fast results arrive."""
-        msg = tr("running", len=d["length"], ev=d["evaluations"], t=d["elapsed"])
-        if d.get("attempts", 1) > 1:
-            msg = tr("attempt_of", k=d["attempt"], n=d["attempts"]) + "  " + msg
-        self.statusBar().showMessage(msg)
+        if not d.get("final"):
+            self._last_prog = d
+            self._nest_tick()
         if d.get("result") is not None and not d.get("final"):
             first = getattr(self, "_pending_preview", None) is None
             self._pending_preview = d["result"]

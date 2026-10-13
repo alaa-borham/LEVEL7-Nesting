@@ -252,6 +252,8 @@ T = {
     "best_result": ("Best result (several attempts, shortest wins)", "أفضل نتيجة (عدة محاولات، يُحفظ الأقصر)"),
     "attempt_of": ("Attempt {k}/{n}:", "محاولة {k}/{n}:"),
     "best_done": ("Best of {n} attempts ({l} mm) -> {b:.1f} mm", "أفضل {n} محاولات ({l} مم): الأقصر {b:.1f} مم"),
+    "running_live": ("Nesting… {t:.0f} / {T:.0f} s, best length {len} mm",
+                     "جاري التعشيق… {t:.0f} / {T:.0f} ث، أفضل طول {len} مم"),
     "tab_spacing": ("Margins, buffers and shrinkage", "الهوامش والبفر والانكماش"),
     "tb_tab_spacing": ("Margins", "الهوامش"),
     "measure_tool": ("Measure", "قياس"), "tb_measure_tool": ("Measure", "قياس"),
