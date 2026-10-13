@@ -274,6 +274,20 @@ class MarkerView(QGraphicsView):
         self._snap_pts: list[tuple[float, float]] = []
         self._measure_item = None
         self._pan = None
+        # the marker stays at the bottom-left of the view; zoom buttons in the corner
+        self.setAlignment(Qt.AlignAbsolute | Qt.AlignLeft | Qt.AlignBottom)
+        from PySide6.QtWidgets import QToolButton
+        self.zoom_buttons = []
+        for txt, tip, fn in (("+", "zoom_in", lambda: self.zoom_step(1.25)), ("−", "zoom_out", lambda: self.zoom_step(0.8)),
+                             ("⤢", "zoom_fit", self.zoom_fit)):
+            b = QToolButton(self)
+            b.setText(txt)
+            b.setObjectName("zoomButton")
+            b.setProperty("tipkey", tip)
+            b.setFixedSize(34, 34)
+            b.setCursor(Qt.PointingHandCursor)
+            b.clicked.connect(fn)
+            self.zoom_buttons.append(b)
         self.pick_match = False            # plaid: next click on a piece picks its match point
 
     def apply_theme(self):
@@ -323,7 +337,8 @@ class MarkerView(QGraphicsView):
             g = it.piece.sizes[it.placement.size]
             snaps.extend(placement_points(g.cut, it.placement))
         self._snap_pts = snaps
-        sc.setSceneRect(QRectF(-200, -200, max(L, (self.last_result or (0,))[0]) + 400, W + 400))
+        # little room below the fabric (the marker sits at the bottom of the view), more above it (pieces taken out)
+        sc.setSceneRect(QRectF(-60, -40, max(L, (self.last_result or (0,))[0]) + 260, W + 340))
 
     def _draw_aux(self):
         sc = self.scene()
@@ -402,14 +417,34 @@ class MarkerView(QGraphicsView):
     def zoom_fit(self):
         if self.marker:
             self.setTransform(self.base_transform())
-            self.fitInView(QRectF(-50, -50, max(self.marker.length, 100) + 100, self.marker.fabric.width + 100),
-                           Qt.KeepAspectRatio)
-            self.centerOn(max(self.marker.length, 100) / 2, self.marker.fabric.width / 2)
+            # the fabric width fills the view (large, readable pieces); the length scrolls sideways. A short
+            # marker that fits completely keeps that size.
+            self.fitInView(QRectF(-50, -30, 1, self.marker.fabric.width + 60), Qt.KeepAspectRatio)
+            # the marker sits at the bottom-left of the view (alignment + scroll to that corner)
+            self.horizontalScrollBar().setValue(self.horizontalScrollBar().minimum())
+            self.verticalScrollBar().setValue(self.verticalScrollBar().maximum())
 
     def selected_placements(self):
         return [it.placement for it in self.scene().selectedItems() if isinstance(it, PieceItem)]
 
     # -- interaction -----------------------------------------------------------------
+    def zoom_step(self, f: float):
+        """Zoom buttons: around the marker's bottom-left corner, which stays at the bottom of the view."""
+        old = self.transformationAnchor()
+        self.setTransformationAnchor(QGraphicsView.NoAnchor)
+        self.scale(f, f)
+        self.setTransformationAnchor(old)
+        self.horizontalScrollBar().setValue(self.horizontalScrollBar().minimum())
+        self.verticalScrollBar().setValue(self.verticalScrollBar().maximum())
+
+    def resizeEvent(self, ev):
+        super().resizeEvent(ev)
+        x = self.viewport().width() - 44
+        y = self.viewport().height() - 44
+        for k, b in enumerate(reversed(self.zoom_buttons)):
+            b.move(x - k * 40, y)
+            b.raise_()
+
     def wheelEvent(self, ev):
         f = 1.25 if ev.angleDelta().y() > 0 else 0.8
         self.scale(f, f)

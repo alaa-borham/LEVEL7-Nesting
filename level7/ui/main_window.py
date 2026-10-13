@@ -695,6 +695,8 @@ class MainWindow(QMainWindow):
         self._layout_toolbar(force=True)
 
     def retranslate(self):
+        for b in getattr(self.view, "zoom_buttons", []):
+            b.setToolTip(tr(b.property("tipkey")))
         rtl = LANG["current"] == "ar"
         QApplication.instance().setLayoutDirection(Qt.RightToLeft if rtl else Qt.LeftToRight)
         self._update_title()

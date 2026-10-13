@@ -254,6 +254,7 @@ T = {
     "best_done": ("Best of {n} attempts ({l} mm) -> {b:.1f} mm", "أفضل {n} محاولات ({l} مم): الأقصر {b:.1f} مم"),
     "running_live": ("Nesting… {t:.0f} / {T:.0f} s, best length {len}",
                      "جاري التعشيق… {t:.0f} / {T:.0f} ث، أفضل طول {len}"),
+    "zoom_in": ("Zoom in", "تكبير"), "zoom_out": ("Zoom out", "تصغير"),
     "tab_spacing": ("Margins, buffers and shrinkage", "الهوامش والبفر والانكماش"),
     "tb_tab_spacing": ("Margins", "الهوامش"),
     "measure_tool": ("Measure", "قياس"), "tb_measure_tool": ("Measure", "قياس"),

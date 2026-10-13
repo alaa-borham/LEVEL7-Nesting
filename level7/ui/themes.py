@@ -102,6 +102,9 @@ QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
 
 QStatusBar {{ background: {_rgb(c['panel'])}; border-top: 1px solid {_rgb(c['border'])}; color: {_rgb(txt)}; }}
 QStatusBar::item {{ border: none; }}
+QToolButton#zoomButton {{ background: {_rgb(c['panel'], 0.92)}; border: 1px solid {_rgb(c['border'])};
+    border-radius: 17px; font-size: 15pt; font-weight: 600; min-width: 0; padding: 0; }}
+QToolButton#zoomButton:hover {{ background: {_rgb(acc, 0.35)}; border-color: {_rgb(acc)}; }}
 QLabel#statChip {{ background: {_rgb(c['base'])}; border: 1px solid {_rgb(c['border'])}; border-radius: 7px;
     padding: 2px 10px; margin: 2px 0; }}
 QProgressBar {{ background: {_rgb(c['base'])}; border: 1px solid {_rgb(c['border'])}; border-radius: 7px;
