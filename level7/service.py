@@ -219,11 +219,13 @@ def _nest_with_sparrow(proj, items, fabric, settings, workers, progress, stop_ev
     from .nesting.parallel import run_parallel
     total = settings.time_limit or 30.0
     t_start = min(15.0, max(3.0, 0.15 * total))
-    start = run_parallel(items, fabric, replace(settings, time_limit=t_start), workers=workers, progress=progress,
-                         stop_event=stop_event)
+    t0 = time.monotonic()
+    # the start has a hard time limit: a big job's first layout can take minutes (it ran past the timer before)
+    start = run_parallel(items, fabric, replace(settings, time_limit=t_start, hard_time=True), workers=workers,
+                         progress=progress, stop_event=stop_event)
     if stop_event is not None and stop_event.is_set():
         return start, "builtin"
-    remaining = max(5.0, total - t_start)
+    remaining = max(5.0, total - (time.monotonic() - t0))
 
     def prog(d):
         if progress:

@@ -85,7 +85,7 @@ def run_parallel(items: list[NestItem], fabric: FabricSettings, settings: NestSe
     errors = []
     evals = {}
     t0 = time.monotonic()
-    limit = settings.time_limit + 60.0
+    limit = settings.time_limit + (5.0 if getattr(settings, "hard_time", True) else 60.0)
     while done < workers:
         if stop_event is not None and stop_event.is_set():
             stop.set()

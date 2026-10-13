@@ -159,6 +159,7 @@ class NestSettings:
     attempts: int = 0              # 0 = until time limit
     engine: str = "auto"           # auto: built-in start + sparrow compression when available; builtin: only LEVEL7
     best_of: int = 1               # "best result": this many attempts (different seeds), the shortest valid one wins
+    hard_time: bool = True         # the time limit also ends the first layout: pieces not placed by then are reported
 
 
 @dataclass

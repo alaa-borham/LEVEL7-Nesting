@@ -221,6 +221,13 @@ def build_items(project: Project, sizes: dict[str, int], counts: dict[str, tuple
     return items, unplaced, warnings
 
 
+class _Halt(Exception):
+    """Stop pressed or time limit reached in the middle of placing a piece."""
+
+
+HALT_REASON = "not placed: nesting stopped / time limit reached before this piece - give more time or nest again"
+
+
 class NestEngine:
     def __init__(self, items: list[NestItem], fabric: FabricSettings, settings: NestSettings,
                  progress=None, stop_event: threading.Event | None = None):
@@ -229,6 +236,7 @@ class NestEngine:
         self.settings = settings
         self.progress = progress
         self.stop_event = stop_event or threading.Event()
+        self._deadline: float | None = None     # monotonic time the search must end (run())
         self._oriented: dict = {}
         self._nfp_cache: dict = {}
         # directional buffers grow the shapes by ex / ey on each side; the usable area grows by the same amount
@@ -276,8 +284,13 @@ class NestEngine:
         return r
 
     # -- greedy placement ----------------------------------------------------------
+    def _halted(self) -> bool:
+        return self.stop_event.is_set() or (self._deadline is not None and time.monotonic() > self._deadline)
+
     def greedy(self, order: list[int], abort_len: float | None = None, ignore_stop: bool = False,
-               rot_pref: dict | None = None):
+               rot_pref: dict | None = None, partial: bool = False):
+        """Bottom-left fill in ``order``. Stop / time limit: None, or with ``partial`` the pieces placed so far
+        (the others reported as not placed) - a big job's first layout can take longer than the time given."""
         placed: list[tuple[NestItem, float, tuple[int, int]]] = []
         result: dict[int, tuple[float, tuple[int, int]]] = {}
         failed: dict[int, str] = {}
@@ -290,23 +303,35 @@ class NestEngine:
                 placed.append((it, pl.rotation, t))
                 result[idx] = (pl.rotation, t)
                 length = max(length, (t[0] / SCALE) + w)
+        halted = False
         for idx in order:
             it = self.items[idx]
             if it.pinned is not None:
                 continue
-            if self.stop_event.is_set() and not ignore_stop:
-                return None
+            if halted or (self._halted() and not ignore_stop):
+                if not partial:
+                    return None
+                halted = True
+                failed[idx] = HALT_REASON
+                continue
             best = None
             if rot_pref is not None and idx in rot_pref:
                 pref = it.rotations[rot_pref[idx] % len(it.rotations)]
                 groups = [[pref], [r for r in it.rotations if r != pref]]
             else:
                 groups = [it.rotations]
-            for group in groups:
-                if best is not None:
-                    break
-                for rot in group:
-                    best = self._best_position(it, rot, placed, length, best)
+            try:
+                for group in groups:
+                    if best is not None:
+                        break
+                    for rot in group:
+                        best = self._best_position(it, rot, placed, length, best, not ignore_stop)
+            except _Halt:
+                if not partial:
+                    return None
+                halted = True
+                failed[idx] = HALT_REASON
+                continue
             if best is None:
                 fits = any(self.oriented(it, r)[4] <= (self.y1 - self.y0) + 1e-6 for r in it.rotations)
                 failed[idx] = ("no free position within length limit" if fits else
@@ -320,7 +345,7 @@ class NestEngine:
                 return ("abort", length)
         return (result, failed, length)
 
-    def _best_position(self, it, rot, placed, length, best):
+    def _best_position(self, it, rot, placed, length, best, halt=True):
         if it.match is not None:
             return self._best_matched(it, rot, placed, length, best)
         ip, bx0, by0, w, h = self.oriented(it, rot)
@@ -332,7 +357,9 @@ class NestEngine:
             return best
         rect = [(xa, ya), (xb, ya), (xb, yb), (xa, yb)]
         forb = []
-        for (pit, prot, pt) in placed:
+        for k, (pit, prot, pt) in enumerate(placed):
+            if halt and k % 16 == 15 and self._halted():      # Stop answers within a fraction of a second
+                raise _Halt()
             forb.extend(translate(self.nfp_rel(pit, prot, it, rot), pt[0], pt[1]))
         region = feasible_region(rect, forb)
         wi = int(round(w * SCALE))
@@ -446,6 +473,8 @@ class NestEngine:
         """Genetic search over (order, preferred rotation) with elitism; keeps the best valid layout."""
         t0 = time.monotonic()
         limit = self.settings.time_limit or MODE_TIME.get(self.settings.mode, 30.0)
+        if getattr(self.settings, "hard_time", True):
+            self._deadline = t0 + limit
         rng = random.Random(self.settings.seed)
         free = [i for i, it in enumerate(self.items) if it.pinned is None]
         evaluations = 0
@@ -465,7 +494,8 @@ class NestEngine:
         def evaluate(ind, ignore_stop=False, abort=None):
             nonlocal evaluations, best
             order, rots = ind
-            sol = self.greedy(order, abort_len=abort, ignore_stop=ignore_stop, rot_pref=rots)
+            # no layout yet: a stopped / timed-out first pass still returns the pieces it placed
+            sol = self.greedy(order, abort_len=abort, ignore_stop=ignore_stop, rot_pref=rots, partial=best is None)
             evaluations += 1
             if sol is None:
                 return None
