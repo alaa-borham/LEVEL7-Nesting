@@ -2034,13 +2034,14 @@ class MainWindow(QMainWindow):
             cfg = self.plt_config()
         elif fmt == "scb":
             from ..service import scb_template
-            cfg = scb_template(self.project)
+            cfg = getattr(self, "scb_template_path", None) or scb_template(self.project)
             if cfg is None:
                 QMessageBox.information(self, tr("save_scb"), tr("scb_pick_template"))
                 cfg, _ = QFileDialog.getOpenFileName(self, tr("save_scb"), self.settings_store.value("last_dir", ""),
                                                      "GRAFIS SCB (*.scb *.SCB)")
                 if not cfg:
                     return
+                self.scb_template_path = cfg            # asked once per session
         ext = {"plt": "PLT (*.plt)", "dxf": "DXF (*.dxf)", "iso": "ISO (*.iso)", "scb": "GRAFIS SCB (*.scb)"}[fmt]
         name = f"{self.project.name}_{self.marker.fabric.width:g}{'_DIAGNOSTIC' if diagnostic else ''}.{fmt}"
         p, _ = QFileDialog.getSaveFileName(self, tr("export").replace("&", ""),

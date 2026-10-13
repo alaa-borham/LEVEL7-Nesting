@@ -396,8 +396,54 @@ def mdl_template(proj: Project) -> str | None:
 
 
 def scb_template(proj: Project) -> str | None:
-    """The GRAFIS SCB this session was read from (template for writing SCB), if any and still on disk."""
+    """The GRAFIS SCB this session was read from (template for writing SCB), if any and still on disk; for a
+    session read from an MDL: an SCB of the same model next to it (see find_scb_for_model)."""
     for src in proj.sources:
         if src.kind == "scb" and os.path.isfile(src.path):
             return src.path
+    mdl = mdl_template(proj)
+    return find_scb_for_model(proj, os.path.dirname(mdl)) if mdl else None
+
+
+def find_scb_for_model(proj: Project, folder: str, limit: int = 200) -> str | None:
+    """A GRAFIS SCB in ``folder`` (or one level below) whose part list holds every part ``proj`` nests (matched as
+    write_scb does, see formats.grafis.writer.part_map) - a GRAFIS marker of this model; the newest is returned."""
+    from .formats.grafis.container import read_container
+    from .formats.grafis.textsections import parse_text
+    from .formats.grafis.writer import ScbWriteError, part_map
+    co = proj.cut_order
+    uids = {p.uid for p in proj.pieces if any(co.piece_counts.get(p.uid, (0, 0)))}
+    want = {(p.number, p.name.strip()) for p in proj.pieces if p.uid in uids}
+    if not want or not os.path.isdir(folder):
+        return None
+    key = (os.path.abspath(folder), frozenset(want))
+    hit = _SCB_FOUND.get(key)
+    if hit and os.path.isfile(hit):
+        return hit
+    found = []
+    for root in [folder] + [os.path.join(folder, d) for d in sorted(os.listdir(folder))
+                            if os.path.isdir(os.path.join(folder, d))]:
+        try:
+            names = os.listdir(root)
+        except OSError:
+            continue
+        found += [os.path.join(root, n) for n in names if n.lower().endswith(".scb")]
+    found.sort(key=lambda f: os.path.getmtime(f), reverse=True)
+    for f in found[:limit]:
+        try:
+            tb = read_container(f).get(2, 1, 0, 0)
+            ts = parse_text(tb.payload) if tb is not None else None
+        except Exception:
+            continue
+        if ts is None:
+            continue
+        try:
+            part_map(proj, ts.tlist, uids)
+        except ScbWriteError:
+            continue
+        _SCB_FOUND[key] = f
+        return f
     return None
+
+
+_SCB_FOUND: dict = {}

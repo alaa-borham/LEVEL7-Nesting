@@ -67,3 +67,24 @@ def test_produced_part_needs_a_material(tmp_path):
     p.material = None
     with pytest.raises(MdlWriteError, match="needs a material"):
         write_mdl(MDL, proj, str(tmp_path / "x.mdl"))
+
+
+def test_scb_from_mdl_session_with_renumbered_grafis26_scb(tmp_path):
+    """GRAFIS 26 numbers the SCB's parts 1..n (MDL 19, 21 ...): the SCB next to the MDL is found and the
+    parts are matched by name and order; the written marker reads back valid."""
+    from level7.model import FabricSettings, NestSettings
+    from level7.service import export_marker, run_nesting, scb_template
+    from level7.validation.checker import validate_marker
+    proj, _ = open_any(VEST)
+    t = scb_template(proj)
+    assert t is not None and t.endswith("OUT vest2027-M1-M.scb")
+    proj.cut_order.size_quantities = {"M": 1}
+    m, _ = run_nesting(proj, FabricSettings(width=1500.0), NestSettings(time_limit=4, seed=1, engine="builtin"),
+                       workers=1)
+    out = str(tmp_path / "x.scb")
+    info = export_marker(proj, m, "scb", out, t)
+    assert info["placements"] == sum(1 for p in m.placements if p.placed)
+    r = read_grafis(out)
+    assert validate_marker(r.project, r.project.markers[0]).ok
+    names = sorted(proj.piece(p.piece_uid).name for p in m.placements if p.placed)
+    assert sorted(r.project.piece(p.piece_uid).name for p in r.project.markers[0].placements) == names

@@ -85,6 +85,8 @@ def write_scb(template_path: str, project, marker, out_path: str) -> dict:
     placed = [pl for pl in marker.placements if pl.placed]
     if not placed:
         raise ScbWriteError("the marker has no placed pieces")
+    pmap = part_map(project, ts.tlist, {pl.piece_uid for pl in placed})
+    check_geometry(template_path, project, pmap, {(pl.piece_uid, pl.size) for pl in placed})
     if any(abs(pl.sx - 1.0) > 1e-9 or abs(pl.sy - 1.0) > 1e-9 for pl in placed):
         raise ScbWriteError("markers with shrinkage cannot be written as SCB yet (GRAFIS' shrinkage fields are "
                             "not decoded); save as LEVEL7 project or export PLT/DXF/ISO")
@@ -96,9 +98,7 @@ def write_scb(template_path: str, project, marker, out_path: str) -> dict:
     for k, pl in enumerate(placed):
         gb = gbundle[(pl.size, pl.bundle)]
         piece = project.piece(pl.piece_uid)
-        e = tlist.get(piece.number)
-        if e is None or e.name.strip() != piece.name.strip():
-            raise ScbWriteError(f"piece {piece.number} {piece.name!r} is not in the template SCB's piece list")
+        e = pmap[piece.uid]
         if pl.size not in size_idx:
             raise ScbWriteError(f"size {pl.size!r} is not in the template SCB")
         si = size_idx[pl.size]
@@ -182,13 +182,13 @@ def write_scb(template_path: str, project, marker, out_path: str) -> dict:
               .split("\r\n") if (m := re.match(r"(\d{3}) ", ln))}
     counts = {}
     for pl in placed:
-        n = project.piece(pl.piece_uid).number
+        n = pmap[pl.piece_uid].number
         c = counts.setdefault(n, [set(), set()])
         c[1 if pl.mirrored else 0].add((pl.size, pl.bundle, pl.uid))
     tl_lines = []
     for n in sorted(parts_used):
         e = parts_used[n]
-        garments = max(1, len({(pl.size, pl.bundle) for pl in placed if project.piece(pl.piece_uid).number == n}))
+        garments = max(1, len({(pl.size, pl.bundle) for pl in placed if pmap[pl.piece_uid].number == n}))
         nn, mm = len(counts[n][0]) // garments, len(counts[n][1]) // garments
         line = old_tl.get(n)
         if line:
@@ -206,6 +206,54 @@ def write_scb(template_path: str, project, marker, out_path: str) -> dict:
     out = rebuild_container(data, cont, new, ScbWriteError)
     write_atomic(out_path, out)
     return {"placements": len(recs), "length": length, "efficiency": eff, "bytes": len(out)}
+
+
+def part_map(project, tlist, uids) -> dict:
+    """piece uid -> the template's #TLIST entry of that part. Older GRAFIS keeps the model's part numbers in the
+    SCB; GRAFIS 26 numbers the SCB's parts 1..n in model order (vest2027 sample: MDL 19, 21, 24 ... -> SCB 1, 2,
+    3 ...). Same number and name first; otherwise the k-th part of that name in the model is the k-th part of
+    that name in the SCB."""
+    out = {}
+    by_num = {e.number: e for e in tlist}
+    named: dict[str, list] = {}
+    for e in sorted(tlist, key=lambda e: e.number):
+        named.setdefault(e.name.strip(), []).append(e)
+    model_named: dict[str, list] = {}
+    for pc in sorted(project.pieces, key=lambda p: p.number or 0):
+        model_named.setdefault(pc.name.strip(), []).append(pc)
+    exact = all(by_num.get(project.piece(u).number) is not None and
+                by_num[project.piece(u).number].name.strip() == project.piece(u).name.strip() for u in uids)
+    for u in uids:
+        pc = project.piece(u)
+        if exact:
+            out[u] = by_num[pc.number]
+            continue
+        # k-th of the same name among the parts this model produces (GRAFIS 26 lists only those in the SCB)
+        same = [p for p in model_named[pc.name.strip()] if p.production or p.uid in uids]
+        cands = named.get(pc.name.strip(), [])
+        k = same.index(pc)
+        if len(same) != len(cands) or k >= len(cands):
+            raise ScbWriteError(f"piece {pc.number} {pc.name!r} is not in the template SCB's piece list")
+        out[u] = cands[k]
+    return out
+
+
+def check_geometry(template_path, project, pmap, used) -> None:
+    """The SCB carries its own copy of every part's geometry: it must be the session's geometry (otherwise the
+    model changed after that SCB was saved and GRAFIS would show other shapes at the written positions)."""
+    from ...readers.grafis import read_grafis
+    tp = {p.number: p for p in read_grafis(template_path).project.pieces}
+    for uid, size in used:
+        pc = project.piece(uid)
+        t = tp.get(pmap[uid].number)
+        g, tg = pc.sizes.get(size), (t.sizes.get(size) if t is not None else None)
+        if g is None or tg is None:
+            raise ScbWriteError(f"piece {pc.name!r} size {size}: not in the template SCB")
+        if max(abs(a - b) for a, b in zip(bbox(g.cut), bbox(tg.cut))) > 0.05 or \
+                abs(abs(ring_area(g.cut)) - abs(ring_area(tg.cut))) > 1.0:
+            raise ScbWriteError(f"piece {pc.name!r} size {size}: the template SCB's copy of this part differs from "
+                                f"the model (changed after that SCB was saved) - save a new SCB of this model "
+                                f"from GRAFIS and use it")
 
 
 def rebuild_container(data: bytes, cont, new_payloads: dict, error=ScbWriteError) -> bytes:

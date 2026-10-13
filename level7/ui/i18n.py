@@ -414,10 +414,12 @@ T = {
                   "حُفظ بصيغة MDL جرافس (خامات القطع وعدد النسخ): {p} — تجريبي، افحصه في جرافس"),
     "save_scb": ("Save marker as GRAFIS SCB…", "حفظ الماركر بصيغة GRAFIS SCB…"),
     "export_scb": ("GRAFIS SCB (marker file)…", "GRAFIS SCB (ملف ماركر)…"),
-    "scb_pick_template": ("An SCB is written into a copy of a GRAFIS SCB of the same model (all unknown GRAFIS data is "
-                          "kept from it). Choose any GRAFIS SCB of this model.",
-                          "ملف SCB يُكتب داخل نسخة من ملف SCB من GRAFIS لنفس الموديل (لتبقى كل بيانات GRAFIS كما هي). "
-                          "اختر أي ملف SCB من GRAFIS لهذا الموديل."),
+    "scb_pick_template": ("An SCB is written into a copy of a GRAFIS SCB of the same model (all GRAFIS data LEVEL7 does "
+                          "not change is kept from it). No SCB of this model was found in the model's folder: choose "
+                          "any SCB GRAFIS saved for this model (any marker of it).",
+                          "ملف SCB يُكتب داخل نسخة من ملف SCB حفظه جرافس لنفس الموديل (لتبقى بيانات جرافس كما هي). "
+                          "لم يُعثر على SCB لهذا الموديل في مجلد الموديل: اختر أي ملف SCB حفظه جرافس لهذا الموديل "
+                          "(أي ماركر له)."),
     "scb_saved": ("Saved as GRAFIS SCB:\n{p}\n\nRe-read by LEVEL7 and identical. Please open it once in GRAFIS to "
                   "confirm (the first files are experimental until GRAFIS has opened them).",
                   "تم الحفظ بصيغة GRAFIS SCB:\n{p}\n\nأعاد LEVEL7 قراءته وهو مطابق. افتحه مرة في GRAFIS للتأكيد "
