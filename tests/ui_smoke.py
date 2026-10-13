@@ -3,6 +3,8 @@ import os
 import sys
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+if hasattr(sys.stdout, "reconfigure"):                  # Arabic messages on a Windows cp1252 console
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 os.environ.setdefault("LEVEL7_NO_UPDATE_CHECK", "1")   # never open an update dialog during the smoke test
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCB = os.path.join(HERE, "..", "samples", "Neay blue pants-44.scb")
