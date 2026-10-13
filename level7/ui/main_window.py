@@ -99,11 +99,9 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
         self.view.moved.connect(self.on_moved)
         self.view.dragging.connect(self._live_length)
-        self.view.cursor_mm.connect(lambda x, y: self.coord_label.setText(f"x {x:.1f}  y {y:.1f} mm"))
         self.view.measured.connect(lambda d: self.statusBar().showMessage(tr("distance", d=d)))
         self._build_docks()
         self._build_actions()
-        self.coord_label = QLabel()
         self.grafis_status = QLabel()
         self._load_display_options()
         self.progress_bar = QProgressBar()
@@ -111,7 +109,6 @@ class MainWindow(QMainWindow):
         self.progress_bar.hide()
         self.statusBar().addPermanentWidget(self.progress_bar)
         self.statusBar().addPermanentWidget(self.grafis_status)
-        self.statusBar().addPermanentWidget(self.coord_label)
         self.updates = None
         if primary and not os.environ.get("LEVEL7_NO_UPDATE_CHECK"):
             self.updates = UpdateManager(self, self.settings_store, self._before_update)
