@@ -173,6 +173,7 @@ class MainWindow(QMainWindow):
         self.strip_area, self.strip = make_strip_area(self)
         self.strip_area.setMinimumHeight(40)
         self.strip.open_table.connect(lambda: self.show_table_tab(0))
+        self.strip.row_toggled.connect(self._toggle_strip_row)
         self.dock_strip = QDockWidget(self)
         self.dock_strip.setObjectName("piece_strip")
         self.dock_strip.setWidget(self.strip_area)
@@ -1047,6 +1048,20 @@ class MainWindow(QMainWindow):
         self.update_status_line()
         if fit:
             self.view.zoom_fit()
+
+    def _toggle_strip_row(self, size, bundle):
+        """Strip check box: include / exclude this size+bundle in the next nesting run."""
+        if self.project is None:
+            return
+        co = self.project.cut_order
+        ex = {(s, int(b)) for s, b in co.excluded}
+        ex ^= {(size, bundle)}
+        co.excluded = sorted(ex)
+        self.mark_dirty()
+        self._refresh_strip()
+        from .marker_view import bundle_letter
+        key = "strip_row_off" if (size, bundle) in ex else "strip_row_on"
+        self.statusBar().showMessage(tr(key, r=f"{size}/{bundle_letter(bundle)}"))
 
     def _refresh_strip(self):
         self.strip.set_data(self.project, self.marker)

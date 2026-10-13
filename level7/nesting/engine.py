@@ -122,8 +122,9 @@ def _rescaled(pl: Placement, fabric: FabricSettings, project: Project) -> Placem
 
 def build_items(project: Project, sizes: dict[str, int], counts: dict[str, tuple[int, int]],
                 fabric: FabricSettings, settings: NestSettings, pinned: list[Placement] | None = None,
-                material: str | None = None) -> tuple[list[NestItem], list[Unplaced], list[str]]:
-    """Expand the cut order into individual piece copies."""
+                material: str | None = None, excluded=None) -> tuple[list[NestItem], list[Unplaced], list[str]]:
+    """Expand the cut order into individual piece copies (``excluded``: (size, bundle) rows left out)."""
+    excluded = {(s, int(b)) for s, b in (excluded or [])}
     items: list[NestItem] = []
     unplaced: list[Unplaced] = []
     warnings: list[str] = []
@@ -163,6 +164,8 @@ def build_items(project: Project, sizes: dict[str, int], counts: dict[str, tuple
                     match_rule = (*matching.rules(piece, fabric), a, *matching.targets(fabric, piece),
                                   fabric.repeat_x, fabric.repeat_y)
             for bundle in range(1, qty + 1):
+                if (size, bundle) in excluded:
+                    continue
                 for mirrored, copies in ((False, n), (True, m)):
                     for _ in range(copies):
                         uid_counter += 1

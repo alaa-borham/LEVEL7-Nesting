@@ -105,7 +105,8 @@ def project_from_dict(d: dict) -> Project:
     co = d.get("cut_order", {})
     cut_order = CutOrder(size_quantities=co.get("size_quantities", {}),
                          piece_counts={k: tuple(v) for k, v in co.get("piece_counts", {}).items()},
-                         material=co.get("material"))
+                         material=co.get("material"),
+                         excluded=[tuple(x) for x in co.get("excluded", [])])
     return Project(name=d.get("name", "untitled"), pieces=pieces, size_names=d.get("size_names", []),
                    sources=[SourceInfo(**_known(SourceInfo, s)) for s in d.get("sources", [])], cut_order=cut_order,
                    nest_settings=NestSettings(**_known(NestSettings, d.get("nest_settings", {}))), markers=markers,

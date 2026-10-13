@@ -17,8 +17,12 @@ MIN_CELL = 56
 MAX_CELL = 150
 
 
+CHECK = 12            # include / exclude check box in the size column
+
+
 class PieceStrip(QWidget):
     open_table = Signal()
+    row_toggled = Signal(str, int)      # (size, bundle): include / exclude this row from the marker
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -42,6 +46,7 @@ class PieceStrip(QWidget):
             self.update()
             return
         co = project.cut_order
+        self.excluded = {(s, int(b)) for s, b in (getattr(co, "excluded", None) or [])}
         pcs = {p.uid: p for p in project.pieces}
         groups: dict[tuple[str, int, str], list] = {}
         marker_rows: set = set()
@@ -70,7 +75,8 @@ class PieceStrip(QWidget):
                     continue
                 else:
                     rn, rm, has_m = n, m, m > 0
-                    self.total += n + m
+                    if (size, b) not in self.excluded:
+                        self.total += n + m
                 self.counts[((size, b), p.uid)] = (rn, rm, has_m)
         # outlines turned so the grain runs along the strip, all at one scale
         maxw = maxh = 1.0
@@ -91,7 +97,7 @@ class PieceStrip(QWidget):
         f.setPointSizeF(8)
         fm = QFontMetrics(f)
         from ..service import size_label
-        self.head_w = min(220, max(HEAD_W, max((fm.horizontalAdvance(size_label(self.tags, sz)) + 26
+        self.head_w = CHECK + 6 + min(220, max(HEAD_W, max((fm.horizontalAdvance(size_label(self.tags, sz)) + 26
                                                 for sz, _b in self.rows), default=0)))
         x = self.head_w
         for p in pieces:
@@ -129,11 +135,23 @@ class PieceStrip(QWidget):
         dim.setAlpha(140)
         for r, (size, b) in enumerate(self.rows):
             y = TOP + r * ROW_H
-            p.setPen(fg)
+            off = (size, b) in getattr(self, "excluded", set())
+            # include / exclude check box
+            box = QRectF(3, y + (ROW_H - CHECK) / 2, CHECK, CHECK)
+            p.setPen(QPen(fg, 1.2))
+            p.setBrush(Qt.NoBrush)
+            p.drawRect(box)
+            if not off:
+                p.setPen(QPen(QColor(0, 150, 60), 2.0))
+                p.drawLine(QPointF(box.left() + 2.5, box.center().y()), QPointF(box.left() + 5, box.bottom() - 2.5))
+                p.drawLine(QPointF(box.left() + 5, box.bottom() - 2.5), QPointF(box.right() - 2, box.top() + 2.5))
+            p.setPen(dim if off else fg)
             from ..service import size_label
-            p.drawText(QRectF(2, y + 2, hw - 8, ROW_H - 4), Qt.AlignLeft | Qt.AlignVCenter,
+            tx = CHECK + 8
+            p.drawText(QRectF(tx, y + 2, hw - 8 - tx, ROW_H - 4), Qt.AlignLeft | Qt.AlignVCenter,
                        size_label(self.tags, size))
-            p.drawText(QRectF(2, y + 2, hw - 8, ROW_H - 4), Qt.AlignRight | Qt.AlignVCenter, bundle_letter(b))
+            p.drawText(QRectF(tx, y + 2, hw - 8 - tx, ROW_H - 4), Qt.AlignRight | Qt.AlignVCenter,
+                       bundle_letter(b))
             p.setPen(QPen(dim, 1))
             p.drawLine(0, y + ROW_H, self.width(), y + ROW_H)
             for piece, x, cw in self.cols:
@@ -142,7 +160,7 @@ class PieceStrip(QWidget):
                 if c is None:
                     continue
                 rn, rm, has_m = c
-                done = rn == 0 and rm == 0
+                done = (rn == 0 and rm == 0) or off
                 if shape:
                     cx, cy = x + cw / 2, y + 3 + THUMB_H / 2
                     path = QPainterPath()
@@ -167,6 +185,10 @@ class PieceStrip(QWidget):
         return None
 
     def mouseMoveEvent(self, ev):
+        if ev.position().x() < getattr(self, "head_w", HEAD_W) and self._row_at(ev.position()) is not None:
+            from .i18n import tr
+            QToolTip.showText(ev.globalPosition().toPoint(), tr("strip_toggle_tip"), self)
+            return
         pc = self._piece_at(ev.position())
         if pc is not None:
             num = f"{pc.number:03d}" if pc.number is not None else "—"
@@ -174,7 +196,20 @@ class PieceStrip(QWidget):
         else:
             QToolTip.hideText()
 
+    def _row_at(self, pos):
+        r = int((pos.y() - TOP) // ROW_H)
+        return self.rows[r] if pos.y() >= TOP and 0 <= r < len(self.rows) else None
+
+    def mousePressEvent(self, ev):
+        row = self._row_at(ev.position())
+        if row is not None and ev.button() == Qt.LeftButton and ev.position().x() < getattr(self, "head_w", HEAD_W):
+            self.row_toggled.emit(row[0], row[1])
+            return
+        super().mousePressEvent(ev)
+
     def mouseDoubleClickEvent(self, ev):
+        if ev.position().x() < getattr(self, "head_w", HEAD_W):
+            return                                       # a quick second click on the box just toggles again
         self.open_table.emit()
 
 

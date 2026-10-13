@@ -67,3 +67,20 @@ def test_cli_export_without_marker_reports_error(tmp_path, capsys):
     save_project(proj, path)
     assert main(["export", path, "--format", "plt", "-o", str(tmp_path / "x.plt")]) == 1
     assert "marker" in capsys.readouterr().out
+
+
+def test_excluded_strip_rows_left_out_and_saved(tmp_path):
+    from level7.model import FabricSettings, NestSettings
+    from level7.project_storage.store import load_project, save_project
+    from level7.service import run_nesting
+    proj, _ = open_any(SCB)
+    co = proj.cut_order
+    size = next(s for s, q in co.size_quantities.items() if q)
+    co.size_quantities[size] = 2
+    co.excluded = [(size, 2)]
+    m, info = run_nesting(proj, FabricSettings(width=1500.0), NestSettings(time_limit=3, engine="builtin"),
+                          workers=1)
+    assert info["validation"].ok and {p.bundle for p in m.placements} == {1}
+    path = str(tmp_path / "p.l7n")
+    save_project(proj, path)
+    assert load_project(path).cut_order.excluded == [(size, 2)]

@@ -165,6 +165,7 @@ class CutOrder:
     size_quantities: dict[str, int] = field(default_factory=dict)   # size -> garments
     piece_counts: dict[str, tuple[int, int]] = field(default_factory=dict)  # piece uid -> (normal, mirrored) per garment
     material: str | None = None
+    excluded: list = field(default_factory=list)   # [size, bundle] rows switched off in the piece strip
 
 
 @dataclass

@@ -265,7 +265,7 @@ def run_nesting(proj: Project, fabric: FabricSettings, settings: NestSettings, c
     from .nesting.parallel import run_parallel
     co = cut_order or proj.cut_order
     items, unplaced, warnings = build_items(proj, co.size_quantities, co.piece_counts, fabric, settings, pinned,
-                                           co.material)
+                                           material=co.material, excluded=getattr(co, "excluded", None))
     if not items and not unplaced:
         raise ValueError("nothing to nest: set size quantities and piece counts")
     t0 = time.monotonic()
