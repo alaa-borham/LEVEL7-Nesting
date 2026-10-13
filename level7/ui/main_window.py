@@ -618,6 +618,11 @@ class MainWindow(QMainWindow):
         possible); further rows (up to 3) are shown only when needed."""
         if not hasattr(self, "toolbars") or getattr(self, "_marker_full", False):
             return
+        if getattr(self, "_tb_slack_w", None) != self.width():
+            # the correction below belongs to one window width: a margin kept from a smaller window (before it
+            # was maximized) made the icons wrap into two rows on a wide screen
+            self._tb_slack, self._tb_slack_w = 0, self.width()
+            force = True
         avail = max(200, self.width() - 12 - getattr(self, "_tb_slack", 0))
         rows, cur, acc, last_sep = [], [], 0, None
         for e in self._tb_entries:
@@ -1097,7 +1102,19 @@ class MainWindow(QMainWindow):
             self.mark_dirty()
             if self.project is not None:          # the strip follows the chosen sizes / quantities at once
                 self.read_tables()
+                self._sync_marker()
                 self._refresh_strip()
+
+    def _sync_marker(self):
+        """The marker follows the order at once: copies no longer ordered leave it, new ones wait unplaced."""
+        from ..service import sync_marker_to_order
+        if self.marker is None or (self.worker is not None and self.worker.isRunning()):
+            return
+        removed, added = sync_marker_to_order(self.project, self.marker)
+        if removed or added:
+            self.view.show_marker(self.project, self.marker, self.view.bad)
+            self.after_edit()
+            self.statusBar().showMessage(tr("order_synced", r=removed, a=added))
 
     def _load_tables(self):
         p = self.project

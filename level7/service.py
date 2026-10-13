@@ -6,7 +6,7 @@ import threading
 import time
 from collections import Counter
 
-from .model import CutOrder, FabricSettings, Marker, NestSettings, Project
+from .model import CutOrder, FabricSettings, Marker, NestSettings, Placement, Project
 from .nesting.engine import build_items, grain_rotations
 from .validation.checker import marker_stats, validate_marker
 
@@ -253,6 +253,57 @@ def default_cut_order(proj: Project) -> CutOrder:
     mats = Counter(p.material for p in proj.pieces if p.production and p.material)
     co.material = mats.most_common(1)[0][0] if mats else None
     return co
+
+
+ADDED_TO_ORDER = "added to the order - not placed yet (nest again or drag it in)"
+
+
+def sync_marker_to_order(proj: Project, marker: Marker) -> tuple[int, int]:
+    """The marker follows the cut order at once (like GRAFIS): copies no longer ordered (a size quantity lowered,
+    a size or part switched off, fewer copies) leave the marker - unplaced ones first -, newly ordered copies are
+    added as not placed. Rows excluded with the strip check box only affect the next nesting run.
+    Returns (removed, added)."""
+    from .model import LayType
+    co = proj.cut_order
+    need: Counter = Counter()
+    for piece in proj.pieces:
+        n, m = co.piece_counts.get(piece.uid, (0, 0))
+        if n + m == 0 or (co.material and piece.material and piece.material != co.material):
+            continue
+        if marker.fabric.lay_type in (LayType.FACE_TO_FACE, LayType.FOLDED):
+            n, m = max(n, m), 0
+        for size, qty in co.size_quantities.items():
+            if (qty or 0) <= 0 or size not in piece.sizes or (piece.model and not size.startswith(piece.model + ":")):
+                continue
+            for b in range(1, qty + 1):
+                need[(piece.uid, size, b, False)] += n
+                need[(piece.uid, size, b, True)] += m
+    have: dict = {}
+    for pl in marker.placements:
+        have.setdefault((pl.piece_uid, pl.size, pl.bundle, pl.mirrored), []).append(pl)
+    drop: set = set()
+    pcs = {p.uid: p for p in proj.pieces}
+    for key, pls in have.items():
+        if key[0] not in pcs or key[1] not in pcs[key[0]].sizes:
+            continue                        # no geometry for that size: its notice stays in the marker
+        extra = len(pls) - need.get(key, 0)
+        if extra > 0:                       # unplaced copies go first, then the last placed ones
+            order = [pl for pl in pls if not pl.placed] + [pl for pl in reversed(pls) if pl.placed]
+            drop |= {id(pl) for pl in order[:extra]}
+    uids = {pl.uid for pl in marker.placements}
+    added, k = [], 0
+    sx, sy = marker.fabric.scale
+    for key, cnt in need.items():
+        for _ in range(cnt - len(have.get(key, []))):
+            k += 1
+            while f"a{k}" in uids:
+                k += 1
+            uids.add(f"a{k}")
+            added.append(Placement(f"a{k}", key[0], key[1], key[2], mirrored=key[3], placed=False, sx=sx, sy=sy,
+                                   reason=ADDED_TO_ORDER))
+    if drop or added:
+        marker.placements = [pl for pl in marker.placements if id(pl) not in drop] + added
+    return len(drop), len(added)
 
 
 def required_copies(items) -> dict:

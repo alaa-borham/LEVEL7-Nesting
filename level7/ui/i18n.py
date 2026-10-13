@@ -323,6 +323,8 @@ T = {
                      "الزر الأيمن على الجدول يعيّن الخامة لكل القطع المحددة مرة واحدة."),
     "mdl_not_possible": ("Saving as GRAFIS MDL needs a session opened from one GRAFIS MDL (one model).",
                          "الحفظ بصيغة MDL جرافس يحتاج جلسة مفتوحة من ملف MDL واحد (موديل واحد)."),
+    "order_synced": ("Marker updated to the order: {r} copies removed, {a} added (not placed yet - nest again)",
+                     "تم تحديث الماركر حسب الطلب: حُذفت {r} نسخة وأضيفت {a} (غير معشّقة بعد - أعد التعشيق)"),
     "mat_none": ("— none —", "— بدون —"),
     "mat_new": ("New material…", "خامة جديدة…"),
     "mat_new_title": ("New material", "خامة جديدة"),
