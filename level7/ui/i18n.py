@@ -152,7 +152,10 @@ T = {
     "tb_open": ("Open", "فتح"), "tb_save": ("Save", "حفظ"), "tb_undo": ("Undo", "تراجع"),
     "tb_redo": ("Redo", "إعادة"), "tb_rotate180": ("Rotate 180°", "تدوير 180°"), "tb_pin": ("Pin", "تثبيت"),
     "tb_measure": ("Measure", "قياس"), "tb_zoom_fit": ("Fit", "ملاءمة"), "tb_display_options": ("Display", "العرض"),
-    "tb_pieces_table": ("Pieces", "القطع"), "tb_run": ("Nest", "تعشيق"), "tb_stop": ("Stop", "إيقاف"),
+    "tb_pieces_table": ("Pieces", "القطع"), "tb_tab_pieces": ("Pieces", "القطع"),
+    "tb_tab_sizes": ("Sizes", "المقاسات"),
+    "tab_pieces": ("Pieces table (use, material, copies, grain)", "جدول القطع (الاستخدام، الخامة، النسخ، النسيج)"),
+    "tab_sizes": ("Size quantities (garments per size)", "كميات المقاسات (عدد القطع لكل مقاس)"), "tb_run": ("Nest", "تعشيق"), "tb_stop": ("Stop", "إيقاف"),
     "tb_export_plt": ("PLT", "PLT"), "tb_export_dxf": ("DXF", "DXF"), "tb_export_iso": ("ISO", "ISO"),
     "tb_language": ("العربية", "English"),
     "missing_sizes": ("These sizes have no geometry in the opened file (a GRAFIS marker file stores only some "

@@ -319,7 +319,8 @@ class MainWindow(QMainWindow):
 
     TOOLBAR = (("open", "open"), ("save", "save"), None, ("undo", None), ("redo", None), None,
                ("rotate180", "rotate180"), ("pin", "pin"), ("measure", "measure"), None,
-               ("zoom_fit", "zoom_fit"), ("display_options", "display"), ("pieces_table", "pieces"), None,
+               ("zoom_fit", "zoom_fit"), ("display_options", "display"), None,
+               ("tab_pieces", "pieces"), ("tab_sizes", "sizes"), None,
                ("run", "run"), ("stop", "stop"), None,
                ("export_plt", "plt"), ("export_dxf", "dxf"), ("export_iso", "iso"), None,
                ("language", "language"))
@@ -336,7 +337,11 @@ class MainWindow(QMainWindow):
                          "QToolButton { padding: 2px 6px; min-width: 46px; }")
         acts = {k: a for a, k in self.actions_tr}
         acts["undo"], acts["redo"] = undo, redo
-        acts["pieces_table"] = self.act_table
+        acts["tab_pieces"] = self._act("tab_pieces", lambda: self.show_table_tab(0), checkable=True)
+        acts["tab_sizes"] = self._act("tab_sizes", lambda: self.show_table_tab(1), checkable=True)
+        self.tab_actions = (acts["tab_pieces"], acts["tab_sizes"])
+        self.dock_left.visibilityChanged.connect(lambda _v: self._sync_tab_actions())
+        self.left_tabs.currentChanged.connect(lambda _i: self._sync_tab_actions())
         self.toolbar_items = []
         for item in self.TOOLBAR:
             if item is None:
@@ -360,6 +365,21 @@ class MainWindow(QMainWindow):
         self.theme_button.setMenu(self.m_theme)
         tb.addWidget(self.theme_button)
         self.toolbar = tb
+
+    def show_table_tab(self, index: int):
+        """Toolbar 'Pieces' / 'Size quantities': open the table on that tab; a second click closes it."""
+        if self.dock_left.isVisible() and self.left_tabs.currentIndex() == index:
+            self.dock_left.hide()
+        else:
+            self.left_tabs.setCurrentIndex(index)
+            self.dock_left.show()
+            self.dock_left.raise_()
+        self._sync_tab_actions()
+
+    def _sync_tab_actions(self):
+        vis = self.dock_left.isVisible()
+        for i, a in enumerate(getattr(self, "tab_actions", ())):
+            a.setChecked(vis and self.left_tabs.currentIndex() == i)
 
     def set_theme(self, name):
         from .icons import icon

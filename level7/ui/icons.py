@@ -141,6 +141,21 @@ def _draw(name: str, p: QPainter, fg: QColor):
         p.setBrush(fg)
         p.drawPath(half)
         p.setBrush(Qt.NoBrush)
+    elif name == "sizes":
+        # three size tags S / M / L
+        f = QFont()
+        f.setPixelSize(8)
+        f.setBold(True)
+        p.setFont(f)
+        for k, (lab, col) in enumerate((("S", BLUE), ("M", GREEN), ("L", RED))):
+            r = QRectF(2 + k * 9.5, 10 + (k % 2) * 3, 9, 12)
+            p.setPen(Qt.NoPen)
+            p.setBrush(col)
+            p.drawRoundedRect(r, 2, 2)
+            p.setPen(QColor("white"))
+            p.drawText(r, Qt.AlignCenter, lab)
+        p.setPen(QPen(fg, 1.5))
+        p.drawLine(QPointF(3, 27), QPointF(29, 27))
     elif name == "pieces":
         for i, x in enumerate((3, 12, 21)):
             _piece(p, QRectF(x, 9, 8, 14 - i * 3))
