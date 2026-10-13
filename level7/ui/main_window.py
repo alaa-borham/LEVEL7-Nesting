@@ -1258,13 +1258,19 @@ class MainWindow(QMainWindow):
             return
         co = self.project.cut_order
         ex = {(s, int(b)) for s, b in co.excluded}
-        ex ^= {(size, bundle)}
+        if bundle:
+            ex ^= {(size, bundle)}
+        else:                                    # the whole size: every bundle of the order and of the marker
+            n = max([co.size_quantities.get(size, 0)] +
+                    [pl.bundle for pl in (self.marker.placements if self.marker else []) if pl.size == size])
+            rows = {(size, b) for b in range(1, n + 1)}
+            ex = (ex - rows) if rows <= ex else (ex | rows)
         co.excluded = sorted(ex)
         self.mark_dirty()
         self._refresh_strip()
         from .marker_view import bundle_letter
-        key = "strip_row_off" if (size, bundle) in ex else "strip_row_on"
-        self.statusBar().showMessage(tr(key, r=f"{size}/{bundle_letter(bundle)}"))
+        key = "strip_row_off" if (size, bundle or 1) in ex else "strip_row_on"
+        self.statusBar().showMessage(tr(key, r=f"{size}/{bundle_letter(bundle)}" if bundle else size))
 
     def _refresh_strip(self):
         self.strip.set_data(self.project, self.marker)

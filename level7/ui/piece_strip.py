@@ -22,7 +22,7 @@ CHECK = 12            # include / exclude check box in the size column
 
 class PieceStrip(QWidget):
     open_table = Signal()
-    row_toggled = Signal(str, int)      # (size, bundle): include / exclude this row from the marker
+    row_toggled = Signal(str, int)      # (size, 0): include / exclude this size (all its bundles) from the marker
     relayout = Signal()                 # number of strip lines changed (window adjusts the strip height)
     piece_clicked = Signal(str)         # piece uid (highlighted in the pieces table)
 
@@ -82,6 +82,23 @@ class PieceStrip(QWidget):
                     if (size, b) not in self.excluded:
                         self.total += n + m
                 self.counts[((size, b), p.uid)] = (rn, rm, has_m)
+        # one row per size: the copies of all its bundles are added up ("×3" = three garments of that size)
+        per_size: dict = {}
+        for (size, b) in self.rows:
+            per_size.setdefault(size, []).append(b)
+        agg, rows = {}, []
+        self.excluded_sizes = set()
+        for size, bundles in per_size.items():
+            row = (size, len(bundles))
+            rows.append(row)
+            on = [b for b in bundles if (size, b) not in self.excluded] or bundles
+            if all((size, b) in self.excluded for b in bundles):
+                self.excluded_sizes.add(size)
+            for p in pieces:
+                cs = [self.counts[((size, b), p.uid)] for b in on if ((size, b), p.uid) in self.counts]
+                if cs:
+                    agg[(row, p.uid)] = (sum(c[0] for c in cs), sum(c[1] for c in cs), any(c[2] for c in cs))
+        self.rows, self.counts = rows, agg
         # outlines turned so the grain runs along the strip, all at one scale
         maxw = maxh = 1.0
         for (size, _b) in self.rows:
@@ -176,7 +193,7 @@ class PieceStrip(QWidget):
                 p.drawLine(int(bx - 3), TOP, int(bx - 3), TOP + self.lines() * ROW_H)
         for r, (size, b) in enumerate(self.rows):
             bx, y = self._origin(r)
-            off = (size, b) in getattr(self, "excluded", set())
+            off = size in getattr(self, "excluded_sizes", set())
             # include / exclude check box
             box = QRectF(bx + 3, y + (ROW_H - CHECK) / 2, CHECK, CHECK)
             p.setPen(QPen(fg, 1.2))
@@ -192,7 +209,7 @@ class PieceStrip(QWidget):
             p.drawText(QRectF(bx + tx, y + 2, hw - 8 - tx, ROW_H - 4), Qt.AlignLeft | Qt.AlignVCenter,
                        size_label(self.tags, size))
             p.drawText(QRectF(bx + tx, y + 2, hw - 8 - tx, ROW_H - 4), Qt.AlignRight | Qt.AlignVCenter,
-                       bundle_letter(b))
+                       f"×{b}" if b > 1 else "")
             for piece, x, cw in self.cols:
                 x = bx + x
                 c = self.counts.get(((size, b), piece.uid))
@@ -250,7 +267,7 @@ class PieceStrip(QWidget):
     def mousePressEvent(self, ev):
         row = self._row_at(ev.position())
         if row is not None and ev.button() == Qt.LeftButton and self._in_head(ev.position()):
-            self.row_toggled.emit(row[0], row[1])
+            self.row_toggled.emit(row[0], 0)          # 0 = every bundle of this size
             return
         pc = self._piece_at(ev.position())
         if pc is not None and ev.button() == Qt.LeftButton:
