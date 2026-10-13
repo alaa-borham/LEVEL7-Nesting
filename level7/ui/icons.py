@@ -157,6 +157,18 @@ def _draw(name: str, p: QPainter, fg: QColor):
         f.setBold(True)
         p.setFont(f)
         p.drawText(QRectF(2, 15, 24, 10), Qt.AlignCenter, name.upper())
+    elif name == "export":
+        # sheet with an arrow leaving it, three format colours
+        p.setBrush(QColor(255, 255, 255))
+        p.drawRect(QRectF(4, 4, 17, 23))
+        for k, col in enumerate((BLUE, GREEN, RED)):
+            p.setPen(Qt.NoPen)
+            p.setBrush(col)
+            p.drawRect(QRectF(6, 8 + k * 6, 13, 4))
+        p.setPen(QPen(fg, 2.2, Qt.SolidLine, Qt.RoundCap))
+        p.drawLine(QPointF(17, 18), QPointF(29, 18))
+        p.drawLine(QPointF(29, 18), QPointF(25, 14))
+        p.drawLine(QPointF(29, 18), QPointF(25, 22))
     elif name == "language":
         p.drawEllipse(QRectF(4, 4, 24, 24))
         p.drawEllipse(QRectF(10, 4, 12, 24))

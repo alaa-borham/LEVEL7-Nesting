@@ -10,6 +10,8 @@ T = {
     "save": ("Save", "حفظ"),
     "save_as": ("Save as…", "حفظ باسم…"),
     "export": ("&Export", "&تصدير"),
+    "export_menu": ("Export (PLT / DXF / ISO / SCB)", "اكسبورت (PLT / DXF / ISO / SCB)"),
+    "tb_export_menu": ("Export", "اكسبورت"),
     "export_plt": ("Export PLT (HP-GL)…", "تصدير PLT (HP-GL)…"),
     "export_dxf": ("Export DXF…", "تصدير DXF…"),
     "export_iso": ("Export ISO…", "تصدير ISO…"),

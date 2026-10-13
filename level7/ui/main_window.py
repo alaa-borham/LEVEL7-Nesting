@@ -379,7 +379,7 @@ class MainWindow(QMainWindow):
                ("zoom_fit", "zoom_fit"), ("display_options", "display"), None,
                ("tab_props", "properties"), ("tab_pieces", "pieces"), ("tab_sizes", "sizes"), ("tab_spacing", "margins"), ("tab_plaid", "plaid"), None,
                ("run", "run"), ("stop", "stop"), ("batch", "batch"), None,
-               ("export_plt", "plt"), ("export_dxf", "dxf"), ("export_iso", "iso"), None,
+               ("export_menu", "export"), None,
                ("language", "language"))
 
     def _build_toolbar(self, undo, redo):
@@ -394,6 +394,9 @@ class MainWindow(QMainWindow):
                          "QToolButton { padding: 2px 6px; min-width: 46px; }")
         acts = {k: a for a, k in self.actions_tr}
         acts["undo"], acts["redo"] = undo, redo
+        # one "Export" button: its menu holds PLT / DXF / ISO / GRAFIS SCB and the plotter settings
+        acts["export_menu"] = self._act("export_menu", lambda: None)
+        acts["export_menu"].setMenu(self.m_export)
         acts["tab_pieces"] = self._act("tab_pieces", lambda: self.show_table_tab(0), checkable=True)
         acts["tab_sizes"] = self._act("tab_sizes", lambda: self.show_table_tab(1), checkable=True)
         acts["tab_spacing"] = self._act("tab_spacing", lambda: self.show_table_tab(2), checkable=True)
@@ -417,7 +420,8 @@ class MainWindow(QMainWindow):
             a.setIcon(icon(ic or key))
             tb.addAction(a)
             self.toolbar_items.append((a, key))
-        from PySide6.QtWidgets import QMenu
+        from PySide6.QtWidgets import QMenu, QToolButton as _QTB
+        tb.widgetForAction(acts["export_menu"]).setPopupMode(_QTB.InstantPopup)
         self.m_measure = QMenu(self)
         self.m_measure.addAction(self.act_measure)
         self.m_measure.addAction(self.act_measure_curve)
