@@ -255,6 +255,8 @@ T = {
     "running_live": ("Nesting… {t:.0f} / {T:.0f} s, best length {len}",
                      "جاري التعشيق… {t:.0f} / {T:.0f} ث، أفضل طول {len}"),
     "zoom_in": ("Zoom in", "تكبير"), "zoom_out": ("Zoom out", "تصغير"),
+    "nest_stopped_empty": ("Nesting stopped before a first complete marker - nothing changed",
+                           "توقف التعشيق قبل اكتمال أول ماركر — لم يتغير شيء"),
     "tab_spacing": ("Margins, buffers and shrinkage", "الهوامش والبفر والانكماش"),
     "tb_tab_spacing": ("Margins", "الهوامش"),
     "measure_tool": ("Measure", "قياس"), "tb_measure_tool": ("Measure", "قياس"),

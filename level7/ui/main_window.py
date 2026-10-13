@@ -8,7 +8,7 @@ import threading
 import time
 import traceback
 
-from PySide6.QtCore import QSettings, Qt, QThread, QTimer, Signal
+from PySide6.QtCore import QEvent, QSettings, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QAction, QKeySequence, QUndoCommand, QUndoStack
 from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
                                QDockWidget, QDoubleSpinBox, QFileDialog, QFormLayout, QHBoxLayout, QHeaderView,
@@ -27,6 +27,16 @@ from .updates import UpdateManager
 
 
 # ---------------------------------------------------------------------------------- undo
+def _owned_by(w, owner) -> bool:
+    """w lives in a pop-up list that belongs to owner (e.g. the list of a combo box inside a panel)."""
+    p = w
+    while p is not None:
+        if p is owner:
+            return True
+        p = p.parentWidget()
+    return False
+
+
 TAKEN_OUT = "taken out of the marker"      # Placement.reason of copies the user removed from the marker
 
 
@@ -522,6 +532,7 @@ class MainWindow(QMainWindow):
         self._tb_split = None
         self._tb_widths: dict = {}
         self._layout_toolbar(force=True)
+        QApplication.instance().installEventFilter(self)       # click outside an open panel closes it
 
     # -- toolbar wrapping ----------------------------------------------------------------------
     def _entry_width(self, e) -> int:
@@ -645,6 +656,27 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, ev):
         super().resizeEvent(ev)
         self._layout_toolbar()
+
+    def eventFilter(self, obj, ev):
+        """A click outside an open panel closes it (the pieces table stays open for clicks on the marker / strip,
+        so selected pieces are highlighted in it); clicks in the panel's own lists, its toolbar icon or a dialog
+        do not count."""
+        if ev.type() == QEvent.MouseButtonPress and getattr(self, "tab_actions", None):
+            gp = ev.globalPosition()
+            key = (ev.timestamp(), round(gp.x(), 1), round(gp.y(), 1))      # the copies passed on keep both
+            first = key != getattr(self, "_last_press", None)   # a click not used is passed on to the parents:
+            self._last_press = key                               # judge it once, at the widget clicked
+            open_pops = [(p, a) for p, a in zip(self.table_popups, self.tab_actions) if p.isVisible()] if first else []
+            if open_pops:
+                w = obj if isinstance(obj, QWidget) else None
+                if w is not None and not isinstance(w.window(), QDialog):
+                    for pop, action in open_pops:
+                        keep = [pop, self._tool_button(action)]
+                        if pop is self.pieces_popup:
+                            keep += [self.view, self.strip]
+                        if not any(k is not None and (w is k or k.isAncestorOf(w) or _owned_by(w, k)) for k in keep):
+                            pop.hide()
+        return super().eventFilter(obj, ev)
 
     def createPopupMenu(self):
         return None        # no toolbar/dock list on right-click: the toolbar buttons have their own menus
@@ -1703,8 +1735,15 @@ class MainWindow(QMainWindow):
         self._strip_height()
 
     def on_finished(self, marker, info):
-        self.mark_dirty()
         self._nest_ui(False)
+        if info.get("stopped") and not any(p.placed for p in marker.placements):
+            # stopped before a first complete layout: keep the marker on screen, add nothing
+            self.statusBar().showMessage(tr("nest_stopped_empty"))
+            if self.marker is not None:
+                self.view.show_marker(self.project, self.marker)
+                self.after_edit()
+            return
+        self.mark_dirty()
         self.project.markers.append(marker)
         self.refresh_markers_list(select=len(self.project.markers) - 1)
         v = info["validation"]

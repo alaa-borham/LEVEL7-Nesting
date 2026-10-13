@@ -484,7 +484,7 @@ class NestEngine:
         pop: list[tuple[tuple, tuple]] = []
         for k, order in enumerate(seeds):
             ind = (order, {i: 0 for i in free})
-            f = evaluate(ind, ignore_stop=(k == 0))
+            f = evaluate(ind)                  # Stop works at once, even before a first complete layout
             if f is None:
                 break
             pop.append((f, ind))
@@ -539,6 +539,15 @@ class NestEngine:
                 nxt.append((f, child))
             pop = nxt
         stopped = self.stop_event.is_set()
+        if best is None:                       # stopped before the first complete layout: nothing placed
+            res = NestResult([], [Unplaced(it.uid, it.piece_uid, it.size, it.mirrored, "stopped")
+                                  for it in self.items if it.pinned is None],
+                             self.fabric.margin_start + self.fabric.margin_end, evaluations,
+                             time.monotonic() - t0, self.settings.seed, True, history)
+            if self.progress:
+                self.progress({"elapsed": res.elapsed, "evaluations": evaluations, "length": res.length,
+                               "unplaced": len(res.unplaced), "result": res, "final": True})
+            return res
         res = self.to_result(best[0], evaluations, time.monotonic() - t0, stopped, history)
         if self.progress:
             self.progress({"elapsed": res.elapsed, "evaluations": evaluations, "length": res.length,
