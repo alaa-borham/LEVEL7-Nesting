@@ -67,6 +67,7 @@ class PieceStrip(QWidget):
         used = {k[2] for k in groups} | {u for u, (n, m) in co.piece_counts.items() if n + m > 0}
         pieces = [p for p in project.pieces if p.uid in used]
         pieces.sort(key=lambda p: (p.number if p.number is not None else 10 ** 6, p.name))
+        row_pcs: dict = {}                      # (size, bundle) -> [placed, total] copies (parts in the marker)
         for (size, b) in self.rows:
             for p in pieces:
                 n, m = co.piece_counts.get(p.uid, (p.default_count, p.default_mirrored))
@@ -75,11 +76,15 @@ class PieceStrip(QWidget):
                     rn = sum(1 for pl in pls if not pl.placed and not pl.mirrored)
                     rm = sum(1 for pl in pls if not pl.placed and pl.mirrored)
                     has_m = m > 0 or any(pl.mirrored for pl in pls)
+                    pc = row_pcs.setdefault((size, b), [0, 0])
+                    pc[0] += sum(1 for pl in pls if pl.placed)
+                    pc[1] += len(pls)
                 elif (size, b) in marker_rows or n + m == 0 or size not in p.sizes \
                         or (p.model and not size.startswith(p.model + ":")):
                     continue
                 else:
                     rn, rm, has_m = n, m, m > 0
+                    row_pcs.setdefault((size, b), [0, 0])[1] += n + m
                     if (size, b) not in self.excluded:
                         self.total += n + m
                 self.counts[((size, b), p.uid)] = (rn, rm, has_m)
@@ -88,6 +93,7 @@ class PieceStrip(QWidget):
         for (size, b) in self.rows:
             per_size.setdefault(size, []).append(b)
         agg, rows = {}, []
+        self.row_pcs = {}
         self.excluded_sizes = set()
         for size, bundles in per_size.items():
             row = (size, len(bundles))
@@ -95,6 +101,8 @@ class PieceStrip(QWidget):
             on = [b for b in bundles if (size, b) not in self.excluded] or bundles
             if all((size, b) in self.excluded for b in bundles):
                 self.excluded_sizes.add(size)
+            pcs = [row_pcs.get((size, b), [0, 0]) for b in on]
+            self.row_pcs[row] = (sum(c[0] for c in pcs), sum(c[1] for c in pcs))
             for p in pieces:
                 cs = [self.counts[((size, b), p.uid)] for b in on if ((size, b), p.uid) in self.counts]
                 if cs:
@@ -220,10 +228,14 @@ class PieceStrip(QWidget):
             p.setPen(dim if off else fg)
             from ..service import size_label
             tx = CHECK + 8
-            p.drawText(QRectF(bx + tx, y + 2, hw - 8 - tx, ROW_H - 4), Qt.AlignLeft | Qt.AlignVCenter,
-                       size_label(self.tags, size))
-            p.drawText(QRectF(bx + tx, y + 2, hw - 8 - tx, ROW_H - 4), Qt.AlignRight | Qt.AlignVCenter,
-                       f"×{b}" if b > 1 else "")
+            top = QRectF(bx + tx, y + 2, hw - 8 - tx, ROW_H / 2 - 2)
+            p.drawText(top, Qt.AlignLeft | Qt.AlignBottom, size_label(self.tags, size))
+            p.drawText(top, Qt.AlignRight | Qt.AlignBottom, f"×{b}" if b > 1 else "")
+            # parts of this size in the marker (placed / all), under the size name
+            placed, total = getattr(self, "row_pcs", {}).get((size, b), (0, 0))
+            p.setPen(dim)
+            p.drawText(QRectF(bx + tx, y + ROW_H / 2 + 1, hw - 8 - tx, ROW_H / 2 - 3), Qt.AlignLeft | Qt.AlignTop,
+                       f"Pc {placed}/{total}" if placed and placed != total else f"Pc {total}")
             for piece, x, cw in self.line_cols[L]:
                 x = bx + x
                 c = self.counts.get(((size, b), piece.uid))

@@ -1566,7 +1566,8 @@ class MainWindow(QMainWindow):
         rows = self.strip.lines()                 # size rows are laid side by side, wrapped into lines
         hbar = self.strip.sizeHint().width() > self.strip_area.width()
         extra = 6 + (self.strip_area.horizontalScrollBar().sizeHint().height() if hbar else 0)   # scroll bar
-        self.strip_area.setFixedHeight(TOP + min(rows, 3) * ROW_H + extra)
+        # up to 5 model lines in view (a 4th model was hidden below 3 lines); more scroll with the mouse wheel
+        self.strip_area.setFixedHeight(TOP + min(rows, 5) * ROW_H + extra)
 
     def update_results(self, v=None):
         if not self.marker or not self.project:
