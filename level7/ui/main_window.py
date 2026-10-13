@@ -417,6 +417,7 @@ class MainWindow(QMainWindow):
         self.m_edit.addAction(self.act_measure_curve)
         self.m_view.addAction(self._act("zoom_fit", self.view.zoom_fit, "F"))
         self.m_view.addAction(self._act("display_options", self.display_options, "Ctrl+D"))
+        self.m_view.addAction(self._act("tb_customize", lambda: self.customize_toolbar()))
         self.m_theme = self.m_view.addMenu("")
         from PySide6.QtGui import QActionGroup
         grp = QActionGroup(self)
@@ -486,17 +487,16 @@ class MainWindow(QMainWindow):
             pop.closed.connect(self._sync_tab_actions)
         self.m_view.addActions(list(self.tab_actions))
         self.toolbar_items = []
-        self._tb_entries = []                    # ("act", action) / ("sep",) / ("theme",), in toolbar order
+        self._tb_keys = {}                        # key -> action of every toolbar icon
         for item in self.TOOLBAR:
             if item is None:
-                self._tb_entries.append(("sep",))
                 continue
             key, ic = item
             a = acts[key]
             a.setIcon(icon(ic or key))
-            self._tb_entries.append(("act", a))
+            self._tb_keys[key] = a
             self.toolbar_items.append((a, key))
-        self._tb_entries.append(("theme",))
+        self._tb_entries = self._entries_from_settings()
         from PySide6.QtWidgets import QMenu
         self._acts = acts
         self.m_measure = QMenu(self)
@@ -533,6 +533,54 @@ class MainWindow(QMainWindow):
         self._tb_widths: dict = {}
         self._layout_toolbar(force=True)
         QApplication.instance().installEventFilter(self)       # click outside an open panel closes it
+
+    # -- toolbar order (customizable) -----------------------------------------------------------
+    def _default_order(self):
+        return ["|" if it is None else it[0] for it in self.TOOLBAR]
+
+    def _entries_from_settings(self):
+        """("act", action) / ("sep",) / ("theme",) in the user's order; icons added in a later version go last."""
+        order = self.settings_store.value("toolbar_order", "") or ""
+        hidden = set(filter(None, (self.settings_store.value("toolbar_hidden", "") or "").split(",")))
+        keys = [k for k in order.split(",") if k == "|" or k in self._tb_keys] if order else self._default_order()
+        keys += [k for k in self._default_order() if k != "|" and k not in keys]
+        out = []
+        for k in keys:
+            if k == "|":
+                if out and out[-1][0] != "sep":
+                    out.append(("sep",))
+            elif k not in hidden:
+                out.append(("act", self._tb_keys[k]))
+        while out and out[-1][0] == "sep":
+            out.pop()
+        return out + [("theme",)]
+
+    def customize_toolbar(self):
+        from .toolbar_dialog import ToolbarDialog
+        order = self.settings_store.value("toolbar_order", "") or ",".join(self._default_order())
+        hidden = set(filter(None, (self.settings_store.value("toolbar_hidden", "") or "").split(",")))
+        keys = [k for k in order.split(",") if k == "|" or k in self._tb_keys]
+        keys += [k for k in self._default_order() if k != "|" and k not in keys]
+        dlg = ToolbarDialog(self, keys, self._tb_keys, hidden, self._default_order())
+        if dlg.exec() != QDialog.Accepted:
+            return
+        keys, hidden = dlg.result_order()
+        self.settings_store.setValue("toolbar_order", ",".join(keys))
+        self.settings_store.setValue("toolbar_hidden", ",".join(sorted(hidden)))
+        for w in self._all_windows():                 # every session window
+            w._tb_entries = w._entries_from_settings()
+            w._tb_split = None
+            w._layout_toolbar(force=True)
+
+    def contextMenuEvent(self, ev):
+        """Right-click on an empty place of the toolbar: customize it."""
+        if any(t.isVisible() and t.geometry().contains(ev.pos()) for t in self.toolbars):
+            from PySide6.QtWidgets import QMenu
+            m = QMenu(self)
+            m.addAction(tr("tb_customize"), self.customize_toolbar)
+            m.exec(ev.globalPos())
+            return
+        super().contextMenuEvent(ev)
 
     # -- toolbar wrapping ----------------------------------------------------------------------
     def _entry_width(self, e) -> int:

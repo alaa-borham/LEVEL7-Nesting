@@ -257,6 +257,14 @@ T = {
     "zoom_in": ("Zoom in", "تكبير"), "zoom_out": ("Zoom out", "تصغير"),
     "nest_stopped_empty": ("Nesting stopped before a first complete marker - nothing changed",
                            "توقف التعشيق قبل اكتمال أول ماركر — لم يتغير شيء"),
+    "tb_customize": ("Customize toolbar…", "تخصيص الأيقونات…"),
+    "tb_customize_hint": ("Drag the icons into the order you like (or Up / Down). Untick an icon to hide it. "
+                          "Separators group the icons.",
+                          "اسحب الأيقونات بالترتيب الذي تريده (أو أعلى / أسفل). أزل علامة ✓ لإخفاء أيقونة. "
+                          "الفواصل تقسّم الأيقونات إلى مجموعات."),
+    "tb_up": ("Up", "أعلى"), "tb_down": ("Down", "أسفل"), "tb_add_sep": ("Add separator", "إضافة فاصل"),
+    "tb_remove_sep": ("Remove separator", "حذف الفاصل"), "tb_reset": ("Default order", "الترتيب الافتراضي"),
+    "tb_separator": ("separator", "فاصل"),
     "tab_spacing": ("Margins, buffers and shrinkage", "الهوامش والبفر والانكماش"),
     "tb_tab_spacing": ("Margins", "الهوامش"),
     "measure_tool": ("Measure", "قياس"), "tb_measure_tool": ("Measure", "قياس"),
