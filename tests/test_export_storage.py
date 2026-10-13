@@ -112,7 +112,7 @@ def test_plt_print_items_switch_layers_without_changing_format(scb, tmp_path):
     n_cut = sum(1 for p in sc.paths if p.layer == "CUT")
     assert st["paths"] == n_cut and st["notches_merged"] == 0 and st["text_strokes"] == 0
     txt = f.read_bytes().decode("ascii")
-    assert txt.startswith("IN\r\nLT1\r\n") and txt.rstrip().endswith("PG") and "SP" not in txt   # same dialect
+    assert txt.startswith("IN\r\nLT\r\n") and txt.rstrip().endswith("PG") and "SP" not in txt   # same dialect
     assert st_full["paths"] > st["paths"]
     # grain + piece names on, seam off: still the GRAFIS dialect, more paths than cut only
     some = apply_items(PRESETS["algotex_grafis"](), {"CUT": True, "GRAIN": True, "PIECE_NAME": True})

@@ -78,6 +78,11 @@ class PlotSettingsDialog(QDialog):
         self.preset.addItem(tr("plt_preset_generic"), "generic")
         self.preset.setCurrentIndex(0 if self.cfg.dialect == "grafis" else 1)
         top.addRow(tr("plt_preset"), self.preset)
+        self.line = QComboBox()
+        self.line.addItem(tr("plt_line_solid"), "solid")
+        self.line.addItem(tr("plt_line_lt1"), "lt1")
+        self.line.setCurrentIndex(1 if self.cfg.line_type == "lt1" else 0)
+        top.addRow(tr("plt_line"), self.line)
         lay.addLayout(top)
 
         box = QGroupBox(tr("plt_what"))
@@ -150,12 +155,14 @@ class PlotSettingsDialog(QDialog):
         c = PRESETS[self.preset.itemData(i)]()
         self.cfg = c
         self._load(c)
+        self.line.setCurrentIndex(1 if c.line_type == "lt1" else 0)
         on = enabled_items(c)
         for layer, ch in self.checks.items():
             ch.setChecked(on[layer] or layer == "CUT")
 
     def result_config(self) -> PlotterConfig:
         c = self.cfg
+        c.line_type = self.line.currentData()
         if self.adv.isChecked():
             c.dialect, c.text_mode = self.dialect.currentText(), self.tmode.currentText()
             c.merge_notches = self.merge.isChecked()

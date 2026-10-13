@@ -37,6 +37,8 @@ class PlotterConfig:
     text_mode: str = "label"            # "label" (HP-GL LB) | "strokes" (vector font) | "none"
     text_layers: list = field(default_factory=lambda: ["TEXT", "PIECE_NAME"])
     merge_notches: bool = False         # put notch slits into the cut contour as there-and-back spikes
+    line_type: str = "solid"            # "solid": LT (continuous lines)  "lt1": LT1 as in GRAFIS' file (HP-GL
+    #                                     line pattern 1 = dotted on plotters that honour it)
 
     def save(self, path):
         with open(path, "w", encoding="utf-8") as fh:
@@ -113,7 +115,8 @@ def write_plt(scene: Scene, path: str, cfg: PlotterConfig | None = None) -> dict
     if ext[0] < -1e-6 or ext[1] < -1e-6:
         raise ExportError(f"negative marker coordinates {ext[:2]}; expected origin at lower-left")
     grafis = cfg.dialect == "grafis"
-    out = ["IN", "LT1"] if grafis else ["IN;", "PA;"]
+    lt = "LT1" if cfg.line_type == "lt1" else "LT"
+    out = ["IN", lt] if grafis else ["IN;", f"{lt};", "PA;"]
     cur_pen = None
     stats = {"paths": 0, "labels": 0, "text_strokes": 0, "by_pen": {}, "skipped_chars": set(), "notches_merged": 0}
     paths = list(scene.paths)

@@ -344,6 +344,18 @@ class MainWindow(QMainWindow):
             a.setIcon(icon(ic or key))
             tb.addAction(a)
             self.toolbar_items.append((a, key))
+        # theme switch: its own button at the far end of the toolbar (far left in Arabic)
+        from PySide6.QtWidgets import QSizePolicy, QToolButton
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        tb.addWidget(spacer)
+        self.theme_button = QToolButton()
+        self.theme_button.setIcon(icon("theme"))
+        self.theme_button.setIconSize(QSize(28, 28))
+        self.theme_button.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        self.theme_button.setPopupMode(QToolButton.InstantPopup)
+        self.theme_button.setMenu(self.m_theme)
+        tb.addWidget(self.theme_button)
         self.toolbar = tb
 
     def set_theme(self, name):
@@ -353,6 +365,7 @@ class MainWindow(QMainWindow):
         self.settings_store.setValue("theme", name)
         for a, key in self.toolbar_items:
             a.setIcon(icon(dict((k, i) for k, i in (x for x in self.TOOLBAR if x)).get(key) or key))
+        self.theme_button.setIcon(icon("theme"))
         self.toolbar.setStyleSheet(self.toolbar.styleSheet())   # re-polish with the new palette
         for w in QApplication.instance().allWidgets():
             w.update()
@@ -376,6 +389,8 @@ class MainWindow(QMainWindow):
         self.act_table.setText(tr("pieces_table"))
         self._retranslate_toolbar()
         self.m_theme.setTitle(tr("theme"))
+        self.theme_button.setText(tr("theme"))
+        self.theme_button.setToolTip(tr("theme"))
         for m, k in self.menus_tr:
             m.setTitle(tr(k))
         for lab, k in self.form_rows:
@@ -387,6 +402,10 @@ class MainWindow(QMainWindow):
         self.left_tabs.setTabText(1, tr("sizes"))
         self.pieces_table.setHorizontalHeaderLabels([tr(k) for k in ("col_use", "col_name", "col_mat", "col_sizes",
                                                                      "col_count", "col_mirror", "col_grain")])
+        for c, k in enumerate(("col_use", "col_name", "col_mat", "col_sizes", "col_count", "col_mirror", "col_grain")):
+            h = self.pieces_table.horizontalHeaderItem(c)
+            if h is not None and k != "col_name":
+                h.setToolTip(tr("tip_" + k))
         self.sizes_table.setHorizontalHeaderLabels([tr("col_size"), tr("col_qty")])
         self.res_labels[0].setText(tr("markers"))
         self.res_labels[1].setText(tr("unplaced"))

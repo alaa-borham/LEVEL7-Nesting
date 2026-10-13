@@ -82,10 +82,10 @@ T = {
     "col_use": ("Use", "استخدام"),
     "col_name": ("Name", "الاسم"),
     "col_mat": ("Material", "الخامة"),
-    "col_count": ("Copies", "نسخ"),
-    "col_mirror": ("Mirrored", "معكوسة"),
-    "col_grain": ("Grain", "النسيج"),
-    "col_sizes": ("Sizes", "المقاسات"),
+    "col_count": ("Normal copies", "نسخ عادية"),
+    "col_mirror": ("Mirrored copies", "نسخ معكوسة"),
+    "col_grain": ("Grain angle", "زاوية النسيج"),
+    "col_sizes": ("Sizes available", "مقاسات متوفرة"),
     "col_size": ("Size", "المقاس"),
     "col_qty": ("Garments", "عدد القطع"),
     "width": ("Total width (mm)", "العرض الكلي (مم)"),
@@ -187,6 +187,22 @@ T = {
                    "the time; the shorter valid marker is kept. Best results from about 2 minutes.",
                    "تلقائي: LEVEL7 يبني ماركرًا صحيحًا أولًا، ثم يقوم محرك sparrow بتقصيره في باقي الوقت، ويُحفظ الأقصر "
                    "الصحيح. أفضل النتائج من حوالي دقيقتين."),
+    "plt_line": ("Line type", "نوع الخط"),
+    "plt_line_solid": ("Solid (recommended)", "متصل (موصى به)"),
+    "plt_line_lt1": ("Dotted LT1 (as GRAFIS' file)", "منقط LT1 (مثل ملف GRAFIS)"),
+    "tip_col_use": ("Include this piece in the marker", "إدخال هذه القطعة في الماركر"),
+    "tip_col_mat": ("Material of the piece (O = upper fabric, F = lining …)", "خامة القطعة (O = القماش الأساسي، F = البطانة …)"),
+    "tip_col_sizes": ("Number of sizes for which the file contains this piece's geometry",
+                      "عدد المقاسات التي يحتوي الملف على شكل هذه القطعة فيها"),
+    "tip_col_count": ("Copies as drawn, per garment (e.g. 1 back)", "عدد النسخ كما هي مرسومة لكل قطعة ملابس (مثال: ظهر واحد)"),
+    "tip_col_mirror": ("Mirror-image copies per garment: the opposite side (left/right). Front 1 + mirrored 1 = left and "
+                       "right front", "عدد النسخ المقلوبة كصورة مرآة لكل قطعة ملابس، أي الجهة المقابلة يمين/يسار. "
+                       "أمام 1 + معكوسة 1 = أمام يمين وأمام يسار"),
+    "tip_col_grain": ("Angle of the grain line in the pattern (90 = vertical); pieces are laid with it along the "
+                      "fabric length", "زاوية خط النسيج في الباترون (90 = رأسي)؛ تُوضع القطعة بحيث يكون موازيًا لطول القماش"),
+    "opt_view_rotation": ("Screen rotation (display only)", "تدوير العرض (الشاشة فقط)"),
+    "opt_view_rot180": ("Rotate view 180°", "تدوير العرض 180°"),
+    "opt_view_rot90": ("Rotate view 90° (vertical marker)", "تدوير العرض 90° (ماركر رأسي)"),
     "cancel": ("Cancel", "إلغاء"),
 }
 

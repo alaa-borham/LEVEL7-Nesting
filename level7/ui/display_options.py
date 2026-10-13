@@ -14,6 +14,7 @@ class DisplayOptionsDialog(QDialog):
                      ("piece_names", "opt_piece_names"), ("direction", "opt_direction"))
     CHECKS_AUX = (("efficiency_mark", "opt_eff_mark"), ("last_efficiency", "opt_last_eff"),
                   ("white_marking", "opt_white"))
+    CHECKS_VIEW = (("view_rot180", "opt_view_rot180"), ("view_rot90", "opt_view_rot90"))
 
     def __init__(self, options: dict, parent=None):
         super().__init__(parent)
@@ -34,6 +35,13 @@ class DisplayOptionsDialog(QDialog):
             cb = QCheckBox(tr(label))
             cb.setChecked(bool(self.opts.get(key)))
             l2.addWidget(cb)
+            self.boxes[key] = cb
+        gv = QGroupBox(tr("opt_view_rotation"))
+        lv = QVBoxLayout(gv)
+        for key, label in self.CHECKS_VIEW:
+            cb = QCheckBox(tr(label))
+            cb.setChecked(bool(self.opts.get(key)))
+            lv.addWidget(cb)
             self.boxes[key] = cb
         g3 = QGroupBox(tr("opt_show_pieces"))
         l3 = QVBoxLayout(g3)
@@ -67,11 +75,12 @@ class DisplayOptionsDialog(QDialog):
         l3.addWidget(self.color)
         grid.addWidget(g1, 0, 0)
         grid.addWidget(g2, 1, 0)
-        grid.addWidget(g3, 0, 1, 2, 1)
+        grid.addWidget(gv, 2, 0)
+        grid.addWidget(g3, 0, 1, 3, 1)
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         bb.accepted.connect(self.accept)
         bb.rejected.connect(self.reject)
-        grid.addWidget(bb, 2, 0, 1, 2)
+        grid.addWidget(bb, 3, 0, 1, 2)
 
     def result_options(self) -> dict:
         o = dict(self.opts)

@@ -132,6 +132,15 @@ def _draw(name: str, p: QPainter, fg: QColor):
         p.drawLine(QPointF(4, 16), QPointF(28, 16))
         p.drawLine(QPointF(6, 10), QPointF(26, 10))
         p.drawLine(QPointF(6, 22), QPointF(26, 22))
+    elif name == "theme":
+        p.drawEllipse(QRectF(5, 5, 22, 22))
+        half = QPainterPath()
+        half.moveTo(16, 5)
+        half.arcTo(QRectF(5, 5, 22, 22), 90, 180)
+        half.closeSubpath()
+        p.setBrush(fg)
+        p.drawPath(half)
+        p.setBrush(Qt.NoBrush)
     elif name == "pieces":
         for i, x in enumerate((3, 12, 21)):
             _piece(p, QRectF(x, 9, 8, 14 - i * 3))

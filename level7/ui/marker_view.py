@@ -34,7 +34,7 @@ def color_for(key: str) -> QColor:
 DEFAULT_OPTIONS = {
     # "Display in the pieces" (GRAFIS: Marker display options)
     "symbols": False, "size_bundle": True, "buffer": True, "marking": False, "grain": False, "internal": False,
-    "piece_names": False, "direction": True,     # direction arrow (→ / ← = turned 180°) next to the label
+    "piece_names": False, "direction": True, "view_rot90": False, "view_rot180": False,     # direction arrow (→ / ← = turned 180°) next to the label
     # "Display auxiliary objects"
     "efficiency_mark": True, "last_efficiency": True, "white_marking": True,
     # "Show pieces to be placed"
@@ -139,7 +139,10 @@ class PieceItem(QGraphicsPathItem):
         if o["size_bundle"]:
             arrow = ""
             d = lay_direction(self.piece.grain_angle, pl) if o.get("direction", True) else None
-            arrow = {1: " →", -1: " ←"}.get(d, "")
+            arrow = ""
+            if d is not None:      # arrow as seen on screen (the view may be rotated in the display options)
+                v = self.view.base_transform().map(QPointF(float(d), 0.0))
+                arrow = (" →" if v.x() > 0 else " ←") if abs(v.x()) >= abs(v.y()) else (" ↓" if v.y() > 0 else " ↑")
             lines.append(f"{pl.size}/{bundle_letter(pl.bundle)}{arrow}")
         if o["piece_names"]:
             lines.append(f"{self.piece.name}{' (M)' if pl.mirrored else ''}")
@@ -306,9 +309,12 @@ class MarkerView(QGraphicsView):
             vline(ll, pen, f"{ll / 1000:.2f} m  {le:.1f} %")
 
     def set_options(self, **kw):
+        old = self.view_angle()
         self.options.update(kw)
         if self.marker is not None:
             self.show_marker(self.project, self.marker, self.bad)
+            if self.view_angle() != old:
+                self.zoom_fit()
 
     def refresh(self, bad=None):
         if bad is not None:
@@ -318,12 +324,18 @@ class MarkerView(QGraphicsView):
             it.rebuild()
         self._draw_aux()
 
+    def view_angle(self) -> int:
+        """Screen-only rotation chosen in the display options (90 / 180 / 270); the marker is not changed."""
+        return (90 if self.options.get("view_rot90") else 0) + (180 if self.options.get("view_rot180") else 0)
+
+    def base_transform(self) -> QTransform:
+        return QTransform(1, 0, 0, -1, 0, 0) * QTransform().rotate(self.view_angle())   # Y up, then rotate
+
     def zoom_fit(self):
         if self.marker:
+            self.setTransform(self.base_transform())
             self.fitInView(QRectF(-50, -50, max(self.marker.length, 100) + 100, self.marker.fabric.width + 100),
                            Qt.KeepAspectRatio)
-            t = self.transform()
-            self.setTransform(QTransform(t.m11(), 0, 0, -abs(t.m22()), 0, 0))
             self.centerOn(max(self.marker.length, 100) / 2, self.marker.fabric.width / 2)
 
     def selected_placements(self):
@@ -455,28 +467,30 @@ class MarkerView(QGraphicsView):
         painter.fillRect(0, 0, 40, vh, rb)
         painter.setPen(self.theme["ruler_text"])
         painter.setFont(QFont("Segoe UI", 7))
-        scale = abs(self.transform().m11())
+        t = self.transform()
+        scale = math.hypot(t.m11(), t.m12()) or 1.0
         step = 10.0
-        for s in (10, 20, 50, 100, 200, 500, 1000, 2000):
-            if s * scale >= 60:
-                step = s
+        for st in (10, 20, 50, 100, 200, 500, 1000, 2000):
+            if st * scale >= 60:
+                step = st
                 break
-        x0 = self.mapToScene(0, 0).x()
-        x1 = self.mapToScene(vw, 0).x()
-        v = math.floor(x0 / step) * step
-        while v <= x1:
-            px = self.mapFromScene(QPointF(v, 0)).x()
-            painter.drawLine(px, 12, px, 18)
-            painter.drawText(px + 2, 11, f"{v:g}")
-            v += step
-        ya = self.mapToScene(0, vh).y()
-        yb = self.mapToScene(0, 0).y()
-        v = math.floor(min(ya, yb) / step) * step
-        while v <= max(ya, yb):
-            py = self.mapFromScene(QPointF(0, v)).y()
-            painter.drawLine(34, py, 40, py)
-            painter.drawText(2, py - 2, f"{v:g}")
-            v += step
+
+        def ticks(p0, p1):
+            """Scene axis that varies along the screen segment p0-p1 (works for any quarter-turn view)."""
+            a0, a1 = self.mapToScene(*p0), self.mapToScene(*p1)
+            ax = 0 if abs(a1.x() - a0.x()) >= abs(a1.y() - a0.y()) else 1
+            lo, hi = sorted(((a0.x(), a1.x()) if ax == 0 else (a0.y(), a1.y())))
+            v = math.floor(lo / step) * step
+            while v <= hi:
+                q = QPointF(v, a0.y()) if ax == 0 else QPointF(a0.x(), v)
+                yield v, self.mapFromScene(q)
+                v += step
+        for v, q in ticks((0, 0), (vw, 0)):
+            painter.drawLine(q.x(), 12, q.x(), 18)
+            painter.drawText(q.x() + 2, 11, f"{v:g}")
+        for v, q in ticks((0, 0), (0, vh)):
+            painter.drawLine(34, q.y(), 40, q.y())
+            painter.drawText(2, q.y() - 2, f"{v:g}")
         painter.drawText(44, 11, "mm")
         if self.measure_mode:
             painter.setRenderHint(QPainter.Antialiasing)

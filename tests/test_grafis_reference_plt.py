@@ -42,7 +42,9 @@ def both(tmp_path_factory):
     r = read_grafis(SCB1500)
     sc = marker_scene(r.project, r.project.markers[0])
     out = tmp_path_factory.mktemp("plt") / "l7.plt"
-    st = write_plt(sc, str(out), algotex_grafis_config())
+    cfg = algotex_grafis_config()
+    cfg.line_type = "lt1"                 # GRAFIS' own header; LEVEL7's default is a solid line (LT)
+    st = write_plt(sc, str(out), cfg)
     ref, _ = read_plt(REF)
     ours, labels = read_plt(str(out))
     return ref, ours, labels, st, out
@@ -55,6 +57,15 @@ def test_file_framing_like_grafis(both):
     assert raw.startswith(b"IN\r\nLT1\r\nPA") and ref.startswith(b"IN\r\nLT1\r\nPA")
     assert raw.endswith(b"PU\r\nPG\r\n") and ref.endswith(b"PU\r\nPG\r\n")
     assert b";" not in raw and b"SP" not in raw and not labels and st["skipped_chars"] == []
+
+
+def test_default_line_type_is_solid(tmp_path):
+    r = read_grafis(SCB1500)
+    sc = marker_scene(r.project, r.project.markers[0])
+    out = tmp_path / "solid.plt"
+    write_plt(sc, str(out), algotex_grafis_config())
+    raw = open(out, "rb").read()
+    assert raw.startswith(b"IN\r\nLT\r\nPA")          # LT without a pattern number = continuous line
 
 
 def test_cut_contours_with_notch_slits(both):
