@@ -314,4 +314,18 @@ def export_marker(proj: Project, marker: Marker, fmt: str, path: str, config=Non
         from .exporters.iso import write_iso
         name = job_name or os.path.splitext(os.path.basename(path))[0]
         return write_iso(sc, path, config, diagnostic=diagnostic_iso, job_name=name)
+    if fmt == "scb":
+        from .formats.grafis.writer import write_scb
+        template = config or scb_template(proj)
+        if not template:
+            raise ValueError("saving as GRAFIS SCB needs a GRAFIS SCB of this model as template")
+        return write_scb(template, proj, marker, path)
     raise ValueError(fmt)
+
+
+def scb_template(proj: Project) -> str | None:
+    """The GRAFIS SCB this session was read from (template for writing SCB), if any and still on disk."""
+    for src in proj.sources:
+        if src.kind == "scb" and os.path.isfile(src.path):
+            return src.path
+    return None

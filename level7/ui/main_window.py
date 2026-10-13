@@ -84,7 +84,9 @@ class MainWindow(QMainWindow):
         self.project_path: str | None = None
         self.marker: Marker | None = None
         self.worker: NestWorker | None = None
+        self.dirty = False                # unsaved changes in this session
         self.undo = QUndoStack(self)
+        self.undo.indexChanged.connect(lambda _i: self.mark_dirty())
         self.undo.setUndoLimit(500)
         self.setAcceptDrops(True)
         self.resize(1400, 860)
@@ -152,7 +154,7 @@ class MainWindow(QMainWindow):
         self.pieces_table.verticalHeader().hide()
         self.pieces_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.pieces_table.itemChanged.connect(
-            lambda it: self._refresh_material_groups() if it.column() == 0 else None)
+            lambda it: (self._refresh_material_groups(), self._table_edited()) if it.column() == 0 else None)
         self.sizes_table = QTableWidget(0, 2)
         self.sizes_table.verticalHeader().hide()
         self.sizes_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
@@ -276,6 +278,7 @@ class MainWindow(QMainWindow):
         self.m_file.addAction(self._act("add_model", self.add_model_dialog, "Ctrl+Shift+O"))
         self.m_file.addAction(self._act("save", self.save, "Ctrl+S"))
         self.m_file.addAction(self._act("save_as", self.save_as, "Ctrl+Shift+S"))
+        self.m_file.addAction(self._act("save_scb", lambda: self.export("scb"), "Ctrl+Alt+S"))
         self.m_file.addSeparator()
         self.m_file.addAction(self._act("language", self.toggle_language))
         undo = self.undo.createUndoAction(self, "")
@@ -312,6 +315,7 @@ class MainWindow(QMainWindow):
         self.m_export.addAction(self._act("export_plt", lambda: self.export("plt")))
         self.m_export.addAction(self._act("export_dxf", lambda: self.export("dxf")))
         self.m_export.addAction(self._act("export_iso", lambda: self.export("iso")))
+        self.m_export.addAction(self._act("export_scb", lambda: self.export("scb")))
         self.m_export.addSeparator()
         self.m_export.addAction(self._act("plotter_settings", self.plotter_settings))
         self.m_help.addAction(self._act("check_updates", self.check_updates))
@@ -410,7 +414,7 @@ class MainWindow(QMainWindow):
     def retranslate(self):
         rtl = LANG["current"] == "ar"
         QApplication.instance().setLayoutDirection(Qt.RightToLeft if rtl else Qt.LeftToRight)
-        self.setWindowTitle(f"{tr('app_title')} {__version__}" + (f" — {self.project.name}" if self.project else ""))
+        self._update_title()
         for a, k in self.actions_tr:
             a.setText(tr(k))
         self.undo_actions[0].setText(tr("undo"))
@@ -529,6 +533,8 @@ class MainWindow(QMainWindow):
         self.load_tables()
         self.refresh_markers_list(select=self.markers_list.currentRow() if self.markers_list.currentRow() >= 0 else -1)
         self.retranslate()
+        if added:
+            self.mark_dirty()
         msg = tr("models_added", n=len(added), t=len(model_tags(self.project)))
         if problems:
             QMessageBox.warning(self, tr("add_model"), msg + "\n\n" + "\n".join(problems))
@@ -577,6 +583,7 @@ class MainWindow(QMainWindow):
             self.issues_list.addItems(issues[:200])
         self.statusBar().showMessage(msg)
         self.retranslate()
+        self.mark_dirty(False)                 # freshly opened = nothing to save yet
         compat = [i for i in issues if i.startswith("COMPAT:") or "geometry not available" in i]
         if compat and path.lower().endswith((".mdl", ".scb")):
             box = QMessageBox(QMessageBox.Warning, tr("compat_title"), tr("compat_text", n=len(compat)), parent=self)
@@ -611,6 +618,17 @@ class MainWindow(QMainWindow):
         QDesktopServices.openUrl(QUrl.fromLocalFile(out))
 
     def load_tables(self):
+        self._loading_tables = True
+        try:
+            self._load_tables()
+        finally:
+            self._loading_tables = False
+
+    def _table_edited(self, *_):
+        if not getattr(self, "_loading_tables", False):
+            self.mark_dirty()
+
+    def _load_tables(self):
         p = self.project
         t = self.pieces_table
         t.setRowCount(0)
@@ -633,17 +651,20 @@ class MainWindow(QMainWindow):
             mat.setCurrentText(pc.material or "")
             mat.setToolTip(tr("material_tip"))
             mat.currentTextChanged.connect(lambda _t: self._refresh_material_groups())
+            mat.currentTextChanged.connect(self._table_edited)
             t.setCellWidget(r, 2, mat)
             t.setItem(r, 3, QTableWidgetItem(str(len(pc.sizes))))
             for col, val in ((4, n or pc.default_count), (5, m if (n or m) else pc.default_mirrored)):
                 s = QSpinBox()
                 s.setRange(0, 20)
                 s.setValue(val)
+                s.valueChanged.connect(self._table_edited)
                 t.setCellWidget(r, col, s)
             g = QDoubleSpinBox()
             g.setRange(-1, 179.99)
             g.setSpecialValueText(tr("grain_unknown"))
             g.setValue(pc.grain_angle if pc.grain_angle is not None else -1)
+            g.valueChanged.connect(self._table_edited)
             t.setCellWidget(r, 6, g)
             for c in (1, 2, 3):
                 t.item(r, c).setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
@@ -658,6 +679,7 @@ class MainWindow(QMainWindow):
             sp = QSpinBox()
             sp.setRange(0, 999)
             sp.setValue(co.size_quantities.get(s, 0))
+            sp.valueChanged.connect(self._table_edited)
             st.setCellWidget(r, 1, sp)
         self._refresh_material_groups(co.material)
 
@@ -716,26 +738,40 @@ class MainWindow(QMainWindow):
                             allow_rotation_180=self.f_rot180.isChecked(), allow_rotation_90=self.f_rot90.isChecked(),
                             curve_tolerance=self.f_tol.value())
 
-    def save(self):
+    def mark_dirty(self, on: bool = True):
+        if self.project is None:
+            on = False
+        if on != self.dirty:
+            self.dirty = on
+            self._update_title()
+
+    def _update_title(self):
+        self.setWindowTitle(f"{tr('app_title')} {__version__}" +
+                            (f" — {self.project.name}{' *' if self.dirty else ''}" if self.project else ""))
+
+    def save(self) -> bool:
         if not self.project:
-            return
+            return True
         if not self.project_path:
             return self.save_as()
         from ..project_storage.store import save_project
         self.read_tables()
         save_project(self.project, self.project_path)
         self.statusBar().showMessage(tr("saved", p=self.project_path))
+        self.mark_dirty(False)
+        return True
 
-    def save_as(self):
+    def save_as(self) -> bool:
         if not self.project:
-            return
+            return True
         p, _ = QFileDialog.getSaveFileName(self, tr("save_as"), os.path.join(
             self.settings_store.value("last_dir", ""), self.project.name + ".l7n"), "LEVEL7 project (*.l7n)")
-        if p:
-            if not p.lower().endswith(".l7n"):
-                p += ".l7n"
-            self.project_path = p
-            self.save()
+        if not p:
+            return False
+        if not p.lower().endswith(".l7n"):
+            p += ".l7n"
+        self.project_path = p
+        return self.save()
 
     # -- markers ---------------------------------------------------------------------------
     def refresh_markers_list(self, select=None):
@@ -1063,6 +1099,7 @@ class MainWindow(QMainWindow):
         self.view.show_marker(self.project, tmp)
 
     def on_finished(self, marker, info):
+        self.mark_dirty()
         self._nest_ui(False)
         self.project.markers.append(marker)
         self.refresh_markers_list(select=len(self.project.markers) - 1)
@@ -1106,7 +1143,16 @@ class MainWindow(QMainWindow):
             cfg = prof
         elif fmt == "plt":
             cfg = self.plt_config()
-        ext = {"plt": "PLT (*.plt)", "dxf": "DXF (*.dxf)", "iso": "ISO (*.iso)"}[fmt]
+        elif fmt == "scb":
+            from ..service import scb_template
+            cfg = scb_template(self.project)
+            if cfg is None:
+                QMessageBox.information(self, tr("save_scb"), tr("scb_pick_template"))
+                cfg, _ = QFileDialog.getOpenFileName(self, tr("save_scb"), self.settings_store.value("last_dir", ""),
+                                                     "GRAFIS SCB (*.scb *.SCB)")
+                if not cfg:
+                    return
+        ext = {"plt": "PLT (*.plt)", "dxf": "DXF (*.dxf)", "iso": "ISO (*.iso)", "scb": "GRAFIS SCB (*.scb)"}[fmt]
         name = f"{self.project.name}_{self.marker.fabric.width:g}{'_DIAGNOSTIC' if diagnostic else ''}.{fmt}"
         p, _ = QFileDialog.getSaveFileName(self, tr("export"),
                                            os.path.join(self.settings_store.value("export_dir", ""), name), ext)
@@ -1119,6 +1165,8 @@ class MainWindow(QMainWindow):
             return
         self.settings_store.setValue("export_dir", os.path.dirname(p))
         self.statusBar().showMessage(tr("exported", p=p))
+        if fmt == "scb":
+            QMessageBox.information(self, tr("save_scb"), tr("scb_saved", p=p))
 
     def plt_config(self):
         from ..exporters.plt import PlotterConfig
@@ -1154,6 +1202,12 @@ class MainWindow(QMainWindow):
             "Nesting results are heuristic; no global optimum is claimed."))
 
     def closeEvent(self, ev):
+        if self.dirty and self.project is not None:
+            r = QMessageBox.question(self, tr("unsaved_title"), tr("unsaved_text", n=self.project.name),
+                                     QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel, QMessageBox.Save)
+            if r == QMessageBox.Cancel or (r == QMessageBox.Save and not self.save()):
+                ev.ignore()
+                return
         if self.worker and self.worker.isRunning():
             self.worker.stop_event.set()
             self.worker.wait(15000)

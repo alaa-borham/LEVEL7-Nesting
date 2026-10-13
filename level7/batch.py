@@ -33,7 +33,7 @@ HEADERS = {
     "spacing": ("spacing", "مسافة", "المسافة"),
     "engine": ("engine", "محرك"),
 }
-FORMATS = ("plt", "dxf", "iso")
+FORMATS = ("plt", "dxf", "iso", "scb")
 
 
 @dataclass
@@ -146,7 +146,7 @@ def parse_orders(path: str) -> list[MarkerOrder]:
     for o in orders.values():
         bad = [x for x in o.formats if x not in FORMATS]
         if bad:
-            raise OrderError(f"marker {o.name}: unknown format(s) {', '.join(bad)} (use plt, dxf, iso)")
+            raise OrderError(f"marker {o.name}: unknown format(s) {', '.join(bad)} (use plt, dxf, iso, scb)")
         if not o.width:
             raise OrderError(f"marker {o.name}: fabric width is missing")
     return list(orders.values())
@@ -232,6 +232,12 @@ def run_order(order: MarkerOrder, outdir: str, plt_config=None, iso_config=None,
     for fmt in order.formats:
         path = os.path.join(outdir, f"{safe}.{fmt}")
         cfg = plt_config if fmt == "plt" else iso_config if fmt == "iso" else None
+        if fmt == "scb":
+            if len({l.file for l in order.lines}) > 1:
+                raise OrderError("scb: a GRAFIS marker file holds one model; this marker uses several files")
+            cfg = service.scb_template(proj)
+            if cfg is None:
+                raise OrderError("scb: list the model's GRAFIS .scb (not the .mdl) as design file - it is the template")
         service.export_marker(proj, marker, fmt, path, cfg, job_name=safe)
         order.outputs.append(path)
     order.length_mm = marker.stats.get("length_mm")

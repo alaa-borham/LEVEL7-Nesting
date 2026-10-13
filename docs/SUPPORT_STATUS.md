@@ -15,7 +15,8 @@
 | Symbols (kind 6) | **confirmed: measurement annotations** — all 615 values equal the #TFLIST measurement of the same size (e.g. "414", "I=342", "300 (2*)"); layer MEASURE (screen/DXF only), never plotted, drilled or cut. GRAFIS exports no drill holes for them (Bullmer ISO, AAMA) |
 | SCB placements: position, rotation, mirror, bundle, copies | reproduced exactly (efficiency/area/length = GRAFIS) |
 | Spline definitions, construction program | not read (GRAFIS stores evaluated polylines, which are used) |
-| Writing MDL/SCB | not supported (format not proven) |
+| Writing SCB (marker file) | **experimental**: template based (a GRAFIS SCB of the same model); unknown GRAFIS data copied byte for byte, only the marker block and #SBINFO/#SBGRLST/#SBTLIST rewritten. GRAFIS' own markers are rewritten byte-identical (3 files), LEVEL7 markers are re-read identically by LEVEL7. Not yet confirmed by opening in GRAFIS |
+| Writing MDL | not supported |
 | Absolute left/right of the SCB marker | confirmed against the GRAFIS screen view (docs/evidence) |
 
 ## Nesting

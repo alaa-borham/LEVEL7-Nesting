@@ -2,7 +2,7 @@
 
     level7 info  FILE
     level7 nest  FILE --width 1430 [--sizes 44=2] [--time 30] [--seed 1] [--spacing 0] [-o out.l7n]
-    level7 export PROJECT.l7n --marker -1 --format plt|dxf|iso [--diagnostic] -o FILE
+    level7 export PROJECT.l7n --marker -1 --format plt|dxf|iso|scb [--diagnostic] [--template SCB] -o FILE
     level7 compare FILE.scb --width 1500 [--time 30]
 """
 from __future__ import annotations
@@ -108,6 +108,8 @@ def cmd_export(a):
         cfg = PRESETS[a.plt_preset]()
     if a.config:
         cfg = (PlotterConfig if a.format == "plt" else MachineProfile).load(a.config)
+    if a.format == "scb":
+        cfg = a.template
     st = export_marker(proj, m, a.format, a.output, cfg, diagnostic_iso=a.diagnostic)
     print(st)
     return 0
@@ -170,7 +172,8 @@ def main(argv=None):
     s = sub.add_parser("export")
     s.add_argument("project")
     s.add_argument("--marker", type=int, default=-1)
-    s.add_argument("--format", choices=("plt", "dxf", "iso"), required=True)
+    s.add_argument("--format", choices=("plt", "dxf", "iso", "scb"), required=True)
+    s.add_argument("--template", help="scb: GRAFIS SCB of the same model (default: the project's own SCB)")
     s.add_argument("--config")
     s.add_argument("--diagnostic", action="store_true")
     s.add_argument("--plt-preset", choices=("generic", "algotex_grafis"))
