@@ -1279,7 +1279,8 @@ class MainWindow(QMainWindow):
     def _strip_height(self):
         from .piece_strip import ROW_H, TOP
         rows = self.strip.lines()                 # size rows are laid side by side, wrapped into lines
-        extra = 16 if rows > 3 or self.strip.sizeHint().width() > self.strip_area.width() else 4   # scroll bars
+        hbar = self.strip.sizeHint().width() > self.strip_area.width()
+        extra = 6 + (self.strip_area.horizontalScrollBar().sizeHint().height() if hbar else 0)   # scroll bar
         self.strip_area.setFixedHeight(TOP + min(rows, 3) * ROW_H + extra)
 
     def update_results(self, v=None):

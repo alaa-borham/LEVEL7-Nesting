@@ -36,14 +36,14 @@ class PieceStrip(QWidget):
         self.shapes = {}          # (size, piece_uid) -> outline points in strip mm, origin at its bbox centre
         self.scale = 1.0
         self.placed = self.total = 0
-        self.block_w = 200        # one size row: check box, size, bundle, every piece
-        self.ncols = 1            # size rows side by side (as many as fit the width)
+        self.line_cols, self.line_w, self.pos, self.grid = [], [], {}, {}
 
     # -- data ------------------------------------------------------------------------------
     def set_data(self, project, marker):
         from ..service import model_tags
         self.tags = model_tags(project) if project is not None else []
         self.rows, self.cols, self.counts, self.shapes = [], [], {}, {}
+        self.line_cols, self.line_w, self.pos, self.grid = [], [], {}, {}
         self.placed = self.total = 0
         if project is None:
             self.updateGeometry()
@@ -62,7 +62,8 @@ class PieceStrip(QWidget):
             marker_rows = {(k[0], k[1]) for k in groups}
         # sizes / quantities chosen in the cut order show up at once (still to place), like GRAFIS
         order_rows = {(s, b) for s, q in co.size_quantities.items() for b in range(1, (q or 0) + 1)}
-        self.rows = sorted(marker_rows | order_rows, key=lambda r: (_size_key(r[0]), r[1]))
+        self.rows = sorted(marker_rows | order_rows,
+                           key=lambda r: (_size_key(r[0].split(":", 1)[-1]), r[0], r[1]))   # "model:size" too
         used = {k[2] for k in groups} | {u for u, (n, m) in co.piece_counts.items() if n + m > 0}
         pieces = [p for p in project.pieces if p.uid in used]
         pieces.sort(key=lambda p: (p.number if p.number is not None else 10 ** 6, p.name))
@@ -120,49 +121,63 @@ class PieceStrip(QWidget):
         from ..service import size_label
         self.head_w = CHECK + 6 + min(220, max(HEAD_W, max((fm.horizontalAdvance(size_label(self.tags, sz)) + 26
                                                 for sz, _b in self.rows), default=0)))
-        x = self.head_w
-        for p in pieces:
-            w = max((bbox(s)[2] - bbox(s)[0] for (sz, u), s in self.shapes.items() if u == p.uid), default=0)
-            cw = int(max(MIN_CELL, w * self.scale + 12))
-            self.cols.append((p, x, cw))
-            x += cw
-        self.block_w = (x + 10) if self.cols else 200
-        self._fit()
+        # one line per model file: all its sizes side by side (scrolls sideways when they do not fit);
+        # every further model file of the session gets its own line with its own pieces
+        def tag_of(size):
+            return size.split(":", 1)[0] if self.tags and ":" in size else ""
+        present = []
+        for size, _b in self.rows:
+            if tag_of(size) not in present:
+                present.append(tag_of(size))
+        order = [t for t in (self.tags or [""]) if t in present] + [t for t in present if t not in (self.tags or [""])]
+        self.line_cols, self.line_w, self.pos, self.grid = [], [], {}, {}
+        for L, t in enumerate(order):
+            lp = [p for p in pieces if (p.model or "") == t] if self.tags else pieces
+            x, cols = self.head_w, []
+            for p in lp:
+                w = max((bbox(sh)[2] - bbox(sh)[0] for (sz, u), sh in self.shapes.items() if u == p.uid), default=0)
+                cw = int(max(MIN_CELL, w * self.scale + 12))
+                cols.append((p, x, cw))
+                x += cw
+            self.line_cols.append(cols)
+            self.line_w.append((x + 10) if cols else 200)
+            j = 0
+            for r, (size, _b) in enumerate(self.rows):
+                if tag_of(size) == t:
+                    self.pos[r] = (L, j)
+                    self.grid[(L, j)] = r
+                    j += 1
+        self.cols = [c for cols in self.line_cols for c in cols]
         self.updateGeometry()
+        self.resize(self.sizeHint())
         self.update()
+        self.relayout.emit()
 
-    # -- layout: size rows side by side, wrapped into lines -----------------------------------------
+    # -- layout ---------------------------------------------------------------------------------
     def lines(self) -> int:
-        return max(1, -(-len(self.rows) // max(1, self.ncols)))
-
-    def _fit(self):
-        avail = self.parentWidget().width() if self.parentWidget() is not None else self.width()
-        n = max(1, min(len(self.rows) or 1, int(max(avail, self.width()) // max(1, self.block_w))))
-        if n != self.ncols:
-            self.ncols = n
-            self.updateGeometry()
-            self.relayout.emit()
-
-    def resizeEvent(self, ev):
-        super().resizeEvent(ev)
-        self._fit()
+        return max(1, len(getattr(self, "line_cols", [])))
 
     def _origin(self, r):
-        return (r % self.ncols) * self.block_w, TOP + (r // self.ncols) * ROW_H
+        L, j = self.pos[r]
+        return j * self.line_w[L], TOP + L * ROW_H
 
     def _hit(self, pos):
         """(row index, x inside its block) at ``pos`` or (None, 0)."""
-        col, line = int(pos.x() // self.block_w), int((pos.y() - TOP) // ROW_H)
-        r = line * self.ncols + col
-        if pos.y() < TOP or col >= self.ncols or not 0 <= r < len(self.rows):
+        L = int((pos.y() - TOP) // ROW_H)
+        if pos.y() < TOP or not 0 <= L < len(getattr(self, "line_w", [])):
             return None, 0.0
-        return r, pos.x() - col * self.block_w
+        j = int(pos.x() // self.line_w[L])
+        r = self.grid.get((L, j))
+        return (r, pos.x() - j * self.line_w[L]) if r is not None else (None, 0.0)
 
     def sizeHint(self):
-        return QSize(self.block_w, TOP + self.lines() * ROW_H + 4)
+        counts = {}
+        for L, _j in getattr(self, "pos", {}).values():
+            counts[L] = counts.get(L, 0) + 1
+        w = max([counts[L] * self.line_w[L] for L in counts] or [200])
+        return QSize(int(w), TOP + self.lines() * ROW_H + 4)
 
-    def minimumSizeHint(self):
-        return QSize(self.block_w, TOP + self.lines() * ROW_H + 4)
+    minimumSizeHint = sizeHint
 
     # -- painting ----------------------------------------------------------------------------
     def paintEvent(self, ev):
@@ -182,17 +197,16 @@ class PieceStrip(QWidget):
         dim = QColor(fg)
         dim.setAlpha(140)
         p.setPen(QPen(dim, 1))
-        for line in range(self.lines()):                   # grid: one line per row of blocks
+        for line in range(self.lines()):                   # one line per model file
             p.drawLine(0, TOP + (line + 1) * ROW_H, self.width(), TOP + (line + 1) * ROW_H)
-        for col in range(min(self.ncols, len(self.rows))):
-            bx = col * self.block_w
-            p.setPen(QPen(fg, 1))
-            p.drawLine(int(bx + hw - 4), TOP, int(bx + hw - 4), TOP + self.lines() * ROW_H)
-            if col:
-                p.setPen(QPen(dim, 1))
-                p.drawLine(int(bx - 3), TOP, int(bx - 3), TOP + self.lines() * ROW_H)
         for r, (size, b) in enumerate(self.rows):
             bx, y = self._origin(r)
+            L, j = self.pos[r]
+            p.setPen(QPen(fg, 1))
+            p.drawLine(int(bx + hw - 4), y, int(bx + hw - 4), y + ROW_H)
+            if j:
+                p.setPen(QPen(dim, 1))
+                p.drawLine(int(bx - 3), y, int(bx - 3), y + ROW_H)
             off = size in getattr(self, "excluded_sizes", set())
             # include / exclude check box
             box = QRectF(bx + 3, y + (ROW_H - CHECK) / 2, CHECK, CHECK)
@@ -210,7 +224,7 @@ class PieceStrip(QWidget):
                        size_label(self.tags, size))
             p.drawText(QRectF(bx + tx, y + 2, hw - 8 - tx, ROW_H - 4), Qt.AlignRight | Qt.AlignVCenter,
                        f"×{b}" if b > 1 else "")
-            for piece, x, cw in self.cols:
+            for piece, x, cw in self.line_cols[L]:
                 x = bx + x
                 c = self.counts.get(((size, b), piece.uid))
                 shape = self.shapes.get((size, piece.uid))
@@ -239,7 +253,7 @@ class PieceStrip(QWidget):
         r, lx = self._hit(pos)
         if r is None:
             return None
-        for piece, x, cw in self.cols:
+        for piece, x, cw in self.line_cols[self.pos[r][0]]:
             if x <= lx < x + cw:
                 return piece
         return None
