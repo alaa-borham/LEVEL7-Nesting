@@ -102,10 +102,13 @@ class MainWindow(QMainWindow):
         self.view.measured.connect(lambda d: self.statusBar().showMessage(tr("distance", d=d)))
         self._build_docks()
         self._build_actions()
+        from .status_bar import StatusBar
+        self.setStatusBar(StatusBar(self))
         self.grafis_status = QLabel()
         self._load_display_options()
         self.progress_bar = QProgressBar()
         self.progress_bar.setMaximumWidth(220)
+        self.progress_bar.setMinimumWidth(60)
         self.progress_bar.hide()
         self.statusBar().addPermanentWidget(self.progress_bar)
         self.statusBar().addPermanentWidget(self.grafis_status)
