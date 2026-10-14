@@ -1897,6 +1897,7 @@ class MainWindow(QMainWindow):
         self.project.nest_settings = st
         pinned = [copy.copy(pl) for pl in (self.marker.placements if self.marker else [])
                   if pl.pinned and pl.placed and self.marker.origin != "original"]
+        self._engine_note = self._builtin_reason(fabric, st, bool(pinned))
         self.worker = NestWorker(self.project, fabric, st, self.project.cut_order, pinned)
         self.worker.progress.connect(self.on_progress)
         self.worker.finished_ok.connect(self.on_finished)
@@ -1905,6 +1906,26 @@ class MainWindow(QMainWindow):
         self.worker.cancelled.connect(lambda: (self._nest_ui(False), self.statusBar().showMessage(tr("nest_cancelled"))))
         self._nest_ui(True)
         self.worker.start()
+
+    def _builtin_reason(self, fabric, st, pinned) -> str:
+        """Why this run uses only the built-in engine (slow on big jobs) instead of sparrow - shown while it runs."""
+        import os as _os
+
+        from .. import matching
+        from ..nesting import sparrow
+        engine = _os.environ.get("LEVEL7_ENGINE", st.engine or "auto")
+        if engine not in ("auto", "sparrow"):
+            return tr("eng_why_chosen")
+        if not sparrow.available():
+            return tr("eng_why_missing")
+        if pinned:
+            return tr("eng_why_pinned")
+        if fabric.max_length:
+            return tr("eng_why_maxlen")
+        co = self.project.cut_order
+        if any(matching.active(p, fabric) for p in self.project.pieces if any(co.piece_counts.get(p.uid, (0, 0)))):
+            return tr("eng_why_plaid")
+        return ""
 
     def renest_inside(self):
         if self.project and self.marker and not (self.worker and self.worker.isRunning()):
@@ -1923,6 +1944,7 @@ class MainWindow(QMainWindow):
         if best_of:
             st.best_of = best_of
         self.project.nest_settings = st
+        self._engine_note = self._builtin_reason(fabric, st, any(pl.pinned for pl in inside))
         self.worker = NestWorker(self.project, fabric, st, self.project.cut_order, [], placements=inside,
                                  keep_out=keep_out)
         self.worker.progress.connect(self.on_progress)
@@ -2017,10 +2039,14 @@ class MainWindow(QMainWindow):
         d = getattr(self, "_last_prog", {}) or {}
         L = d.get("length")
         msg = tr("running_live", t=el, T=tot, len=self._fmt_len(L) if L else "—")
+        if not L and d.get("placing"):            # first layout of a big job: pieces placed so far
+            msg += "  · " + tr("first_layout", k=d["placing"], n=d["of"])
         if d.get("attempts", 1) > 1:
             msg = tr("attempt_of", k=d["attempt"], n=d["attempts"]) + "  " + msg
         if d.get("engine") == "sparrow":
             msg += "  · sparrow"
+        elif getattr(self, "_engine_note", ""):
+            msg += "  · " + tr("eng_builtin_only", why=self._engine_note)
         self.statusBar().showMessage(msg)
         if tot > 0:
             self.progress_bar.setValue(min(99, int(100 * el / tot)))

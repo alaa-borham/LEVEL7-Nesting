@@ -239,6 +239,17 @@ class NestEngine:
         self._deadline: float | None = None     # monotonic time the search must end (run())
         self._oriented: dict = {}
         self._nfp_cache: dict = {}
+        # big jobs: a coarser outline approximation (the cost of a no-fit polygon grows with the product of the
+        # vertex counts: 0.2 mm -> ~60 vertices, 20 ms; 0.5 mm -> ~40, 6 ms; 1 mm -> ~27, 2.7 ms per polygon).
+        # It costs length (84 vest pieces: +3 % at 0.5 mm), so a final layout keeps the setting up to 120 pieces;
+        # the start before sparrow (hard_time) is only a warm start that sparrow compresses: coarse from 40.
+        # The cut contours themselves are always checked as they are.
+        n = len(items)
+        tol = settings.curve_tolerance
+        if getattr(settings, "hard_time", False):
+            self.tol = max(tol, 1.0) if n > 40 else tol
+        else:
+            self.tol = max(tol, 1.0) if n > 250 else max(tol, 0.5) if n > 120 else tol
         # directional buffers grow the shapes by ex / ey on each side; the usable area grows by the same amount
         # so the buffer only acts between pieces, not against the margins
         self.ex, self.ey = max(0.0, fabric.buffer_x) / 2.0, max(0.0, fabric.buffer_y) / 2.0
@@ -266,7 +277,7 @@ class NestEngine:
         o = self._oriented.get(key)
         if o is None:
             pts, _ = search_polygon(transform_points(it.cut, rot, it.mirrored, sx=self.sx, sy=self.sy),
-                                    self.fabric.spacing + 2 * CONTACT_MM, self.settings.curve_tolerance,
+                                    self.fabric.spacing + 2 * CONTACT_MM, self.tol,
                                     (self.ex, self.ey))
             bx0, by0, bx1, by1 = bbox(pts)
             norm = [(x - bx0, y - by0) for x, y in pts]
@@ -304,6 +315,7 @@ class NestEngine:
                 result[idx] = (pl.rotation, t)
                 length = max(length, (t[0] / SCALE) + w)
         halted = False
+        tick, todo = time.monotonic(), sum(1 for i in order if self.items[i].pinned is None)
         for idx in order:
             it = self.items[idx]
             if it.pinned is not None:
@@ -338,6 +350,9 @@ class NestEngine:
                                f"does not fit usable width {self.fabric.usable_width:.1f} mm in allowed orientations")
                 continue
             _, rot, t, w = best
+            if partial and self.progress and time.monotonic() - tick > 1.0:     # first layout: show it moves
+                tick = time.monotonic()
+                self.progress({"placing": len(result) + 1, "of": todo, "result": None, "final": False})
             placed.append((it, rot, t))
             result[idx] = (rot, t)
             length = max(length, t[0] / SCALE + w)

@@ -84,6 +84,7 @@ def run_parallel(items: list[NestItem], fabric: FabricSettings, settings: NestSe
     done = 0
     errors = []
     evals = {}
+    placing: dict = {}
     t0 = time.monotonic()
     limit = settings.time_limit + (5.0 if getattr(settings, "hard_time", False) else 60.0)
     while done < workers:
@@ -98,6 +99,12 @@ def run_parallel(items: list[NestItem], fabric: FabricSettings, settings: NestSe
                 stop.set()
             if not any(p.is_alive() for p in procs) and q.empty():
                 break
+            continue
+        if kind == "progress" and "placing" in payload:     # a worker's first layout, piece by piece
+            if best is None and progress:
+                placing[wid] = payload["placing"]
+                progress({"elapsed": time.monotonic() - t0, "placing": max(placing.values()), "of": payload["of"],
+                          "result": None, "final": False})
             continue
         if kind == "progress":
             evals[wid] = payload["evaluations"]
