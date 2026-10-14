@@ -347,6 +347,7 @@ class MarkerView(QGraphicsView):
         self._snap_pts = snaps
         # little room below the fabric (the marker sits at the bottom of the view), more above it (pieces taken out)
         sc.setSceneRect(QRectF(-60, -40, max(L, (self.last_result or (0,))[0]) + 260, W + 340))
+        self._cover_view()
 
     def _draw_aux(self):
         sc = self.scene()
@@ -432,12 +433,8 @@ class MarkerView(QGraphicsView):
             W = self.marker.fabric.width
             self.fitInView(QRectF(-30, -30, L + 150, W + 60), Qt.KeepAspectRatio)   # + room for the length mark
             if self.view_angle() == 0:
-                # fitInView centres the marker: move it to the bottom-left corner of the view. The scene is made
-                # taller than the view first, so the view can scroll there (alignment alone left it a few pixels off)
-                r = self.scene().sceneRect()
-                need = self.viewport().height() / max(abs(self.transform().m22()), 1e-9) + 100
-                if r.height() < need:
-                    self.scene().setSceneRect(QRectF(r.x(), r.y(), r.width(), need))
+                # fitInView centres the marker: move it to the bottom-left corner of the view
+                self._cover_view()
                 hb, vb = self.horizontalScrollBar(), self.verticalScrollBar()
                 hb.setValue(hb.value() + self.mapFromScene(QPointF(-30, 0)).x())
                 vb.setValue(vb.value() + self.mapFromScene(QPointF(0, 0)).y() - (self.viewport().height() - 8))
@@ -475,6 +472,20 @@ class MarkerView(QGraphicsView):
             return r.center()
         return None
 
+    def _cover_view(self):
+        """The scene is kept larger than the view in both directions (grown to the right and upwards): a scene
+        smaller than the view is placed by Qt's alignment, which left the marker in the middle of a wide window
+        (the ruler showed negative values left of it). Larger, the scroll bars put it at the bottom-left."""
+        if self.marker is None:
+            return
+        t = self.transform()
+        sc = max(math.hypot(t.m11(), t.m12()), 1e-9)
+        need_w = self.viewport().width() / sc + 100
+        need_h = self.viewport().height() / sc + 100
+        r = self.scene().sceneRect()
+        if r.width() < need_w or r.height() < need_h:
+            self.scene().setSceneRect(QRectF(r.x(), r.y(), max(r.width(), need_w), max(r.height(), need_h)))
+
     def zoom_step(self, f: float):
         """Zoom buttons: around the measurement / selected pieces when there are any (they stay in the middle),
         otherwise around the marker's bottom-left corner, which stays at the bottom of the view."""
@@ -484,6 +495,7 @@ class MarkerView(QGraphicsView):
         self.setTransformationAnchor(QGraphicsView.NoAnchor)
         self.scale(f, f)
         self.setTransformationAnchor(old)
+        self._cover_view()
         if c is not None:
             self.centerOn(c)
             return
@@ -535,6 +547,7 @@ class MarkerView(QGraphicsView):
             return
         self._auto_fit = False
         self.scale(f, f)                        # otherwise around the mouse pointer
+        self._cover_view()
 
     def mousePressEvent(self, ev):
         if ev.button() == Qt.MiddleButton:
@@ -790,7 +803,7 @@ class MarkerView(QGraphicsView):
     def drawForeground(self, painter: QPainter, rect: QRectF):
         painter.save()
         painter.resetTransform()
-        vw, vh = self.viewport().width(), self.viewport().height()
+        vw = self.viewport().width()
         rb = QColor(self.theme["ruler"])
         rb.setAlpha(235)
         painter.fillRect(0, 0, vw, 18, rb)          # top ruler only (the side ruler was removed)

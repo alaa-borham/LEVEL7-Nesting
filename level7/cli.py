@@ -118,7 +118,15 @@ def cmd_export(a):
         cfg = (PlotterConfig if a.format == "plt" else MachineProfile).load(a.config)
     if a.format == "scb":
         cfg = a.template
-    st = export_marker(proj, m, a.format, a.output, cfg, diagnostic_iso=a.diagnostic)
+    from .exporters.iso import NotConfigured
+    try:
+        st = export_marker(proj, m, a.format, a.output, cfg, diagnostic_iso=a.diagnostic)
+    except NotConfigured as e:
+        print(f"{e} (--iso-preset bullmer_grafis / iecho, --config machine.json, or --diagnostic)")
+        return 1
+    except (OSError, ValueError) as e:          # e.g. SCB template / MDL problems, unwritable output
+        print(f"export failed: {e}")
+        return 1
     print(st)
     return 0
 

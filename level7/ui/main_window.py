@@ -10,10 +10,10 @@ import traceback
 
 from PySide6.QtCore import QEvent, QSettings, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QAction, QKeySequence, QUndoCommand, QUndoStack
-from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
+from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog,
                                QDockWidget, QDoubleSpinBox, QFileDialog, QFormLayout, QHBoxLayout, QHeaderView,
                                QLabel, QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QProgressBar,
-                               QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QTabWidget, QTextEdit,
+                               QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QTextEdit,
                                QVBoxLayout, QWidget)
 
 from .. import __version__
@@ -1898,7 +1898,7 @@ class MainWindow(QMainWindow):
 
     def _ensure_geometry(self) -> bool:
         """Selected sizes without geometry (an SCB holds only some sizes): offer to load them from the MDL."""
-        from ..service import missing_geometry, supplement_from_model
+        from ..service import supplement_from_model
         co = self.project.cut_order
         sizes = [s for s, q in co.size_quantities.items() if q > 0]
         used = {u for u, (n, m) in co.piece_counts.items() if n + m > 0}
@@ -2079,7 +2079,6 @@ class MainWindow(QMainWindow):
         if v is not None and not v.ok and not self._confirm_invalid(v, tr("export").replace("&", "")):
             return
         from ..exporters.iso import MachineProfile
-        from ..exporters.plt import PlotterConfig
         from ..service import export_marker
         diagnostic = False
         cfg = None

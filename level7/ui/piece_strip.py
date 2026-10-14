@@ -7,7 +7,6 @@ from PySide6.QtGui import QColor, QDrag, QFont, QPainter, QPainterPath, QPalette
 from PySide6.QtWidgets import QApplication, QScrollArea, QToolTip, QWidget
 
 from ..geometry import bbox, transform_points
-from .marker_view import bundle_letter
 
 THUMB_H = 26          # px available for the outline (compact: more room for the marker)
 ROW_H = THUMB_H + 18  # outline + count line

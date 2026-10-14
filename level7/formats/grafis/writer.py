@@ -71,7 +71,6 @@ def write_scb(template_path: str, project, marker, out_path: str) -> dict:
         raise ScbWriteError("the template is not a GRAFIS marker file (SCB)")
     text = tb.payload.rstrip(b"\x00").decode(ENC)
     ts = parse_text(tb.payload)
-    tlist = {e.number: e for e in ts.tlist}
     size_idx = {e.name: e.index for e in ts.sizes}
     total_t = int(ts.sbinfo.get("PCSTOTAL", "0") or 0)
     hdr, trecs, errs = decode_marker(mb.payload, total_t or None)
