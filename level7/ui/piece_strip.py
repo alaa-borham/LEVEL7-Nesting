@@ -326,6 +326,7 @@ class PieceStrip(QWidget):
         return self.rows[r] if r is not None else None
 
     def mousePressEvent(self, ev):
+        self._drag_from = None                           # a drag starts only from a press on a piece
         row = self._row_at(ev.position())
         if row is not None and ev.button() == Qt.LeftButton and self._in_head(ev.position()):
             self.row_toggled.emit(row[0], 0)          # 0 = every bundle of this size
@@ -336,6 +337,10 @@ class PieceStrip(QWidget):
             cell = self._cell_at(ev.position())        # dragging it onto the marker places one copy there
             self._drag_from = (ev.position(), cell) if cell is not None else None
         super().mousePressEvent(ev)
+
+    def mouseReleaseEvent(self, ev):
+        self._drag_from = None
+        super().mouseReleaseEvent(ev)
 
     def mouseDoubleClickEvent(self, ev):
         if self._in_head(ev.position()):

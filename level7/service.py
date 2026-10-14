@@ -7,7 +7,7 @@ import time
 from collections import Counter
 
 from .model import CutOrder, FabricSettings, Marker, NestSettings, Placement, Project
-from .nesting.engine import build_items, grain_rotations
+from .nesting.engine import HALT_REASON, build_items, grain_rotations
 from .validation.checker import marker_stats, validate_marker
 
 
@@ -224,8 +224,21 @@ def _nest_with_sparrow(proj, items, fabric, settings, workers, progress, stop_ev
     start = run_parallel(items, fabric, replace(settings, time_limit=t_start, hard_time=True), workers=workers,
                          progress=progress, stop_event=stop_event)
     if stop_event is not None and stop_event.is_set():
+        start.stopped = True
         return start, "builtin"
     remaining = max(5.0, total - (time.monotonic() - t0))
+
+    def fallback():
+        """sparrow gave nothing usable: a start cut short by its time limit is not a result - complete it with
+        the built-in engine in the time that is left (the first layout completes, Stop still answers)."""
+        if not any(u.reason == HALT_REASON for u in start.unplaced) or \
+                (stop_event is not None and stop_event.is_set()):
+            start.stopped = bool(stop_event is not None and stop_event.is_set())
+            return start, "builtin"
+        left = max(5.0, total - (time.monotonic() - t0))
+        res2 = run_parallel(items, fabric, replace(settings, time_limit=left, hard_time=False), workers=workers,
+                            progress=progress, stop_event=stop_event)
+        return res2, "builtin"
 
     def prog(d):
         if progress:
@@ -233,7 +246,7 @@ def _nest_with_sparrow(proj, items, fabric, settings, workers, progress, stop_ev
     res = sparrow.run(items, fabric, settings, remaining, progress=prog, stop_event=stop_event,
                       warm=start if not start.unplaced else None, workers=workers)
     if res is None:
-        return start, "builtin"
+        return fallback()
     allowed = {(it.piece_uid, it.mirrored): it.rotations for it in items}
     check = validate_marker(proj, Marker(name="check", fabric=fabric, placements=res.placements, length=res.length),
                             allowed_rotations=allowed)
@@ -243,7 +256,7 @@ def _nest_with_sparrow(proj, items, fabric, settings, workers, progress, stop_ev
     # 90° turns were explicitly allowed by the user: their grain warnings do not disqualify sparrow's layout
     bad = [i for i in check.issues if not (i.kind == "grain" and settings.allow_rotation_90)]
     if bad or (len(res.unplaced), res.length) >= (len(start.unplaced), start_len):
-        return start, "builtin"
+        return fallback() if bad or res.unplaced else (start, "builtin")
     res.evaluations += start.evaluations
     return res, "sparrow"
 
@@ -260,17 +273,28 @@ def default_cut_order(proj: Project) -> CutOrder:
 ADDED_TO_ORDER = "added to the order - not placed yet (nest again or drag it in)"
 
 
-def sync_marker_to_order(proj: Project, marker: Marker) -> tuple[int, int]:
+def marker_material(proj: Project, marker: Marker) -> str | None:
+    """The material a marker was made of (all its pieces share one), else None."""
+    pcs = {p.uid: p for p in proj.pieces}
+    mats = {pcs[pl.piece_uid].material for pl in marker.placements if pl.piece_uid in pcs}
+    return next(iter(mats)) if len(mats) == 1 else None
+
+
+def sync_marker_to_order(proj: Project, marker: Marker, spare: list | None = None) -> tuple[int, int]:
     """The marker follows the cut order at once (like GRAFIS): copies no longer ordered (a size quantity lowered,
     a size or part switched off, fewer copies) leave the marker - unplaced ones first -, newly ordered copies are
-    added as not placed. Rows excluded with the strip check box only affect the next nesting run.
-    Returns (removed, added)."""
+    added as not placed. Rows excluded with the strip check box only affect the next nesting run. The material
+    is the marker's own (the "material to nest" choice belongs to the next run). ``spare``: copies removed by
+    earlier syncs; ordered again, they come back where they were (a quantity 1 -> 0 -> 1 keeps the layout);
+    the copies removed now are added to it. Returns (removed, added)."""
     from .model import LayType
     co = proj.cut_order
+    material = marker_material(proj, marker) if marker.placements else co.material
+    excluded = {(sz, int(b)) for sz, b in (getattr(co, "excluded", None) or [])}
     need: Counter = Counter()
     for piece in proj.pieces:
         n, m = co.piece_counts.get(piece.uid, (0, 0))
-        if n + m == 0 or (co.material and piece.material and piece.material != co.material):
+        if n + m == 0 or (material and piece.material and piece.material != material):
             continue
         if marker.fabric.lay_type in (LayType.FACE_TO_FACE, LayType.FOLDED):
             n, m = max(n, m), 0
@@ -278,6 +302,8 @@ def sync_marker_to_order(proj: Project, marker: Marker) -> tuple[int, int]:
             if (qty or 0) <= 0 or size not in piece.sizes or (piece.model and not size.startswith(piece.model + ":")):
                 continue
             for b in range(1, qty + 1):
+                if (size, b) in excluded:
+                    continue
                 need[(piece.uid, size, b, False)] += n
                 need[(piece.uid, size, b, True)] += m
     have: dict = {}
@@ -286,24 +312,34 @@ def sync_marker_to_order(proj: Project, marker: Marker) -> tuple[int, int]:
     drop: set = set()
     pcs = {p.uid: p for p in proj.pieces}
     for key, pls in have.items():
-        if key[0] not in pcs or key[1] not in pcs[key[0]].sizes:
-            continue                        # no geometry for that size: its notice stays in the marker
+        if key[0] not in pcs or key[1] not in pcs[key[0]].sizes or (key[1], key[2]) in excluded:
+            continue                        # no geometry for that size (its notice stays) / row switched off
         extra = len(pls) - need.get(key, 0)
         if extra > 0:                       # unplaced copies go first, then the last placed ones
-            order = [pl for pl in pls if not pl.placed] + [pl for pl in reversed(pls) if pl.placed]
+            order = ([pl for pl in pls if not pl.placed] + [pl for pl in reversed(pls) if pl.placed and not pl.pinned]
+                     + [pl for pl in reversed(pls) if pl.placed and pl.pinned])        # pinned copies go last
             drop |= {id(pl) for pl in order[:extra]}
     uids = {pl.uid for pl in marker.placements}
     added, k = [], 0
     sx, sy = marker.fabric.scale
+    spare = spare if spare is not None else []
     for key, cnt in need.items():
         for _ in range(cnt - len(have.get(key, []))):
+            back = next((pl for pl in spare if (pl.piece_uid, pl.size, pl.bundle, pl.mirrored) == key
+                         and pl.uid not in uids), None)
+            if back is not None:                  # removed by an earlier change of the order: same place again
+                spare.remove(back)
+                uids.add(back.uid)
+                added.append(back)
+                continue
             k += 1
-            while f"a{k}" in uids:
+            while f"a{k}" in uids or any(pl.uid == f"a{k}" for pl in spare):
                 k += 1
             uids.add(f"a{k}")
             added.append(Placement(f"a{k}", key[0], key[1], key[2], mirrored=key[3], placed=False, sx=sx, sy=sy,
                                    reason=ADDED_TO_ORDER))
     if drop or added:
+        spare.extend(pl for pl in marker.placements if id(pl) in drop)
         marker.placements = [pl for pl in marker.placements if id(pl) not in drop] + added
     return len(drop), len(added)
 
@@ -402,7 +438,9 @@ def _run_once(proj, fabric, settings, cut_order, pinned, progress, stop_event, w
     marker.length = st["length_mm"]
     marker.stats = st
     info = {"validation": v, "warnings": warnings, "evaluations": res.evaluations, "elapsed": res.elapsed,
-            "stopped": res.stopped, "history": res.history, "max_search_deviation": None, "engine": engine_used}
+            "stopped": res.stopped, "history": res.history, "max_search_deviation": None, "engine": engine_used,
+            # pieces left out because Stop / the time limit came before the first layout was complete
+            "cut_short": sum(1 for u in res.unplaced if u.reason == HALT_REASON)}
     return marker, info
 
 
@@ -440,12 +478,10 @@ def export_marker(proj: Project, marker: Marker, fmt: str, path: str, config=Non
 
 def mdl_template(proj: Project) -> str | None:
     """The GRAFIS MDL this session was read from (template for writing MDL), single-model sessions only."""
-    if any(p.model for p in proj.pieces):
-        return None
-    for src in proj.sources:
-        if src.kind == "mdl" and os.path.isfile(src.path):
-            return src.path
-    return None
+    if any(p.model for p in proj.pieces) or not proj.sources or proj.sources[0].kind != "mdl":
+        return None          # e.g. an SCB session completed from its MDL: its order is the marker's, not the model's
+    src = proj.sources[0]
+    return src.path if os.path.isfile(src.path) else None
 
 
 def scb_template(proj: Project) -> str | None:
@@ -463,25 +499,27 @@ def find_scb_for_model(proj: Project, folder: str, limit: int = 200) -> str | No
     write_scb does, see formats.grafis.writer.part_map) - a GRAFIS marker of this model; the newest is returned."""
     from .formats.grafis.container import read_container
     from .formats.grafis.textsections import parse_text
-    from .formats.grafis.writer import ScbWriteError, part_map
+    from .formats.grafis.writer import check_geometry, part_map, template_pieces
     co = proj.cut_order
     uids = {p.uid for p in proj.pieces if any(co.piece_counts.get(p.uid, (0, 0)))}
     want = {(p.number, p.name.strip()) for p in proj.pieces if p.uid in uids}
     if not want or not os.path.isdir(folder):
         return None
-    key = (os.path.abspath(folder), frozenset(want))
-    hit = _SCB_FOUND.get(key)
-    if hit and os.path.isfile(hit):
-        return hit
     found = []
-    for root in [folder] + [os.path.join(folder, d) for d in sorted(os.listdir(folder))
-                            if os.path.isdir(os.path.join(folder, d))]:
-        try:
-            names = os.listdir(root)
-        except OSError:
-            continue
-        found += [os.path.join(root, n) for n in names if n.lower().endswith(".scb")]
-    found.sort(key=lambda f: os.path.getmtime(f), reverse=True)
+    for root in [folder] + [os.path.join(folder, d) for d in _listdir(folder) if os.path.isdir(os.path.join(folder, d))]:
+        for n in _listdir(root):
+            if n.lower().endswith(".scb"):
+                f = os.path.join(root, n)
+                try:
+                    found.append((os.path.getmtime(f), f))
+                except OSError:          # vanished / dangling link / offline network file
+                    continue
+    found.sort(reverse=True)
+    # cache keyed by the folder's SCBs (names + times): a newer SCB saved by GRAFIS is seen at once
+    key = (os.path.abspath(folder), frozenset(want), tuple(found[:limit]))
+    if key in _SCB_FOUND:
+        return _SCB_FOUND[key]
+    found = [f for _t, f in found]
     for f in found[:limit]:
         try:
             tb = read_container(f).get(2, 1, 0, 0)
@@ -490,13 +528,25 @@ def find_scb_for_model(proj: Project, folder: str, limit: int = 200) -> str | No
             continue
         if ts is None:
             continue
-        try:
-            part_map(proj, ts.tlist, uids)
-        except ScbWriteError:
+        try:   # names, then the shapes (an SCB of another model / an older state of this one is skipped)
+            tp = template_pieces(f)
+            pmap = part_map(proj, ts.tlist, uids, tp)
+            used = {(u, sz) for u in uids for sz, q in co.size_quantities.items()
+                    if q and sz in proj.piece(u).sizes}
+            check_geometry(f, proj, pmap, used, tp)
+        except Exception:
             continue
         _SCB_FOUND[key] = f
         return f
+    _SCB_FOUND[key] = None
     return None
 
 
 _SCB_FOUND: dict = {}
+
+
+def _listdir(folder: str) -> list[str]:
+    try:
+        return sorted(os.listdir(folder))
+    except OSError:
+        return []

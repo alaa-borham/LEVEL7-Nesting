@@ -237,6 +237,10 @@ def run_order(order: MarkerOrder, outdir: str, plt_config=None, iso_config=None,
     marker, info = service.run_nesting(proj, fabric, st, progress=progress, stop_event=stop_event, name=order.name,
                                        workers=workers)
     unplaced = [p for p in marker.placements if not p.placed]
+    if info.get("stopped"):
+        raise OrderError("stopped - marker not exported")
+    if info.get("cut_short"):
+        raise OrderError(f"time limit too short: {info['cut_short']} piece(s) not placed - give this marker more time")
     if not info["validation"].ok:
         raise OrderError("nested marker failed validation: " + info["validation"].summary())
     proj.markers.append(marker)

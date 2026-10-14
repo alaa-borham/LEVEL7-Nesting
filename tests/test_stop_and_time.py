@@ -13,16 +13,16 @@ from level7.service import open_any
 VEST = os.path.join(os.path.dirname(MDL), "vest2027", "vest2027-M1.mdl")
 
 
-def _engine(limit, stop=None):
+def _engine(limit, stop=None, hard=False):
     proj, _ = open_any(VEST)
     sizes = {s: 2 for s in proj.size_names}
-    fab, st = FabricSettings(width=1500.0), NestSettings(time_limit=limit, seed=1)
+    fab, st = FabricSettings(width=1500.0), NestSettings(time_limit=limit, seed=1, hard_time=hard)
     items, _, _ = build_items(proj, sizes, proj.cut_order.piece_counts, fab, st)
     return NestEngine(items, fab, st, stop_event=stop), items
 
 
 def test_time_limit_ends_the_first_layout_with_a_partial_result():
-    eng, items = _engine(2.0)
+    eng, items = _engine(2.0, hard=True)        # the built-in start before sparrow
     t = time.monotonic()
     res = eng.run()
     assert time.monotonic() - t < 2.0 + 3.0

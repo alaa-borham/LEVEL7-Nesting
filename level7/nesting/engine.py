@@ -473,7 +473,7 @@ class NestEngine:
         """Genetic search over (order, preferred rotation) with elitism; keeps the best valid layout."""
         t0 = time.monotonic()
         limit = self.settings.time_limit or MODE_TIME.get(self.settings.mode, 30.0)
-        if getattr(self.settings, "hard_time", True):
+        if getattr(self.settings, "hard_time", False):
             self._deadline = t0 + limit
         rng = random.Random(self.settings.seed)
         free = [i for i, it in enumerate(self.items) if it.pinned is None]

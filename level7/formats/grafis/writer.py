@@ -15,6 +15,7 @@ Self-check: re-writing a GRAFIS marker unchanged reproduces the original file by
 """
 from __future__ import annotations
 
+import math
 import os
 import re
 import struct
@@ -84,8 +85,9 @@ def write_scb(template_path: str, project, marker, out_path: str) -> dict:
     placed = [pl for pl in marker.placements if pl.placed]
     if not placed:
         raise ScbWriteError("the marker has no placed pieces")
-    pmap = part_map(project, ts.tlist, {pl.piece_uid for pl in placed})
-    check_geometry(template_path, project, pmap, {(pl.piece_uid, pl.size) for pl in placed})
+    tp = template_pieces(template_path)
+    pmap = part_map(project, ts.tlist, {pl.piece_uid for pl in placed}, tp)
+    check_geometry(template_path, project, pmap, {(pl.piece_uid, pl.size) for pl in placed}, tp)
     if any(abs(pl.sx - 1.0) > 1e-9 or abs(pl.sy - 1.0) > 1e-9 for pl in placed):
         raise ScbWriteError("markers with shrinkage cannot be written as SCB yet (GRAFIS' shrinkage fields are "
                             "not decoded); save as LEVEL7 project or export PLT/DXF/ISO")
@@ -207,41 +209,76 @@ def write_scb(template_path: str, project, marker, out_path: str) -> dict:
     return {"placements": len(recs), "length": length, "efficiency": eff, "bytes": len(out)}
 
 
-def part_map(project, tlist, uids) -> dict:
+def _shape_gap(pc, tpc) -> float:
+    """How far a model part is from a template part (bbox and area over their common sizes; inf = none)."""
+    if tpc is None:
+        return math.inf
+    common = [sz for sz in pc.sizes if sz in tpc.sizes and not sz.startswith("base:")]
+    if not common:
+        return math.inf
+    gap = 0.0
+    for sz in common:
+        g, tg = pc.sizes[sz], tpc.sizes[sz]
+        gap = max(gap, max(abs(a - b) for a, b in zip(bbox(g.cut), bbox(tg.cut))),
+                  abs(abs(ring_area(g.cut)) - abs(ring_area(tg.cut))) / 100.0)
+    return gap
+
+
+def part_map(project, tlist, uids, tpieces=None) -> dict:
     """piece uid -> the template's #TLIST entry of that part. Older GRAFIS keeps the model's part numbers in the
     SCB; GRAFIS 26 numbers the SCB's parts 1..n in model order (vest2027 sample: MDL 19, 21, 24 ... -> SCB 1, 2,
-    3 ...). Same number and name first; otherwise the k-th part of that name in the model is the k-th part of
-    that name in the SCB."""
+    3 ...; its #TLIST lines start with ">" / carry V="model path"). Same number and name in an SCB that keeps the
+    numbers; otherwise by name, and among parts of the same name by shape (``tpieces``: the template's parts by
+    number) or, without shapes, the k-th of that name."""
     out = {}
     by_num = {e.number: e for e in tlist}
+    renumbered = any(e.raw.lstrip().startswith(">") or ' V="' in e.raw for e in tlist)
     named: dict[str, list] = {}
     for e in sorted(tlist, key=lambda e: e.number):
         named.setdefault(e.name.strip(), []).append(e)
     model_named: dict[str, list] = {}
     for pc in sorted(project.pieces, key=lambda p: p.number or 0):
         model_named.setdefault(pc.name.strip(), []).append(pc)
-    exact = all(by_num.get(project.piece(u).number) is not None and
-                by_num[project.piece(u).number].name.strip() == project.piece(u).name.strip() for u in uids)
-    for u in uids:
+    exact = not renumbered and all(
+        by_num.get(project.piece(u).number) is not None and
+        by_num[project.piece(u).number].name.strip() == project.piece(u).name.strip() for u in uids)
+    taken: set = set()
+    for u in sorted(uids, key=lambda u: project.piece(u).number or 0):
         pc = project.piece(u)
         if exact:
             out[u] = by_num[pc.number]
             continue
-        # k-th of the same name among the parts this model produces (GRAFIS 26 lists only those in the SCB)
-        same = [p for p in model_named[pc.name.strip()] if p.production or p.uid in uids]
         cands = named.get(pc.name.strip(), [])
-        k = same.index(pc)
-        if len(same) != len(cands) or k >= len(cands):
-            raise ScbWriteError(f"piece {pc.number} {pc.name!r} is not in the template SCB's piece list")
-        out[u] = cands[k]
+        if len(cands) == 1:
+            out[u] = cands[0]
+        elif cands and tpieces is not None:
+            free = [e for e in cands if e.number not in taken] or cands
+            gaps = [(_shape_gap(pc, tpieces.get(e.number)), e.number, e) for e in free]
+            gap, _n, e = min(gaps, key=lambda g: g[:2])
+            if gap == math.inf:
+                raise ScbWriteError(f"piece {pc.number} {pc.name!r} is not in the template SCB's piece list")
+            out[u] = e
+        else:
+            # k-th of the same name among the parts this model produces (GRAFIS 26 lists only those in the SCB)
+            same = [p for p in model_named[pc.name.strip()] if p.production or p.uid in uids]
+            k = same.index(pc) if pc in same else -1
+            if not cands or len(same) != len(cands) or not 0 <= k < len(cands):
+                raise ScbWriteError(f"piece {pc.number} {pc.name!r} is not in the template SCB's piece list")
+            out[u] = cands[k]
+        taken.add(out[u].number)
     return out
 
 
-def check_geometry(template_path, project, pmap, used) -> None:
+def template_pieces(template_path) -> dict:
+    """The template SCB's parts (with their geometry) by #TLIST number."""
+    from ...readers.grafis import read_grafis
+    return {p.number: p for p in read_grafis(template_path).project.pieces}
+
+
+def check_geometry(template_path, project, pmap, used, tp=None) -> None:
     """The SCB carries its own copy of every part's geometry: it must be the session's geometry (otherwise the
     model changed after that SCB was saved and GRAFIS would show other shapes at the written positions)."""
-    from ...readers.grafis import read_grafis
-    tp = {p.number: p for p in read_grafis(template_path).project.pieces}
+    tp = tp if tp is not None else template_pieces(template_path)
     for uid, size in used:
         pc = project.piece(uid)
         t = tp.get(pmap[uid].number)

@@ -269,6 +269,13 @@ def _read_marker(res: ReadResult, blocks) -> None:
     sizes = _size_names(ts)
     by_num = {p.number: p for p in proj.pieces}
     marker = Marker(name=f"{proj.name} (original)", fabric=fabric, origin="original")
+    # GRAFIS numbers the bundles through the whole marker (1..N, #SBGRLST); LEVEL7 numbers them per size
+    # (44/1, 44/2, 46/1 ...) like its cut order - otherwise size 46's bundle "2" was not in an order 46 x 1
+    per_size: dict[str, int] = {}
+    local_bundle: dict[int, int] = {}
+    for n, s in ts.sbgrlst:
+        per_size[s] = per_size.get(s, 0) + 1
+        local_bundle[int(n)] = per_size[s]
     checks = {"header_width": hdr.width, "header_length": hdr.length, "header_eff": hdr.efficiency,
               "records": len(recs), "bbox_mismatch": [], "area_mismatch": []}
     for r in recs:
@@ -287,7 +294,7 @@ def _read_marker(res: ReadResult, blocks) -> None:
         rot = r.rotation
         pts = transform_points(g.cut, rot, r.mirror)
         tb = bbox(pts)
-        pl = Placement(uid=Piece.new_uid(), piece_uid=piece.uid, size=size, bundle=r.bundle,
+        pl = Placement(uid=Piece.new_uid(), piece_uid=piece.uid, size=size, bundle=local_bundle.get(r.bundle, r.bundle),
                        x=r.x - tb[0], y=r.y - tb[1], rotation=rot, mirrored=r.mirror)
         marker.placements.append(pl)
     marker.length = float(hdr.length) if hdr.length > 0 else float(sb.get("LENGTH", 0))

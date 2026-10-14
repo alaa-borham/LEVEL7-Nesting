@@ -325,6 +325,14 @@ T = {
                          "الحفظ بصيغة MDL جرافس يحتاج جلسة مفتوحة من ملف MDL واحد (موديل واحد)."),
     "order_synced": ("Marker updated to the order: {r} copies removed, {a} added (not placed yet - nest again)",
                      "تم تحديث الماركر حسب الطلب: حُذفت {r} نسخة وأضيفت {a} (غير معشّقة بعد - أعد التعشيق)"),
+    "mdl_changed_on_disk": ("The MDL was changed (e.g. saved in GRAFIS) after this session opened it - not written, "
+                            "so GRAFIS' newer settings are not overwritten. Open the MDL again and repeat.",
+                            "ملف الـ MDL تغيّر (مثلًا حُفظ من جرافس) بعد فتحه في هذه الجلسة - لم يُكتب حتى لا تُستبدل "
+                            "إعدادات جرافس الأحدث. افتح الملف من جديد وأعد التعديل."),
+    "nest_cut_short": ("{n} piece(s) not placed: the time ran out before the first complete layout - give more time "
+                       "(or drag them in from the strip)",
+                       "{n} قطعة لم تُعشّق: انتهى الوقت قبل اكتمال أول ترتيب - أعطِ وقتًا أكثر (أو اسحبها من الشريط "
+                       "العلوي)"),
     "mat_none": ("— none —", "— بدون —"),
     "mat_new": ("New material…", "خامة جديدة…"),
     "mat_new_title": ("New material", "خامة جديدة"),

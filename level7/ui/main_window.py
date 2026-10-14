@@ -40,6 +40,26 @@ def _owned_by(w, owner) -> bool:
 TAKEN_OUT = "taken out of the marker"      # Placement.reason of copies the user removed from the marker
 
 
+class OrderSyncCommand(QUndoCommand):
+    """The marker's copies changed with the order (MainWindow._sync_marker): undo brings the old list back."""
+
+    def __init__(self, window, marker, old, new):
+        super().__init__("order")
+        self.window, self.marker, self.old, self.new = window, marker, old, new
+
+    def _set(self, pls):
+        self.marker.placements = list(pls)
+        if self.window.marker is self.marker:
+            self.window._redraw_marker()
+            self.window._refresh_strip()
+
+    def redo(self):
+        self._set(self.new)
+
+    def undo(self):
+        self._set(self.old)
+
+
 class PlacementStateCommand(QUndoCommand):
     def __init__(self, window, changes, text):
         super().__init__(text)
@@ -132,6 +152,7 @@ class MainWindow(QMainWindow):
         self.project_path: str | None = None
         self.marker: Marker | None = None
         self.worker: NestWorker | None = None
+        self._sync_spare: dict = {}        # marker id -> copies removed by order changes (see _sync_marker)
         self.dirty = False                # unsaved changes in this session
         self.undo = QUndoStack(self)
         self.undo.indexChanged.connect(lambda _i: self.mark_dirty())
@@ -827,6 +848,12 @@ class MainWindow(QMainWindow):
         self._layout_toolbar(force=True)
 
     def retranslate(self):
+        t = getattr(self, "pieces_table", None)
+        for r in range(t.rowCount() if t is not None else 0):       # material lists: their own texts too
+            b = t.cellWidget(r, 2)
+            if b is not None and b.property("material") is not None:
+                self._fill_material_box(b, self._material_codes(), b.property("material"))
+                b.setToolTip(tr("material_tip"))
         for b in getattr(self.view, "zoom_buttons", []):
             b.setToolTip(tr(b.property("tipkey")))
         rtl = LANG["current"] == "ar"
@@ -1097,6 +1124,7 @@ class MainWindow(QMainWindow):
             self._load_tables()
         finally:
             self._loading_tables = False
+        self._synced_order = self._order_signature() if self.project is not None else None
 
     def _table_edited(self, *_):
         if not getattr(self, "_loading_tables", False):
@@ -1106,15 +1134,26 @@ class MainWindow(QMainWindow):
                 self._sync_marker()
                 self._refresh_strip()
 
+    def _order_signature(self):
+        co = self.project.cut_order
+        return (tuple(sorted(co.size_quantities.items())), tuple(sorted(co.piece_counts.items())))
+
     def _sync_marker(self):
-        """The marker follows the order at once: copies no longer ordered leave it, new ones wait unplaced."""
+        """The marker follows the order at once: copies no longer ordered leave it, new ones wait unplaced. Only
+        a change of the order itself (sizes, quantities, parts used, copies) does this - not a grain angle or a
+        material; it is one undo step, and copies ordered again come back where they were."""
         from ..service import sync_marker_to_order
         if self.marker is None or (self.worker is not None and self.worker.isRunning()):
             return
-        removed, added = sync_marker_to_order(self.project, self.marker)
+        sig = self._order_signature()
+        if sig == getattr(self, "_synced_order", None):
+            return
+        self._synced_order = sig
+        spare = self._sync_spare.setdefault(id(self.marker), [])
+        old = list(self.marker.placements)
+        removed, added = sync_marker_to_order(self.project, self.marker, spare)
         if removed or added:
-            self.view.show_marker(self.project, self.marker, self.view.bad)
-            self.after_edit()
+            self.undo.push(OrderSyncCommand(self, self.marker, old, list(self.marker.placements)))
             self.statusBar().showMessage(tr("order_synced", r=removed, a=added))
 
     def _load_tables(self):
@@ -1384,8 +1423,6 @@ class MainWindow(QMainWindow):
                 finally:
                     if tmp_t:
                         os.remove(tmp_t)
-            elif self.project_path.lower().endswith(".mdl"):
-                self._save_mdl(self.project_path)
             else:
                 from ..project_storage.store import save_project
                 save_project(self.project, self.project_path)
@@ -1407,6 +1444,14 @@ class MainWindow(QMainWindow):
         template = mdl_template(self.project)
         if template is None:
             raise ValueError(tr("mdl_not_possible"))
+        from ..formats.grafis.container import sha256_bytes
+        src = next(x for x in self.project.sources if x.kind == "mdl" and os.path.abspath(x.path) ==
+                   os.path.abspath(template))
+        with open(template, "rb") as fh:
+            if src.sha256 and sha256_bytes(fh.read()) != src.sha256:
+                # changed in GRAFIS after LEVEL7 opened it: writing would bring back this session's older
+                # production / copies / materials over GRAFIS' newer ones
+                raise ValueError(tr("mdl_changed_on_disk"))
         tmp_t = None
         if os.path.abspath(template) == os.path.abspath(path):
             if not os.path.exists(path + ".bak"):
@@ -1420,6 +1465,9 @@ class MainWindow(QMainWindow):
         finally:
             if tmp_t:
                 os.remove(tmp_t)
+        if os.path.abspath(src.path) == os.path.abspath(path):     # our own write: the session knows this file
+            with open(path, "rb") as fh:
+                src.sha256 = sha256_bytes(fh.read())
 
     def save_mdl_as(self):
         """File > Save as GRAFIS MDL…: the model with the parts' material / production / copies."""
@@ -1462,6 +1510,17 @@ class MainWindow(QMainWindow):
         ext = ".scb" if chosen == f_scb else ".mdl" if chosen == f_mdl else ".l7n"
         if not p.lower().endswith(ext):
             p = os.path.splitext(p)[0] + ext
+        if ext == ".mdl":
+            # the model file only (materials / copies): not the session file - markers are not in it, so the
+            # session stays "unsaved" and keeps its own path
+            self.read_tables()
+            try:
+                self._save_mdl(p)
+            except Exception as e:
+                QMessageBox.critical(self, tr("save_mdl"), str(e))
+                return False
+            self.statusBar().showMessage(tr("mdl_saved", p=p))
+            return False
         if ext == ".scb":
             self.scb_template_path = template          # keep the GRAFIS template of this session
         self.project_path = p
@@ -2018,6 +2077,7 @@ class MainWindow(QMainWindow):
         self._strip_height()
 
     def on_finished(self, marker, info):
+        self._synced_order = self._order_signature() if self.project is not None else None
         self._nest_ui(False)
         if info.get("stopped") and not any(p.placed for p in marker.placements):
             # stopped before a first complete layout: keep the marker on screen, add nothing
@@ -2036,6 +2096,10 @@ class MainWindow(QMainWindow):
                      l=" / ".join(f"{L:.0f}" for _s, L, _ok in info["attempts"]), b=marker.length) + " | " + msg
         if info.get("warnings"):
             msg += " | " + "; ".join(info["warnings"])
+        if info.get("cut_short"):
+            msg = tr("nest_cut_short", n=info["cut_short"]) + " | " + msg
+            if not info.get("stopped"):
+                QMessageBox.warning(self, tr("run"), tr("nest_cut_short", n=info["cut_short"]))
         self.statusBar().showMessage(msg)
 
     # -- validation messages -----------------------------------------------------------------

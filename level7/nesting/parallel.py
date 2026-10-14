@@ -85,14 +85,16 @@ def run_parallel(items: list[NestItem], fabric: FabricSettings, settings: NestSe
     errors = []
     evals = {}
     t0 = time.monotonic()
-    limit = settings.time_limit + (5.0 if getattr(settings, "hard_time", True) else 60.0)
+    limit = settings.time_limit + (5.0 if getattr(settings, "hard_time", False) else 60.0)
     while done < workers:
         if stop_event is not None and stop_event.is_set():
             stop.set()
         try:
             kind, wid, payload = q.get(timeout=0.2)
         except queue.Empty:
-            if time.monotonic() - t0 > limit:
+            # safety guard; without a hard time limit the first complete layout is waited for (a stop here
+            # made every worker return a partial layout 60 s late)
+            if time.monotonic() - t0 > limit and (best is not None or getattr(settings, "hard_time", False)):
                 stop.set()
             if not any(p.is_alive() for p in procs) and q.empty():
                 break
