@@ -253,6 +253,7 @@ T = {
     "nest_waiting": ("Waiting: another session is nesting - this run starts as soon as it finishes",
                      "في الانتظار: جلسة أخرى تعشّق الآن — يبدأ هذا التعشيق تلقائيًا بعد انتهائها"),
     "nest_started": ("Nesting started", "بدأ التعشيق"),
+    "nest_stopping": ("Stopping… the best layout so far is kept", "جارٍ الإيقاف… يُحتفظ بأفضل ترتيب حتى الآن"),
     "nest_cancelled": ("Nesting cancelled before it started", "أُلغي التعشيق قبل أن يبدأ"),
     "parallel": ("Simultaneous nestings", "تعشيقات متزامنة"),
     "ft_parallel": ("How many nestings (sessions / marker list) may run at the same time. The processor cores are "

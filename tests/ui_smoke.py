@@ -25,6 +25,11 @@ def main(outdir):
     app.processEvents()
     w.grab().save(os.path.join(outdir, "ui_original_marker.png"))
     assert w.marker is not None and w.marker.origin == "original"
+    # fit mode must not refit in a loop: scroll bars that came and went resized the view, which refit it again
+    # (15 000 refits in 30 s of nesting kept the interface busy and delayed every click, Stop included)
+    from PySide6.QtCore import Qt
+    assert w.view.horizontalScrollBarPolicy() == Qt.ScrollBarAlwaysOn
+    assert w.view.verticalScrollBarPolicy() == Qt.ScrollBarAlwaysOn
     first = w.issues_list.item(0).text()
     print("original:", first)
     w.f_width.setValue(1500)

@@ -202,33 +202,47 @@ def run(items: list[NestItem], fabric, settings, time_limit: float, progress=Non
         sols = os.path.join(work, "output", "sols_level7")
         best, best_len, seen = None, None, set()
         stopped = False
+
+        def halted():
+            return stop_event is not None and stop_event.is_set()
         while proc.poll() is None:
-            if stop_event is not None and stop_event.is_set():
+            if halted():
                 stopped = True
                 proc.kill()
                 break
-            if time.monotonic() - t0 > time_limit + 60:
+            # sparrow may run on past its -t (compression after exploration): our timer is the user's timer -
+            # 3 s of grace, then its best snapshot is the result (it was 60 s: 148 s shown for 120 s)
+            if time.monotonic() - t0 > time_limit + 3.0:
                 proc.kill()
                 break
-            time.sleep(0.4)
+            time.sleep(0.3)
             try:
                 names = os.listdir(sols)
             except OSError:
                 continue
-            for n in sorted(names, key=lambda s: int(s.split("_", 1)[0]) if s.split("_", 1)[0].isdigit() else -1):
+            new = []
+            for n in names:
                 if n in seen or not n.endswith(".svg") or not any(n.endswith(f"_{t}.svg") for t in FEASIBLE):
                     continue
                 seen.add(n)
                 m = re.match(r"\d+_([\d.]+)_", n)
-                if m is None or (best_len is not None and float(m.group(1)) >= best_len):
-                    continue
+                if m is not None and (best_len is None or float(m.group(1)) < best_len):
+                    new.append((float(m.group(1)), n))
+            # only the shortest new snapshot is read (reading every one fell behind and kept Stop waiting)
+            for length, n in sorted(new)[:3]:
+                if halted():
+                    break
                 r = parse_svg(os.path.join(sols, n), groups, fabric, settings.seed, time.monotonic() - t0)
                 if r is not None:
-                    best, best_len = r, float(m.group(1))
+                    best, best_len = r, length
                     if progress:
                         progress({"elapsed": time.monotonic() - t0, "evaluations": len(seen),
                                   "length": r.length, "unplaced": 0, "result": r, "final": False})
-        proc.wait(timeout=30)
+                    break
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            pass
         final = os.path.join(work, "output", "final_level7.json")
         if not stopped and os.path.isfile(final):
             r = parse_json(final, groups, fabric, settings.seed, time.monotonic() - t0)

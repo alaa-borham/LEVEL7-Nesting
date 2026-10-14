@@ -5,7 +5,7 @@ from __future__ import annotations
 import colorsys
 import math
 
-from PySide6.QtCore import QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen, QPolygonF, QTransform
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsPathItem, QGraphicsScene, QGraphicsSimpleTextItem, QGraphicsView
 
@@ -278,6 +278,9 @@ class MarkerView(QGraphicsView):
         # the marker is a drawing: always left-to-right like GRAFIS (in the Arabic interface the mirrored scroll
         # bar showed the end of the marker and hid its start on the left)
         self.setLayoutDirection(Qt.LeftToRight)
+        # scroll bars always there: appearing / disappearing they resized the view (see resizeEvent)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         # like GRAFIS: the whole marker fixed in the view, at the bottom-left corner; it is fitted
         # again when the window is resized (until the user zooms himself); zoom buttons in the corner
         self.setAlignment(Qt.AlignAbsolute | Qt.AlignLeft | Qt.AlignBottom)
@@ -432,6 +435,7 @@ class MarkerView(QGraphicsView):
                                                     if it.placement.placed), default=0.0), 100.0)
             W = self.marker.fabric.width
             self.fitInView(QRectF(-30, -30, L + 150, W + 60), Qt.KeepAspectRatio)   # + room for the length mark
+            self._fit_size = self.viewport().size()
             if self.view_angle() == 0:
                 # fitInView centres the marker: move it to the bottom-left corner of the view
                 self._cover_view()
@@ -531,13 +535,23 @@ class MarkerView(QGraphicsView):
 
     def resizeEvent(self, ev):
         super().resizeEvent(ev)
-        if self._auto_fit and self.marker is not None:
-            self.zoom_fit()
+        # refit once the size has settled, and only for a real change of size: refitting inside the resize made
+        # the scroll bars come and go, which resized the view again - an endless loop (15 000 refits in 30 s of
+        # nesting) that kept the interface busy and delayed every click, Stop included
+        if self._auto_fit and self.marker is not None and self.viewport().size() != getattr(self, "_fit_size", None):
+            if not getattr(self, "_fit_pending", False):
+                self._fit_pending = True
+                QTimer.singleShot(50, self._refit_after_resize)
         x = self.viewport().width() - 44
         y = self.viewport().height() - 44
         for k, b in enumerate(reversed(self.zoom_buttons)):
             b.move(x - k * 40, y)
             b.raise_()
+
+    def _refit_after_resize(self):
+        self._fit_pending = False
+        if self._auto_fit and self.marker is not None and self.viewport().size() != getattr(self, "_fit_size", None):
+            self.zoom_fit()
 
     def wheelEvent(self, ev):
         f = 1.25 if ev.angleDelta().y() > 0 else 0.8

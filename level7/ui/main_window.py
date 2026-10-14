@@ -2012,6 +2012,7 @@ class MainWindow(QMainWindow):
         return True
 
     def _nest_ui(self, running):
+        self._stopping = False
         self.btn_run.setEnabled(not running)
         self.btn_stop.setEnabled(running)
         self.progress_bar.setVisible(running)
@@ -2032,7 +2033,7 @@ class MainWindow(QMainWindow):
             self._nest_timer.stop()
 
     def _nest_tick(self):
-        if getattr(self, "_nest_t0", None) is None:            # queued behind another session
+        if getattr(self, "_nest_t0", None) is None or getattr(self, "_stopping", False):
             return
         el = time.monotonic() - self._nest_t0
         tot = getattr(self, "_nest_total", 0) or 0
@@ -2071,6 +2072,12 @@ class MainWindow(QMainWindow):
     def stop_nesting(self):
         if self.worker and self.worker.isRunning():
             self.worker.stop_event.set()
+            # answer at once: the run ends within a second; previews of the running layout are not drawn any more
+            self._stopping = True
+            self.btn_stop.setEnabled(False)
+            self._pending_preview = None
+            self.statusBar().showMessage(tr("nest_stopping"))
+            QApplication.processEvents()
         elif self.view.pick_match:              # Esc also ends picking plaid match points
             self.plaid.b_pick.setChecked(False)
         elif self.view.measure_mode:            # Esc is also 'clear measurement'
@@ -2087,6 +2094,8 @@ class MainWindow(QMainWindow):
         if not d.get("final"):
             self._last_prog = d
             self._nest_tick()
+        if getattr(self, "_stopping", False):
+            return
         if d.get("result") is not None and not d.get("final"):
             first = getattr(self, "_pending_preview", None) is None
             self._pending_preview = d["result"]
