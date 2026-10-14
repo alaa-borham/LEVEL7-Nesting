@@ -519,7 +519,8 @@ class NestEngine:
             if best is None or fitness(sol) < fitness(best[0]):
                 best = (sol, ind)
                 history.append((time.monotonic() - t0, sol[2]))
-                report(sol)
+                if not any(r == HALT_REASON for r in sol[1].values()):
+                    report(sol)          # a layout cut short is no "best length" (it is returned at the end)
             return fitness(sol)
 
         def rand_rots():

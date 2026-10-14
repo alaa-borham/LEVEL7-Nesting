@@ -34,6 +34,8 @@ def _lower_priority():
 def _worker(items, fabric, settings, stop, q, wid):
     _lower_priority()
     def prog(d):
+        if d.get("final"):           # the end result comes with "done" (a final report of a layout cut short
+            return                   # was passed on as a "best length")
         try:
             q.put(("progress", wid, {k: v for k, v in d.items() if k != "final"}))
         except Exception:

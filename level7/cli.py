@@ -46,9 +46,13 @@ def _nest(a, proj):
     st = NestSettings(time_limit=a.time, seed=a.seed, mode=a.mode, engine=getattr(a, "engine", "auto"))
 
     def prog(d):
-        if not d.get("final"):
-            print(f"  {d['elapsed']:6.1f}s  evaluations {d['evaluations']:6d}  length {d['length']:.1f} mm",
-                  flush=True)
+        if d.get("final"):
+            return
+        if d.get("placing"):                     # first layout of a big job, piece by piece
+            print(f"  {d.get('elapsed', 0.0):6.1f}s  first layout {d['placing']}/{d['of']} pieces", flush=True)
+        elif d.get("length") is not None:
+            print(f"  {d.get('elapsed', 0.0):6.1f}s  evaluations {d.get('evaluations', 0):6d}  "
+                  f"length {d['length']:.1f} mm", flush=True)
     return run_nesting(proj, fab, st, progress=prog, workers=a.workers)
 
 
