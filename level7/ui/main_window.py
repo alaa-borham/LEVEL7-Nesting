@@ -280,7 +280,9 @@ class MainWindow(QMainWindow):
         # fabric / nesting form
         w = QWidget()
         self.form = QFormLayout(w)
-        self.f_width = self._dspin(100, 10000, 1500)
+        # defaults = the settings that gave good results in the user's production (10/2026): width 1480 mm,
+        # long search, 120 s, seed 2, 180 deg allowed, tolerance 0.20 mm, 3 attempts ("best result")
+        self.f_width = self._dspin(100, 10000, 1480)
         self.f_ml = self._dspin(0, 500, 0)
         self.f_mr = self._dspin(0, 500, 0)
         self.f_ms = self._dspin(0, 2000, 0)
@@ -304,23 +306,22 @@ class MainWindow(QMainWindow):
         self.f_engine = QComboBox()
         self.f_seed = QSpinBox()
         self.f_seed.setRange(0, 2 ** 31 - 1)
-        self.f_seed.setValue(1)
+        self.f_seed.setValue(2)
         self.f_rot180 = QCheckBox()
         self.f_rot180.setChecked(True)
         self.f_rot90 = QCheckBox()
         self.f_tol = self._dspin(0.01, 2.0, 0.2, 2)
         # application-wide: how many nestings may run at the same time (cores are divided between them)
-        from ..nesting.slots import auto_limit
         self.f_best = QSpinBox()                   # "best result": attempts with different seeds, shortest wins
         self.f_best.setRange(1, 10)
-        self.f_best.setValue(1)
+        self.f_best.setValue(3)
         self.f_parallel = QSpinBox()
         self.f_parallel.setRange(1, 16)
         try:
             lim = int(self.settings_store.value("parallel_nests", 0) or 0)
         except (TypeError, ValueError):
             lim = 0
-        self.f_parallel.setValue(lim or auto_limit())
+        self.f_parallel.setValue(lim or 1)    # default: one nesting at a time, with all the cores (shortest markers)
         NEST_SLOTS.set_limit(self.f_parallel.value())
         self.f_parallel.valueChanged.connect(self._set_parallel)
         self.f_material = QComboBox()
@@ -916,7 +917,7 @@ class MainWindow(QMainWindow):
         self.f_mode.blockSignals(True)
         self.f_mode.clear()
         self.f_mode.addItems([tr("mode_fast"), tr("mode_balanced"), tr("mode_long")])
-        self.f_mode.setCurrentIndex(cur if cur >= 0 else 1)
+        self.f_mode.setCurrentIndex(cur if cur >= 0 else 2)       # default: long search (time stays 120 s)
         self.f_mode.blockSignals(False)
         from ..nesting import sparrow
         cur = self.f_engine.currentIndex()
