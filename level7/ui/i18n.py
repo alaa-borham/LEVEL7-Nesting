@@ -254,6 +254,8 @@ T = {
                      "في الانتظار: جلسة أخرى تعشّق الآن — يبدأ هذا التعشيق تلقائيًا بعد انتهائها"),
     "nest_started": ("Nesting started", "بدأ التعشيق"),
     "nest_stopping": ("Stopping… the best layout so far is kept", "جارٍ الإيقاف… يُحتفظ بأفضل ترتيب حتى الآن"),
+    "nest_stop_slow": ("Still stopping after 20 s - details written to the log (Help > Open log folder)",
+                       "ما زال يحاول الإيقاف بعد 20 ثانية - التفاصيل كُتبت في السجل (مساعدة ← فتح مجلد السجلات)"),
     "nest_cancelled": ("Nesting cancelled before it started", "أُلغي التعشيق قبل أن يبدأ"),
     "parallel": ("Simultaneous nestings", "تعشيقات متزامنة"),
     "ft_parallel": ("How many nestings (sessions / marker list) may run at the same time. The processor cores are "

@@ -89,9 +89,19 @@ def run_parallel(items: list[NestItem], fabric: FabricSettings, settings: NestSe
     placing: dict = {}
     t0 = time.monotonic()
     limit = settings.time_limit + (5.0 if getattr(settings, "hard_time", False) else 60.0)
+    stop_since = None
     while done < workers:
         if stop_event is not None and stop_event.is_set():
             stop.set()
+        if stop.is_set():
+            stop_since = stop_since or time.monotonic()
+            # a worker that does not answer within 3 s of the stop (busy in one long geometry call, or stuck)
+            # is ended: the results already received are used - Stop never waits for it
+            if time.monotonic() - stop_since > 3.0:
+                for p in procs:
+                    if p.is_alive():
+                        p.terminate()
+                break
         try:
             kind, wid, payload = q.get(timeout=0.2)
         except queue.Empty:
@@ -126,8 +136,14 @@ def run_parallel(items: list[NestItem], fabric: FabricSettings, settings: NestSe
             done += 1
             errors.append(payload)
     for p in procs:
-        p.join(timeout=5)
+        p.join(timeout=2)
+        if p.is_alive():
+            p.terminate()
     if best is None:
+        if stop.is_set():                # stopped before any worker reported: nothing placed (at once)
+            ev = threading.Event()
+            ev.set()
+            return NestEngine(items, fabric, settings, stop_event=ev).run()
         # worker processes could not run (e.g. restricted environment): fall back to in-process search
         best = NestEngine(items, fabric, settings, progress=progress, stop_event=stop_event).run()
         return best

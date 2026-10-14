@@ -40,6 +40,16 @@ def _owned_by(w, owner) -> bool:
 TAKEN_OUT = "taken out of the marker"      # Placement.reason of copies the user removed from the marker
 
 
+def _nest_log(msg: str) -> None:
+    """One line per nesting event in logs/nest.log (start / stop / end) - to follow a run on the user's machine."""
+    try:
+        from .app import log_dir
+        with open(os.path.join(log_dir(), "nest.log"), "a", encoding="utf-8") as fh:
+            fh.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {msg}\n")
+    except Exception:
+        pass
+
+
 class OrderSyncCommand(QUndoCommand):
     """The marker's copies changed with the order (MainWindow._sync_marker): undo brings the old list back."""
 
@@ -1901,11 +1911,30 @@ class MainWindow(QMainWindow):
         self.worker = NestWorker(self.project, fabric, st, self.project.cut_order, pinned)
         self.worker.progress.connect(self.on_progress)
         self.worker.finished_ok.connect(self.on_finished)
-        self.worker.failed.connect(lambda e: (self._nest_ui(False), QMessageBox.critical(self, tr("run"), e)))
+        self.worker.failed.connect(lambda e: (_nest_log("failed: " + e.splitlines()[0] if e else "failed"),
+                                              self._nest_ui(False), QMessageBox.critical(self, tr("run"), e)))
         self.worker.waiting.connect(self._nest_waiting)
         self.worker.cancelled.connect(lambda: (self._nest_ui(False), self.statusBar().showMessage(tr("nest_cancelled"))))
         self._nest_ui(True)
+        _nest_log(f"start: time {st.time_limit:g} s x{max(1, st.best_of or 1)}, engine {st.engine}, "
+                  f"workers {NEST_SLOTS.workers()}, note {getattr(self, '_engine_note', '')!r}")
         self.worker.start()
+
+    def _stop_watch(self, worker):
+        """Still running 20 s after Stop: write where every thread is (hang.log) - to find the cause."""
+        if worker is not None and worker.isRunning():
+            _nest_log("still running 20 s after Stop - thread stacks follow in hang.log")
+            try:
+                import faulthandler
+
+                from .app import log_dir
+                with open(os.path.join(log_dir(), "hang.log"), "a", encoding="utf-8") as fh:
+                    fh.write(f"\n=== still nesting 20 s after Stop {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
+                    fh.flush()
+                    faulthandler.dump_traceback(file=fh, all_threads=True)
+            except Exception:
+                pass
+            self.statusBar().showMessage(tr("nest_stop_slow"))
 
     def _builtin_reason(self, fabric, st, pinned) -> str:
         """Why this run uses only the built-in engine (slow on big jobs) instead of sparrow - shown while it runs."""
@@ -1949,10 +1978,13 @@ class MainWindow(QMainWindow):
                                  keep_out=keep_out)
         self.worker.progress.connect(self.on_progress)
         self.worker.finished_ok.connect(self.on_finished)
-        self.worker.failed.connect(lambda e: (self._nest_ui(False), QMessageBox.critical(self, tr("run"), e)))
+        self.worker.failed.connect(lambda e: (_nest_log("failed: " + e.splitlines()[0] if e else "failed"),
+                                              self._nest_ui(False), QMessageBox.critical(self, tr("run"), e)))
         self.worker.waiting.connect(self._nest_waiting)
         self.worker.cancelled.connect(lambda: (self._nest_ui(False), self.statusBar().showMessage(tr("nest_cancelled"))))
         self._nest_ui(True)
+        _nest_log(f"start: time {st.time_limit:g} s x{max(1, st.best_of or 1)}, engine {st.engine}, "
+                  f"workers {NEST_SLOTS.workers()}, note {getattr(self, '_engine_note', '')!r}")
         self.worker.start()
 
     def _check_cut_order(self) -> bool:
@@ -2077,7 +2109,10 @@ class MainWindow(QMainWindow):
             self.btn_stop.setEnabled(False)
             self._pending_preview = None
             self.statusBar().showMessage(tr("nest_stopping"))
-            QApplication.processEvents()
+            self.statusBar().repaint()          # (no processEvents here: re-entering the event loop in a click)
+            _nest_log("stop pressed")
+            w = self.worker
+            QTimer.singleShot(20000, lambda: self._stop_watch(w))
         elif self.view.pick_match:              # Esc also ends picking plaid match points
             self.plaid.b_pick.setChecked(False)
         elif self.view.measure_mode:            # Esc is also 'clear measurement'
@@ -2112,6 +2147,8 @@ class MainWindow(QMainWindow):
         self._strip_height()
 
     def on_finished(self, marker, info):
+        _nest_log(f"finished: stopped={info.get('stopped')} engine={info.get('engine')} "
+                  f"placed={sum(1 for p in marker.placements if p.placed)}/{len(marker.placements)}")
         self._synced_order = self._order_signature() if self.project is not None else None
         self._nest_ui(False)
         if info.get("stopped") and not any(p.placed for p in marker.placements):
@@ -2133,8 +2170,12 @@ class MainWindow(QMainWindow):
             msg += " | " + "; ".join(info["warnings"])
         if info.get("cut_short"):
             msg = tr("nest_cut_short", n=info["cut_short"]) + " | " + msg
-            if not info.get("stopped"):
-                QMessageBox.warning(self, tr("run"), tr("nest_cut_short", n=info["cut_short"]))
+            if not info.get("stopped"):         # not modal: a blocking box (maybe behind the window) froze it
+                box = QMessageBox(QMessageBox.Warning, tr("run"), tr("nest_cut_short", n=info["cut_short"]),
+                                  parent=self)
+                box.setAttribute(Qt.WA_DeleteOnClose)
+                box.setModal(False)
+                box.show()
         self.statusBar().showMessage(msg)
 
     # -- validation messages -----------------------------------------------------------------
