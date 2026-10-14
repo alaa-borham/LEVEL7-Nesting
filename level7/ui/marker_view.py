@@ -333,10 +333,12 @@ class MarkerView(QGraphicsView):
         if f.margin_left or f.margin_right or f.lay_type.value == "folded":
             r = QRectF(f.margin_start, f.margin_left, L - f.margin_start, f.usable_width)
             sc.addRect(r, QPen(QColor(150, 150, 220), 0, Qt.DashLine))
+        pcs = {p.uid: p for p in project.pieces}
         for pl in marker.placements:
-            if not pl.placed:
+            # (a live preview can still name a size of before "add model" renamed the sizes: skipped)
+            if not pl.placed or pl.piece_uid not in pcs or pl.size not in pcs[pl.piece_uid].sizes:
                 continue
-            it = PieceItem(self, pl, project.piece(pl.piece_uid))
+            it = PieceItem(self, pl, pcs[pl.piece_uid])
             sc.addItem(it)
             it.rebuild()
             self.items_by_uid[pl.uid] = it

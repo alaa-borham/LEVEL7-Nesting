@@ -113,7 +113,8 @@ class UpdateManager(QObject):
         dlg = QProgressDialog(tr("upd_downloading", v=info.version), tr("cancel"), 0, 100, self.w)
         dlg.setWindowTitle(tr("updates"))
         dlg.setMinimumDuration(0)
-        dlg.canceled.connect(lambda: setattr(self.dl, "cancel", True))
+        dl = self.dl          # (self.dl is cleared when the download ends; closing the dialog then emits canceled)
+        dlg.canceled.connect(lambda: setattr(dl, "cancel", True))
 
         def prog(d, t):
             dlg.setMaximum(t or 0)

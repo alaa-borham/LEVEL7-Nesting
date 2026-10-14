@@ -31,8 +31,11 @@ def _install_diagnostics(app):
     faulthandler.enable(file=hang)
 
     def heartbeat():
-        faulthandler.cancel_dump_traceback_later()
-        faulthandler.dump_traceback_later(HANG_SECONDS, repeat=False, file=hang)
+        try:                 # (Windows can refuse the watchdog thread now and then: the next beat retries)
+            faulthandler.cancel_dump_traceback_later()
+            faulthandler.dump_traceback_later(HANG_SECONDS, repeat=False, file=hang)
+        except RuntimeError:
+            pass
     t = QTimer(app)
     t.timeout.connect(heartbeat)
     t.start(1000)
@@ -84,7 +87,15 @@ def main(argv=None):
     w = sessions.new_window()
     if files:
         sessions.open_files(files, prefer=w)
-    return app.exec()
+    code = app.exec()
+    from .main_window import ORPHAN_WORKERS
+    if any(w.isRunning() for w in ORPHAN_WORKERS):
+        # a run that did not stop when its window closed: end its worker processes and leave at once (a running
+        # QThread at exit would abort with an error dialog)
+        for p in multiprocessing.active_children():
+            p.terminate()
+        os._exit(code)
+    return code
 
 
 if __name__ == "__main__":

@@ -31,8 +31,11 @@ def _lower_priority():
         pass
 
 
-def _worker(items, fabric, settings, stop, q, wid):
+def _worker(items_path, fabric, settings, stop, q, wid):
     _lower_priority()
+    import pickle
+    with open(items_path, "rb") as fh:          # the pieces come in a file (see run_parallel)
+        items = pickle.load(fh)
     def prog(d):
         if d.get("final"):           # the end result comes with "done" (a final report of a layout cut short
             return                   # was passed on as a "best length")
@@ -73,15 +76,40 @@ def run_parallel(items: list[NestItem], fabric: FabricSettings, settings: NestSe
     workers = max(1, min(4, workers or (os.cpu_count() or 2) - 1))      # beyond 4 seeds the gain is small
     if workers == 1:
         return NestEngine(items, fabric, settings, progress=progress, stop_event=stop_event).run()
+    import pickle
+    import tempfile
     ctx = mp.get_context("spawn")
     stop = ctx.Event()
     q = ctx.Queue()
     procs = []
-    for k in range(workers):
-        st = replace(settings, seed=settings.seed + k)
-        p = ctx.Process(target=_worker, args=(items, fabric, st, stop, q, k), daemon=True)
-        p.start()
-        procs.append(p)
+    # The pieces go to the workers in a file, not through process start: Windows hands start arguments over a
+    # pipe the new process must read, and a big job blocked Process.start() for minutes when a process came up
+    # slowly (antivirus scan of the program) or not at all - Stop could not get through (hang.log, 10/2026).
+    fd, items_path = tempfile.mkstemp(prefix="level7_items_", suffix=".pkl")
+    with os.fdopen(fd, "wb") as fh:
+        pickle.dump(items, fh, protocol=pickle.HIGHEST_PROTOCOL)
+    try:
+        for k in range(workers):
+            if stop_event is not None and stop_event.is_set():
+                break
+            st = replace(settings, seed=settings.seed + k)
+            p = ctx.Process(target=_worker, args=(items_path, fabric, st, stop, q, k), daemon=True)
+            p.start()
+            procs.append(p)
+        if not procs:
+            ev = threading.Event()
+            ev.set()
+            return NestEngine(items, fabric, settings, stop_event=ev).run()
+        return _collect(procs, workers, items, fabric, settings, progress, stop_event, stop, q)
+    finally:
+        try:
+            os.remove(items_path)
+        except OSError:
+            pass
+
+
+def _collect(procs, workers, items, fabric, settings, progress, stop_event, stop, q) -> NestResult:
+    workers = len(procs)
     best: NestResult | None = None
     done = 0
     errors = []
@@ -90,6 +118,7 @@ def run_parallel(items: list[NestItem], fabric: FabricSettings, settings: NestSe
     t0 = time.monotonic()
     limit = settings.time_limit + (5.0 if getattr(settings, "hard_time", False) else 60.0)
     stop_since = None
+    heard = False
     while done < workers:
         if stop_event is not None and stop_event.is_set():
             stop.set()
@@ -104,7 +133,14 @@ def run_parallel(items: list[NestItem], fabric: FabricSettings, settings: NestSe
                 break
         try:
             kind, wid, payload = q.get(timeout=0.2)
+            heard = True
         except queue.Empty:
+            # no worker has said anything in a minute (never came up / stuck): end them, search in-process
+            if not heard and time.monotonic() - t0 > 60.0:
+                for p in procs:
+                    if p.is_alive():
+                        p.terminate()
+                break
             # safety guard; without a hard time limit the first complete layout is waited for (a stop here
             # made every worker return a partial layout 60 s late)
             if time.monotonic() - t0 > limit and (best is not None or getattr(settings, "hard_time", False)):

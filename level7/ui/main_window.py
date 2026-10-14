@@ -40,6 +40,9 @@ def _owned_by(w, owner) -> bool:
 TAKEN_OUT = "taken out of the marker"      # Placement.reason of copies the user removed from the marker
 
 
+ORPHAN_WORKERS: list = []        # runs still going when their window closed (see closeEvent / app.main)
+
+
 def _nest_log(msg: str) -> None:
     """One line per nesting event in logs/nest.log (start / stop / end) - to follow a run on the user's machine."""
     try:
@@ -2311,7 +2314,12 @@ class MainWindow(QMainWindow):
                 return
         if self.worker and self.worker.isRunning():
             self.worker.stop_event.set()
-            self.worker.wait()                  # a deleted running QThread would abort the application
+            # a deleted running QThread would abort the application - but waiting without end froze the close
+            # when a run was stuck (hang.log): after 5 s it is kept alive outside the window (app.py ends it)
+            if not self.worker.wait(5000):
+                _nest_log("close: run still going 5 s after stop - left to finish in the background")
+                self.worker.setParent(None)
+                ORPHAN_WORKERS.append(self.worker)
         dlg = getattr(self, "_batch_dlg", None)
         try:
             if dlg is not None:

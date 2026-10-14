@@ -229,14 +229,16 @@ def _nest_with_sparrow(proj, items, fabric, settings, workers, progress, stop_ev
     remaining = max(5.0, total - (time.monotonic() - t0))
 
     def fallback():
-        """sparrow gave nothing usable: a start cut short by its time limit is not a result - complete it with
-        the built-in engine in the time that is left (the first layout completes, Stop still answers)."""
+        """sparrow gave nothing usable: a start cut short by its time limit is not a result - continue it with
+        the built-in engine in the time that is left."""
         if not any(u.reason == HALT_REASON for u in start.unplaced) or \
                 (stop_event is not None and stop_event.is_set()):
             start.stopped = bool(stop_event is not None and stop_event.is_set())
             return start, "builtin"
-        left = max(5.0, total - (time.monotonic() - t0))
-        res2 = run_parallel(items, fabric, replace(settings, time_limit=left, hard_time=False), workers=workers,
+        # within the user's timer (a complete first layout could take minutes: 207 s seen for 60 s); pieces it
+        # cannot place in time are reported (cut_short warning) instead
+        left = max(10.0, total - (time.monotonic() - t0))
+        res2 = run_parallel(items, fabric, replace(settings, time_limit=left, hard_time=True), workers=workers,
                             progress=progress, stop_event=stop_event)
         return res2, "builtin"
 
