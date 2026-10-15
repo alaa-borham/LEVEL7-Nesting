@@ -32,6 +32,9 @@ def open_any(path: str) -> tuple[Project, list[str]]:
             return read_aama(path)
         from .readers.dxf import read_dxf
         return read_dxf(path)
+    if ext in (".plt", ".hpgl", ".hpg", ".hgl"):
+        from .readers.plt import read_plt
+        return read_plt(path)
     if ext == ".l7n":
         from .project_storage.store import load_project
         return load_project(path), []

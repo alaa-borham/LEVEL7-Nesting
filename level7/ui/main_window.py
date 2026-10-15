@@ -1034,7 +1034,7 @@ class MainWindow(QMainWindow):
             self.open_dialog()
             return
         ps, _ = QFileDialog.getOpenFileNames(self, tr("add_model"), self.settings_store.value("last_dir", ""),
-                                             "Patterns / markers (*.mdl *.MDL *.scb *.SCB *.dxf *.DXF *.l7n);;All (*)")
+                                             "Patterns / markers (*.mdl *.MDL *.scb *.SCB *.dxf *.DXF *.plt *.PLT *.l7n);;All (*)")
         if not ps:
             return
         self.read_tables()
@@ -1085,7 +1085,7 @@ class MainWindow(QMainWindow):
 
     def open_dialog(self):
         ps, _ = QFileDialog.getOpenFileNames(self, tr("open"), self.settings_store.value("last_dir", ""),
-                                             "Patterns / markers (*.mdl *.MDL *.scb *.SCB *.dxf *.DXF *.l7n);;All (*)")
+                                             "Patterns / markers (*.mdl *.MDL *.scb *.SCB *.dxf *.DXF *.plt *.PLT *.l7n);;All (*)")
         self.open_many(ps)
 
     def open_path(self, path):
