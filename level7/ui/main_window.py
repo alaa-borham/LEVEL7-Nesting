@@ -776,6 +776,10 @@ class MainWindow(QMainWindow):
                 b.setProperty("l7_menu", True)
                 b.setContextMenuPolicy(Qt.CustomContextMenu)
                 b.customContextMenuRequested.connect(lambda pos, b=b, m=menu: m.exec(b.mapToGlobal(pos)))
+                # the small arrow under the icon (like Export): this icon has more options - click = its own
+                # action, right-click or press-and-hold = the options
+                b.setMenu(menu)
+                b.setPopupMode(QToolButton.DelayedPopup)
 
     def resizeEvent(self, ev):
         super().resizeEvent(ev)
