@@ -508,7 +508,7 @@ class MainWindow(QMainWindow):
     TOOLBAR = (("open", "open"), ("add_model", "add_model"), ("save", "save"), None, ("undo", None), ("redo", None), None,
                ("rotate180", "rotate180"), ("pin", "pin"), ("measure_tool", "measure"), None,
                ("zoom_fit", "zoom_fit"), ("display_options", "display"), None,
-               ("tab_props", "properties"), ("tab_results", "results"), ("tab_pieces", "pieces"), ("tab_sizes", "sizes"), ("tab_spacing", "margins"), ("tab_plaid", "plaid"), None,
+               ("tab_props", "properties"), ("tab_results", "results"), ("tab_pieces", "pieces"), ("tab_sizes", "sizes"), ("marker_props", "margins"), None,
                ("run", "run"), ("stop", "stop"), ("batch", "batch"), None,
                ("export_menu", "export"), None,
                ("language", "language"))
@@ -534,6 +534,13 @@ class MainWindow(QMainWindow):
         acts["tab_results"] = self._act("tab_results", lambda: self.show_table_tab(5), checkable=True)
         self.tab_actions = (acts["tab_pieces"], acts["tab_sizes"], acts["tab_spacing"], acts["tab_props"],
                             acts["tab_plaid"], acts["tab_results"])
+        # one icon for the marker's own settings: click = the last of the two used, right-click = choose
+        acts["marker_props"] = self.act_marker_props = self._act("marker_props", self.open_marker_props,
+                                                                 checkable=True)
+        from PySide6.QtWidgets import QMenu
+        self.m_marker_props = QMenu(self)
+        self.m_marker_props.addAction(acts["tab_spacing"])
+        self.m_marker_props.addAction(acts["tab_plaid"])
         # one 'Measure' button: click = measure with the chosen kind, right-click = choose distance / curve
         acts["measure_tool"] = self.act_measure_tool = self._act("measure_tool", self.toggle_measure_tool,
                                                                  checkable=True)
@@ -596,6 +603,12 @@ class MainWindow(QMainWindow):
         """("act", action) / ("sep",) / ("theme",) in the user's order; icons added in a later version go last."""
         order = self.settings_store.value("toolbar_order", "") or ""
         hidden = set(filter(None, (self.settings_store.value("toolbar_hidden", "") or "").split(",")))
+        if order and "marker_props" not in order.split(","):   # saved before margins + plaid became one icon
+            ks = order.split(",")
+            pos = next((i for i, k in enumerate(ks) if k in ("tab_spacing", "tab_plaid")), None)
+            if pos is not None:
+                ks.insert(pos, "marker_props")
+                order = ",".join(ks)
         keys = [k for k in order.split(",") if k == "|" or k in self._tb_keys] if order else self._default_order()
         keys += [k for k in self._default_order() if k != "|" and k not in keys]
         out = []
@@ -753,7 +766,7 @@ class MainWindow(QMainWindow):
         if b is not None:
             b.setObjectName("primary")              # the main action stands out (themes.py)
         for action, menu in ((acts["run"], self.m_run), (acts["save"], self.m_save),
-                             (self.act_measure_tool, self.m_measure)):
+                             (self.act_measure_tool, self.m_measure), (acts["marker_props"], self.m_marker_props)):
             b = self._tool_button(action)
             if b is not None and not b.property("l7_menu"):
                 b.setProperty("l7_menu", True)
@@ -806,7 +819,7 @@ class MainWindow(QMainWindow):
                 w = obj if isinstance(obj, QWidget) else None
                 if w is not None and not isinstance(w.window(), QDialog):
                     for pop, action in open_pops:
-                        keep = [pop, self._tool_button(action)]
+                        keep = [pop, self._panel_button(self.tab_actions.index(action))]
                         if pop is self.pieces_popup:
                             keep += [self.view, self.strip]
                         if not any(k is not None and (w is k or k.isAncestorOf(w) or _owned_by(w, k)) for k in keep):
@@ -824,13 +837,33 @@ class MainWindow(QMainWindow):
         else:
             for other in self.table_popups:
                 other.hide()
-            action = self.tab_actions[index]
-            pop.show_below(self._tool_button(action) if hasattr(self, "toolbar") else None)
+            pop.show_below(self._panel_button(index) if hasattr(self, "toolbar") else None)
+            if index in self.MARKER_PROPS:               # the 'Marker properties' icon opens this one next time
+                self.settings_store.setValue("marker_props_tab", index)
         self._sync_tab_actions()
+
+    MARKER_PROPS = (2, 4)        # panels behind the one 'Marker properties' icon: margins / buffers, plaid
+
+    def _panel_button(self, index):
+        """The toolbar button a panel drops down from: its own icon, or 'Marker properties' for margins / plaid."""
+        b = self._tool_button(self.tab_actions[index])
+        if b is None and index in self.MARKER_PROPS and getattr(self, "act_marker_props", None) is not None:
+            b = self._tool_button(self.act_marker_props)
+        return b
+
+    def open_marker_props(self, *_):
+        """'Marker properties' icon: the last of its panels used (margins / plaid); right-click chooses."""
+        try:
+            idx = int(self.settings_store.value("marker_props_tab", 2) or 2)
+        except (TypeError, ValueError):
+            idx = 2
+        self.show_table_tab(idx if idx in self.MARKER_PROPS else 2)
 
     def _sync_tab_actions(self):
         for pop, a in zip(self.table_popups, getattr(self, "tab_actions", ())):
             a.setChecked(pop.isVisible())
+        if getattr(self, "act_marker_props", None) is not None:
+            self.act_marker_props.setChecked(any(self.table_popups[i].isVisible() for i in self.MARKER_PROPS))
 
     def set_theme(self, name):
         from .themes import apply_theme
