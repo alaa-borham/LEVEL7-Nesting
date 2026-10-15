@@ -87,7 +87,11 @@ def main(argv=None):
     w = sessions.new_window()
     if files:
         sessions.open_files(files, prefer=w)
+    from .. import __version__
+    from .main_window import _nest_log
+    _nest_log(f"=== program started, version {__version__}")
     code = app.exec()
+    _nest_log(f"=== program closed normally (code {code})")     # missing after a start = it was killed / crashed
     from .main_window import ORPHAN_WORKERS
     if any(w.isRunning() for w in ORPHAN_WORKERS):
         # a run that did not stop when its window closed: end its worker processes and leave at once (a running

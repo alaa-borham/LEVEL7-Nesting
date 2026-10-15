@@ -57,7 +57,7 @@ def bundle_letter(n: int) -> str:
 
 
 class PieceItem(QGraphicsPathItem):
-    def __init__(self, view, placement, piece):
+    def __init__(self, view, placement, piece, build=True):
         super().__init__()
         self.view = view
         self.placement = placement
@@ -66,13 +66,23 @@ class PieceItem(QGraphicsPathItem):
         self.setFlag(QGraphicsItem.ItemIsMovable, not placement.pinned)
         self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
         self.children_items = []
-        self.rebuild()
+        self._sig = None
+        if build:                     # (show_marker builds once, after the item is in the scene)
+            self.rebuild()
+
+    def state(self):
+        """What the drawing depends on: rebuilt only when it changed (528 pieces took 4.7 s to show a result,
+        every piece drawn 8 times - the window looked frozen)."""
+        pl = self.placement
+        return (pl.x, pl.y, pl.rotation, pl.mirrored, pl.pinned, pl.placed, pl.sx, pl.sy, pl.size,
+                pl.uid in self.view.bad, id(self.view.options), id(self.view.marker))
 
     def _inner_colour(self, base: QColor) -> QColor:
         return QColor(255 - base.red(), 255 - base.green(), 255 - base.blue()) if self.view.options["inverse_inner"] \
             else base
 
     def rebuild(self):
+        self._sig = self.state()
         for c in self.children_items:
             self.scene().removeItem(c) if c.scene() else None
         self.children_items = []
@@ -338,7 +348,7 @@ class MarkerView(QGraphicsView):
             # (a live preview can still name a size of before "add model" renamed the sizes: skipped)
             if not pl.placed or pl.piece_uid not in pcs or pl.size not in pcs[pl.piece_uid].sizes:
                 continue
-            it = PieceItem(self, pl, pcs[pl.piece_uid])
+            it = PieceItem(self, pl, pcs[pl.piece_uid], build=False)
             sc.addItem(it)
             it.rebuild()
             self.items_by_uid[pl.uid] = it
@@ -418,7 +428,8 @@ class MarkerView(QGraphicsView):
             self.bad = set(bad)
         for it in self.items_by_uid.values():
             it.setFlag(QGraphicsItem.ItemIsMovable, not it.placement.pinned)
-            it.rebuild()
+            if it._sig != it.state():
+                it.rebuild()
         self._draw_aux()
 
     def view_angle(self) -> int:

@@ -1604,7 +1604,9 @@ class MainWindow(QMainWindow):
         self.markers_list.blockSignals(False)
         if select is not None and self.project and self.project.markers:
             idx = select if select >= 0 else len(self.project.markers) - 1
+            self.markers_list.blockSignals(True)      # (the row change selected the marker a second time)
             self.markers_list.setCurrentRow(idx)
+            self.markers_list.blockSignals(False)
             self.select_marker(idx)
         elif not (self.project and self.project.markers):
             self.marker = None
@@ -2103,6 +2105,7 @@ class MainWindow(QMainWindow):
 
     def _nest_ui(self, running):
         self._stopping = False
+        self._preview_cost = 0.0
         self.btn_run.setEnabled(not running)
         self.btn_stop.setEnabled(running)
         self.progress_bar.setVisible(running)
@@ -2193,16 +2196,21 @@ class MainWindow(QMainWindow):
             first = getattr(self, "_pending_preview", None) is None
             self._pending_preview = d["result"]
             if first:
-                QTimer.singleShot(self.PREVIEW_INTERVAL_MS, self._draw_preview)
+                # big markers take longer to draw: wait at least 3x the last drawing time, so the window keeps
+                # two thirds of its time for clicks (528 pieces: 0.5 s per drawing every 0.6 s kept it busy)
+                QTimer.singleShot(max(self.PREVIEW_INTERVAL_MS, int(3000 * getattr(self, "_preview_cost", 0.0))),
+                                  self._draw_preview)
 
     def _draw_preview(self):
         r, self._pending_preview = getattr(self, "_pending_preview", None), None
         if r is None or not (self.worker and self.worker.isRunning()):
             return
+        t0 = time.monotonic()
         tmp = Marker(name="(running)", fabric=self.fabric_from_form(), placements=r.placements, length=r.length)
         self.view.show_marker(self.project, tmp)
         self.strip.set_data(self.project, tmp)      # the strip follows the live result (placed = not to place)
         self._strip_height()
+        self._preview_cost = time.monotonic() - t0
 
     def on_finished(self, marker, info):
         _nest_log(f"finished: stopped={info.get('stopped')} engine={info.get('engine')} "
@@ -2375,6 +2383,7 @@ class MainWindow(QMainWindow):
             "Nesting results are heuristic; no global optimum is claimed."))
 
     def closeEvent(self, ev):
+        _nest_log("window close requested" + (" (nesting running)" if self.worker and self.worker.isRunning() else ""))
         if self.dirty and self.project is not None and not getattr(self, "_closing_for_update", False):
             r = QMessageBox.question(self, tr("unsaved_title"), tr("unsaved_text", n=self.project.name),
                                      QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel, QMessageBox.Save)
