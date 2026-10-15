@@ -8,22 +8,26 @@ A PLT holds only pen strokes, no piece data, so the marker is rebuilt from the d
   inner lines. Notch slits drawn as out-and-back spikes become notches.
 * Pieces of the same shape (also turned 180 deg or mirrored) become one part with several placements, so the
   marker can be checked, re-nested and exported. Parts are named "PLT 01" ... in drawing order.
-* Not in a PLT, so set by hand: part names, sizes, materials and the fabric width (estimated from the drawing).
-  The grain is assumed along the marker length as plotted.
+* The size of every piece is read from the text plotted inside it (GRAFIS draws it with a single-stroke font; HP-GL
+  LB labels are read too); pieces of the same shape but another size are separate parts.
+* Not in a PLT, so set by hand: part names, materials and the fabric width (from the file name "..._1480.plt" or
+  estimated from the drawing). The grain is assumed along the marker length as plotted.
 """
 from __future__ import annotations
 
 import math
 import os
 import re
+from collections import Counter
 
-from shapely.geometry import LineString, Polygon
+from shapely.geometry import LineString, Point, Polygon
 
 from ..formats.grafis.container import sha256_bytes
 from ..geometry import bbox, ring_area, transform_points
 from ..model import (CutOrder, FabricSettings, Marker, Notch, Piece, PieceGeometry, Placement, Polyline, Project,
                      SourceInfo, Status)
 from .dxf import strip_spikes
+from .plt_text import ambiguous, candidates, choose, clusters, is_glyph_stroke
 
 UNITS_PER_MM = 40.0
 JOIN_TOL = 0.5            # mm: stroke ends closer than this are joined
@@ -36,8 +40,8 @@ class PltError(ValueError):
     pass
 
 
-def read_strokes(data: bytes) -> list[list[tuple[float, float]]]:
-    """Pen-down polylines (mm) of an HP-GL file."""
+def read_strokes(data: bytes, labels: list | None = None) -> list[list[tuple[float, float]]]:
+    """Pen-down polylines (mm) of an HP-GL file; LB texts go to ``labels`` as (position mm, text)."""
     text = data.decode("latin-1")
     strokes: list[list[tuple[float, float]]] = []
     pos, pen, relative, cur = (0.0, 0.0), False, False, None
@@ -52,6 +56,8 @@ def read_strokes(data: bytes) -> list[list[tuple[float, float]]]:
         i += 2
         if m == "LB":                                   # label text up to the terminator
             j = text.find(term, i)
+            if labels is not None and text[i:n if j < 0 else j].strip():
+                labels.append((pos, text[i:n if j < 0 else j].strip()))
             i = n if j < 0 else j + 1
             continue
         if m == "DT":                                   # label terminator
@@ -125,6 +131,22 @@ def chain(strokes, tol=JOIN_TOL):
     return closed, opens
 
 
+def _plausible(t: str) -> bool:
+    """A text, not a lone mark: short lines and slashes alone read as "-", "/", "1", "I" ..."""
+    return any(c not in "-/.()+1IL7V " for c in t)
+
+
+def _size_name(t: str) -> str:
+    return t.strip().replace(":", "-") or SIZE
+
+
+def _size_sort(s: str):
+    try:
+        return (0, float(s), s)
+    except ValueError:
+        return (1, 0.0, s)
+
+
 _ORIENT = ((0.0, False), (180.0, False), (0.0, True), (180.0, True))
 
 
@@ -150,7 +172,8 @@ def read_plt(path: str):
     issues: list[str] = []
     with open(path, "rb") as fh:
         data = fh.read()
-    strokes = read_strokes(data)
+    lb: list = []
+    strokes = read_strokes(data, lb)
     if not strokes:
         raise PltError("no drawing (pen-down strokes) in this PLT / HP-GL file")
     closed, opens = chain(strokes)
@@ -182,14 +205,57 @@ def read_plt(path: str):
         raise PltError("no closed piece outlines found in this PLT / HP-GL file")
     pieces_.sort(key=lambda s: (round(s[3].bounds[0], 1), round(s[3].bounds[1], 1)))   # drawing order along x
     with_inner = opens + inner
-    proj = Project(name=os.path.splitext(os.path.basename(path))[0], size_names=[SIZE])
+    # texts plotted inside the pieces (GRAFIS: the size, drawn with a single-stroke font) and HP-GL labels
+    texts: dict[int, list] = {}                          # piece index -> [(text, strokes)]
+    glyphs = [o for o in opens if is_glyph_stroke(o)]
+    found_ = []                                          # (piece index, strokes, readings)
+    for cl in clusters(glyphs):
+        c = Point(sum(p[0] for s in cl for p in s) / sum(len(s) for s in cl),
+                  sum(p[1] for s in cl for p in s) / sum(len(s) for s in cl))
+        k = next((i for i, s in enumerate(pieces_) if s[3].contains(c)), None)
+        if k is not None:
+            found_.append((k, cl, candidates(cl)))
+    # a text that also reads turned 180 deg (6 / 9) takes the direction of the clear texts of its piece, else of
+    # most clear texts of the marker
+    clear = [(k, cs[0][1]) for k, _, cs in found_ if cs and not ambiguous(cs)]
+    overall = [r for r, _ in Counter(r for _, r in clear).most_common()]
+    for k, cl, cs in found_:
+        own = [r for r, _ in Counter(r for kk, r in clear if kk == k).most_common()]
+        t, _ = choose(cs, own + overall)
+        if t and _plausible(t):
+            texts.setdefault(k, []).append((t, cl))
+    for pos, t in lb:
+        k = next((i for i, s in enumerate(pieces_) if s[3].contains(Point(pos))), None)
+        if k is not None:
+            texts.setdefault(k, []).append((t, []))
+    for v in texts.values():                              # "FRONT 44": the size is the last word
+        for i, (t, cl) in enumerate(list(v)):
+            words = [w for w in t.split() if not (w.startswith("(") and w.endswith(")"))]   # "(M)" = mirrored
+            if len(words) == 1:
+                v[i] = (words[0], cl)
+            elif len(words) > 1:
+                v[i] = (words[-1], cl)
+                v.append((" ".join(words[:-1]), []))
+    used = {id(st) for v in texts.values() for _, cl in v for st in cl}
+    with_inner = [o for o in with_inner if id(o) not in used]          # read texts are not inner lines
+    proj = Project(name=os.path.splitext(os.path.basename(path))[0], size_names=[])
     proj.sources.append(SourceInfo(os.path.abspath(path), "plt", sha256_bytes(data), len(data),
                                    notes=["HP-GL / PLT import: pieces rebuilt from the plotted outlines"]))
-    groups: list[tuple[Piece, list, Polygon]] = []       # (part, canonical cut, its polygon)
+    read = {_size_name(sorted(v, key=lambda t: (len(t[0]), t[0]))[0][0]) for v in texts.values()}
+    only = next(iter(read)) if len(read) == 1 else None      # one size in the marker: small parts without text too
+    groups: list[tuple[Piece, list, Polygon, str]] = []  # (part, canonical cut, its polygon, size)
     placements = []
-    for raw, pts, spikes, poly in pieces_:
+    unread = 0
+    for idx, (raw, pts, spikes, poly) in enumerate(pieces_):
+        found = sorted(texts.get(idx, []), key=lambda t: (len(t[0]), t[0]))
+        size = _size_name(found[0][0]) if found else (only or SIZE)
+        unread += not found and only is None
+        extra = " ".join(dict.fromkeys(w for t, _ in found[1:] for w in t.split()
+                                       if w != size and w.strip("?")))     # other texts, once, without the size
         hit = None
-        for part, cut, cpoly in groups:
+        for part, cut, cpoly, gsize in groups:
+            if gsize != size:
+                continue
             m = _match(cut, cpoly, poly)
             if m is not None:
                 hit = (part, m)
@@ -198,7 +264,7 @@ def read_plt(path: str):
             x0, y0 = poly.bounds[0], poly.bounds[1]
             cut = [(x - x0, y - y0) for x, y in pts]
             k = len(groups) + 1
-            g = PieceGeometry(size=SIZE, cut=cut, source=f"PLT outline #{k}", source_unit="plotter unit",
+            g = PieceGeometry(size=size, cut=cut, source=f"PLT outline #{k}", source_unit="plotter unit",
                               unit_factor=1.0 / UNITS_PER_MM)
             g.completeness = {"cut": Status.CONFIRMED.value, "grain": Status.PROBABLE.value,
                               "notches": Status.PROBABLE.value if spikes else Status.UNKNOWN.value}
@@ -210,16 +276,16 @@ def read_plt(path: str):
             for op in with_inner:
                 if len(op) > 1 and area.contains(LineString(op)):
                     g.internal.append(Polyline([(x - x0, y - y0) for x, y in op]))
-            part = Piece(uid=Piece.new_uid(), source_id=f"plt:{k}", number=k, name=f"PLT {k:02d}",
-                         sizes={SIZE: g}, grain_angle=0.0,
+            part = Piece(uid=Piece.new_uid(), source_id=f"plt:{k}", number=k,
+                         name=f"PLT {k:02d}" + (f" {extra}" if extra else ""), sizes={size: g}, grain_angle=0.0,
                          notes=["from a PLT: name, material and grain direction are not in the file - check them"])
             cpoly = Polygon(cut).buffer(0)
-            groups.append((part, cut, cpoly))
+            groups.append((part, cut, cpoly, size))
             hit = (part, (0.0, False, x0, y0))
         part, (rot, mir, dx, dy) = hit
         if mir:
             part.allow_mirror = True
-        placements.append(Placement(uid=Piece.new_uid(), piece_uid=part.uid, size=SIZE, x=dx, y=dy,
+        placements.append(Placement(uid=Piece.new_uid(), piece_uid=part.uid, size=size, x=dx, y=dy,
                                     rotation=rot, mirrored=mir))
     proj.pieces = [g[0] for g in groups]
     counts = {}
@@ -228,7 +294,8 @@ def read_plt(path: str):
         counts[pl.piece_uid] = (n, m + 1) if pl.mirrored else (n + 1, m)
     for p in proj.pieces:
         p.default_count, p.default_mirrored = counts[p.uid]
-    proj.cut_order = CutOrder(size_quantities={SIZE: 1}, piece_counts=dict(counts))
+    proj.size_names = sorted({pl.size for pl in placements}, key=_size_sort)
+    proj.cut_order = CutOrder(size_quantities={sz: 1 for sz in proj.size_names}, piece_counts=dict(counts))
     allb = [s[3].bounds for s in pieces_]
     x0, y0 = min(b[0] for b in allb), min(b[1] for b in allb)
     if x0 < -0.5 or y0 < -0.5 or x0 > 50 or y0 > 50:      # drawing not at the plotter origin: move it to 0,0
@@ -247,8 +314,9 @@ def read_plt(path: str):
     marker = Marker(name=proj.name, fabric=FabricSettings(width=width), placements=placements, length=length,
                     origin="original")
     proj.markers.append(marker)
-    issues.append(f"PLT: {len(placements)} pieces drawn, {len(proj.pieces)} different shapes; names, sizes and "
-                  f"materials are not in a PLT")
-    if opens and not any(p.sizes[SIZE].internal for p in proj.pieces):
-        issues.append(f"{len(opens)} open strokes outside the pieces were ignored")
+    issues.append(f"PLT: {len(placements)} pieces drawn, {len(proj.pieces)} different shapes, sizes "
+                  f"{', '.join(s for s in proj.size_names if s != SIZE) or '-'} read from the texts in the pieces; "
+                  f"part names and materials are not in a PLT")
+    if unread:
+        issues.append(f"{unread} pieces without a readable size text: size \"{SIZE}\" - check them")
     return proj, issues
