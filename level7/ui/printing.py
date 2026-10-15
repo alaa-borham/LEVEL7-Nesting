@@ -32,11 +32,22 @@ class PrintJob:
     names: bool = True
     fill: bool = True
     extra: dict = field(default_factory=dict)
+    marks: list = field(default_factory=list)  # watermark corners (tl, tr, bl) in marker mm, one per piece
+    art: object = None                         # watermark_art.Art drawing them
 
 
-def build_job(project, marker, placements, title, info, **kw) -> PrintJob:
-    """Pieces of ``placements`` (placed ones) as print outlines; the whole marker shows the fabric too."""
+def build_job(project, marker, placements, title, info, watermark: bool = True, **kw) -> PrintJob:
+    """Pieces of ``placements`` (placed ones) as print outlines; the whole marker shows the fabric too.
+    ``watermark``: the project's logo / word on the pieces (when it is switched on)."""
+    from .. import watermark as W
     pcs = {p.uid: p for p in project.pieces}
+    cfg = W.settings(project)
+    art = None
+    if watermark and W.active(cfg):
+        from .watermark_art import art_for
+        art = art_for(cfg)
+        art = art if art.ok else None
+    marks = []
     out = []
     for pl in placements:
         pc = pcs.get(pl.piece_uid)
@@ -44,6 +55,10 @@ def build_job(project, marker, placements, title, info, **kw) -> PrintJob:
             continue
         pts = placement_points(pc.sizes[pl.size].cut, pl)
         out.append((pts, f"{pc.name}  {pl.size.split(':', 1)[-1]}"))
+        if art is not None:
+            c = W.placement_corners(pc, pl, cfg, art.aspect)
+            if c is not None:
+                marks.append(c)
     whole = len(placements) == len(marker.placements)
     if whole:
         L = max([marker.length or 0.0] + [bbox(p)[2] for p, _ in out])
@@ -54,7 +69,7 @@ def build_job(project, marker, placements, title, info, **kw) -> PrintJob:
         world = (min(b[0] for b in bs) - 10, min(b[1] for b in bs) - 10,
                  max(b[2] for b in bs) + 10, max(b[3] for b in bs) + 10)
         fabric = None
-    return PrintJob(out, world, fabric, title, info, **kw)
+    return PrintJob(out, world, fabric, title, info, marks=marks, art=art, **kw)
 
 
 def setup_printer(printer: QPrinter, job: PrintJob) -> None:
@@ -147,11 +162,12 @@ def _page(p, job, window, scale, mm, aw, ah, k, n, col, row, cols, rows):
         p.setPen(QPen(QColor(120, 120, 120), max(1.0, 0.3 * mm), Qt.DashLine))
         p.setBrush(Qt.NoBrush)
         p.drawRect(QRectF(to_px(0, W), to_px(L, 0)))
-    font = QFont("Segoe UI")
+    shown = []
     for pts, label in job.pieces:
         b = bbox(pts)
         if b[2] < wx0 or b[0] > wx1 or b[3] < wy0 or b[1] > wy1:
             continue
+        shown.append((b, label))
         poly = QPolygonF([to_px(x, y) for x, y in pts])
         path = QPainterPath()
         path.addPolygon(poly)
@@ -159,15 +175,23 @@ def _page(p, job, window, scale, mm, aw, ah, k, n, col, row, cols, rows):
         p.setBrush(QColor(235, 235, 235) if job.fill else Qt.NoBrush)
         p.setPen(QPen(QColor(0, 0, 0), max(1.0, 0.25 * mm)))
         p.drawPath(path)
-        if job.names:
-            w_px, h_px = (b[2] - b[0]) * s, (b[3] - b[1]) * s
-            size = max(4.0, min(10.0, min(w_px, h_px) / mm / 3.5))        # points, fits small pieces
-            font.setPointSizeF(size)
-            p.setFont(font)
-            c = to_px((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)
-            p.setPen(QPen(QColor(40, 40, 40)))
-            p.drawText(QRectF(c.x() - w_px / 2, c.y() - h_px / 2, w_px, h_px), Qt.AlignCenter | Qt.TextWordWrap,
-                       label)
+    if job.art is not None:                                     # watermark: over the fill, under the names
+        for tl, tr, bl in job.marks:
+            xs = (tl[0], tr[0], bl[0], tr[0] + bl[0] - tl[0])
+            ys = (tl[1], tr[1], bl[1], tr[1] + bl[1] - tl[1])
+            if max(xs) < wx0 or min(xs) > wx1 or max(ys) < wy0 or min(ys) > wy1:
+                continue
+            a, b, c = (to_px(*q) for q in (tl, tr, bl))
+            job.art.draw(p, (a.x(), a.y()), (b.x(), b.y()), (c.x(), c.y()))
+    font = QFont("Segoe UI")
+    for b, label in shown if job.names else ():
+        w_px, h_px = (b[2] - b[0]) * s, (b[3] - b[1]) * s
+        size = max(4.0, min(10.0, min(w_px, h_px) / mm / 3.5))            # points, fits small pieces
+        font.setPointSizeF(size)
+        p.setFont(font)
+        c = to_px((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)
+        p.setPen(QPen(QColor(40, 40, 40)))
+        p.drawText(QRectF(c.x() - w_px / 2, c.y() - h_px / 2, w_px, h_px), Qt.AlignCenter | Qt.TextWordWrap, label)
     p.restore()
     p.setPen(QPen(QColor(0, 0, 0), max(1.0, 0.2 * mm)))
     p.setBrush(Qt.NoBrush)

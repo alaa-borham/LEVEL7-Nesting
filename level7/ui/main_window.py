@@ -475,6 +475,7 @@ class MainWindow(QMainWindow):
         self._act_full_exit.setEnabled(False)
         self.addAction(self._act_full_exit)
         self.m_view.addAction(self._act("display_options", self.display_options, "Ctrl+D"))
+        self.m_view.addAction(self._act("watermark", self.watermark_dialog))
         self.m_view.addAction(self._act("tb_customize", lambda: self.customize_toolbar()))
         self.m_theme = self.m_view.addMenu("")
         from PySide6.QtGui import QActionGroup
@@ -549,6 +550,8 @@ class MainWindow(QMainWindow):
         self.m_marker_props = QMenu(self)
         self.m_marker_props.addAction(acts["tab_spacing"])
         self.m_marker_props.addAction(acts["tab_plaid"])
+        self.m_marker_props.addSeparator()
+        self.m_marker_props.addAction(self._act("watermark", self.watermark_dialog))
         # one 'Measure' button: click = measure with the chosen kind, right-click = choose distance / curve
         acts["measure_tool"] = self.act_measure_tool = self._act("measure_tool", self.toggle_measure_tool,
                                                                  checkable=True)
@@ -1362,7 +1365,30 @@ class MainWindow(QMainWindow):
         sub.addAction(tr("mat_none"), lambda: self._set_materials(rows, ""))
         sub.addSeparator()
         sub.addAction(tr("mat_new"), lambda: (lambda c: c and self._set_materials(rows, c))(self._ask_material()))
+        uids = [t.item(r, 0).data(Qt.UserRole) for r in rows if t.item(r, 0) is not None]
+        wm = m.addMenu(tr("wm_title"))
+        wm.addAction(tr("wm_on_selected", n=len(uids)), lambda: self._watermark_pieces(uids, True))
+        wm.addAction(tr("wm_off_selected", n=len(uids)), lambda: self._watermark_pieces(uids, False))
         m.exec(t.viewport().mapToGlobal(pos))
+
+    def watermark_dialog(self):
+        """Logo / word on all pieces (screen and printing only)."""
+        if self.project is None:
+            return
+        from .watermark_dialog import WatermarkDialog
+        old = dict(self.project.watermark or {})
+        if WatermarkDialog(self).exec() == QDialog.Accepted and self.project.watermark != old:
+            self.mark_dirty()
+
+    def _watermark_pieces(self, uids, on):
+        """Pieces table right-click: these parts with / without the watermark."""
+        from .. import watermark as W
+        cfg = W.settings(self.project)
+        ex = [u for u in cfg.get("excluded") or [] if u not in uids] + ([] if on else list(uids))
+        if ex != list(cfg.get("excluded") or []):
+            self.project.watermark = dict(self.project.watermark or {}, excluded=ex)
+            self.view.refresh_watermark()
+            self.mark_dirty()
 
     def _refresh_material_groups(self, select=None):
         """Material to nest: the material codes used by the pieces of the file (as assigned in the pieces table),

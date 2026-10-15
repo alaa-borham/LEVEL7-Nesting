@@ -111,4 +111,4 @@ def project_from_dict(d: dict) -> Project:
                    sources=[SourceInfo(**_known(SourceInfo, s)) for s in d.get("sources", [])], cut_order=cut_order,
                    nest_settings=NestSettings(**_known(NestSettings, d.get("nest_settings", {}))), markers=markers,
                    export_configs=d.get("export_configs", {}), reports=d.get("reports", {}),
-                   sbinfo=d.get("sbinfo", {}))
+                   sbinfo=d.get("sbinfo", {}), watermark=d.get("watermark", {}) or {})

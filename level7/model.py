@@ -205,6 +205,7 @@ class Project:
     export_configs: dict = field(default_factory=dict)
     reports: dict = field(default_factory=dict)
     sbinfo: dict = field(default_factory=dict)
+    watermark: dict = field(default_factory=dict)   # logo / word on the pieces, screen + printing (watermark.py)
 
     def piece(self, uid: str) -> Piece:
         for p in self.pieces:

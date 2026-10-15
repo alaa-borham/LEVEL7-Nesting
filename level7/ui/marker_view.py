@@ -33,7 +33,7 @@ def color_for(key: str) -> QColor:
 
 DEFAULT_OPTIONS = {
     # "Display in the pieces" (GRAFIS: Marker display options)
-    "symbols": False, "size_bundle": True, "buffer": True, "marking": False, "grain": False, "internal": False,
+    "symbols": False, "watermark": True, "size_bundle": True, "buffer": True, "marking": False, "grain": False, "internal": False,
     "piece_names": False, "direction": True, "view_rot90": False, "view_rot180": False,     # direction arrow (→ / ← = turned 180°) next to the label
     # "Display auxiliary objects"
     "efficiency_mark": True, "last_efficiency": True, "white_marking": True,
@@ -56,6 +56,25 @@ def bundle_letter(n: int) -> str:
     return s
 
 
+class WatermarkItem(QGraphicsItem):
+    """The logo / word on one piece (scene = marker millimetres)."""
+
+    def __init__(self, art, corners, parent):
+        super().__init__(parent)
+        self.art, self.corners = art, corners
+        tl, tr, bl = corners
+        br = (tr[0] + bl[0] - tl[0], tr[1] + bl[1] - tl[1])
+        xs, ys = [c[0] for c in (tl, tr, bl, br)], [c[1] for c in (tl, tr, bl, br)]
+        self._rect = QRectF(min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys))
+        self.setAcceptedMouseButtons(Qt.NoButton)
+
+    def boundingRect(self):
+        return self._rect
+
+    def paint(self, painter, option, widget=None):
+        self.art.draw(painter, *self.corners, screen=True)
+
+
 class PieceItem(QGraphicsPathItem):
     def __init__(self, view, placement, piece, build=True):
         super().__init__()
@@ -75,7 +94,7 @@ class PieceItem(QGraphicsPathItem):
         every piece drawn 8 times - the window looked frozen)."""
         pl = self.placement
         return (pl.x, pl.y, pl.rotation, pl.mirrored, pl.pinned, pl.placed, pl.sx, pl.sy, pl.size,
-                pl.uid in self.view.bad, id(self.view.options), id(self.view.marker))
+                pl.uid in self.view.bad, id(self.view.options), id(self.view.marker), self.view.wm_key)
 
     def _inner_colour(self, base: QColor) -> QColor:
         return QColor(255 - base.red(), 255 - base.green(), 255 - base.blue()) if self.view.options["inverse_inner"] \
@@ -171,6 +190,13 @@ class PieceItem(QGraphicsPathItem):
                 pen.setCosmetic(True)
                 it.setPen(pen)
                 it.setAcceptedMouseButtons(Qt.NoButton)
+                self.children_items.append(it)
+        wm = self.view.wm
+        if wm is not None:
+            from ..watermark import placement_corners
+            corners = placement_corners(self.piece, pl, self.view.wm_cfg, wm.aspect)
+            if corners is not None:
+                it = WatermarkItem(wm, corners, self)
                 self.children_items.append(it)
         lines = []
         if o["size_bundle"]:
@@ -273,6 +299,9 @@ class MarkerView(QGraphicsView):
         self.bad: set[str] = set()
         self.items_by_uid: dict[str, PieceItem] = {}
         self.project = None
+        self.wm = None                     # watermark drawing (watermark_art.Art) or None
+        self.wm_cfg: dict = {}
+        self.wm_key = None
         self.marker = None
         self.model_tags: list[str] = []
         self.measure_mode = False
@@ -324,6 +353,7 @@ class MarkerView(QGraphicsView):
         self.model_tags = model_tags(project) if project is not None else []
         self.project, self.marker = project, marker
         self.bad = set(bad or [])
+        self.update_watermark()
         sc = self.scene()
         sc.clear()
         self._measure_item = None
@@ -363,6 +393,26 @@ class MarkerView(QGraphicsView):
         # little room below the fabric (the marker sits at the bottom of the view), more above it (pieces taken out)
         sc.setSceneRect(QRectF(-60, -40, max(L, (self.last_result or (0,))[0]) + 260, W + 340))
         self._cover_view()
+
+    def update_watermark(self):
+        """Watermark settings of the project (screen): the logo is decoded once, pieces redrawn when they change."""
+        from .. import watermark as W
+        cfg = W.settings(self.project) if self.project is not None else dict(W.DEFAULTS)
+        if self.options.get("watermark", True) and W.active(cfg):
+            from .watermark_art import art_for
+            art = art_for(cfg)
+            self.wm = art if art.ok else None
+        else:
+            self.wm = None
+        self.wm_cfg = cfg
+        self.wm_key = (id(self.wm), repr(sorted((k, v) for k, v in cfg.items() if k != "image_b64"))) \
+            if self.wm is not None else None
+
+    def refresh_watermark(self):
+        """After a change of the watermark settings: only the pieces are redrawn."""
+        self.update_watermark()
+        for it in self.items_by_uid.values():
+            it.rebuild()
 
     def _draw_aux(self):
         sc = self.scene()

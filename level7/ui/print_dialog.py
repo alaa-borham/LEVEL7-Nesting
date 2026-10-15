@@ -48,8 +48,13 @@ class PrintMarkerDialog(QDialog):
         self.names.setChecked(True)
         self.fill = QCheckBox(tr("pr_fill"))
         self.fill.setChecked(True)
+        self.wm = QCheckBox(tr("pr_watermark"))
+        from .. import watermark as W
+        self.wm.setEnabled(W.active(W.settings(project)))
+        self.wm.setChecked(self.wm.isEnabled())
         v.addWidget(self.names)
         v.addWidget(self.fill)
+        v.addWidget(self.wm)
         self.pages = QLabel()
         v.addWidget(self.pages)
         bs = QHBoxLayout()
@@ -71,7 +76,7 @@ class PrintMarkerDialog(QDialog):
                                   paper=self.paper.currentText(),
                                   orientation=("auto", "portrait", "landscape")[self.orient.currentIndex()],
                                   real_size=self.r_real.isChecked(), names=self.names.isChecked(),
-                                  fill=self.fill.isChecked())
+                                  fill=self.fill.isChecked(), watermark=self.wm.isChecked())
 
     def _printer(self, job, mode=QPrinter.HighResolution) -> QPrinter:
         pr = QPrinter(mode)
