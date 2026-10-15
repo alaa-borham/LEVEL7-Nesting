@@ -27,6 +27,10 @@ from .updates import UpdateManager
 
 
 # ---------------------------------------------------------------------------------- undo
+from PySide6.QtWidgets import QInputDialog as _QInputDialog  # noqa: E402  (prompts a panel itself opens)
+from PySide6.QtWidgets import QProgressDialog as _QProgressDialog  # noqa: E402
+
+
 def _owned_by(w, owner) -> bool:
     """w lives in a pop-up list that belongs to owner (e.g. the list of a combo box inside a panel)."""
     p = w
@@ -809,6 +813,15 @@ class MainWindow(QMainWindow):
         """A click outside an open panel closes it (the pieces table stays open for clicks on the marker / strip,
         so selected pieces are highlighted in it); clicks in the panel's own lists, its toolbar icon or a dialog
         do not count."""
+        if ev.type() == QEvent.Show and isinstance(obj, QDialog) and obj.isWindow() and not isinstance(
+                obj, (QMessageBox, QFileDialog, _QInputDialog, _QProgressDialog)) and \
+                getattr(self, "table_popups", None) and obj.parent() is not None and obj.window() is not self:
+            # a dialog opens (display options, export, settings ...): the open panels close - one window at a time
+            if any(p.isVisible() for p in self.table_popups) and (obj.parent() is self or self.isAncestorOf(obj)
+                                                                   or obj.parent().window() is self):
+                for p in self.table_popups:
+                    p.hide()
+                self._sync_tab_actions()
         if ev.type() == QEvent.MouseButtonPress and getattr(self, "tab_actions", None):
             gp = ev.globalPosition()
             key = (ev.timestamp(), round(gp.x(), 1), round(gp.y(), 1))      # the copies passed on keep both
