@@ -499,6 +499,10 @@ class MainWindow(QMainWindow):
         self.m_export.addAction(self._act("export_iso", lambda: self.export("iso")))
         self.m_export.addAction(self._act("export_scb", lambda: self.export("scb")))
         self.m_export.addSeparator()
+        self.act_print = self._act("print_marker", self.print_marker, "Ctrl+P")
+        self.m_export.addAction(self.act_print)            # A4 / A3: whole marker or the selected pieces
+        self.m_file.addAction(self.act_print)
+        self.m_export.addSeparator()
         self.m_export.addAction(self._act("plotter_settings", self.plotter_settings))
         self.m_help.addAction(self._act("check_updates", self.check_updates))
         self.act_auto_upd = self._act("auto_updates", self._set_auto_updates, checkable=True, checked=True)
@@ -2330,6 +2334,18 @@ class MainWindow(QMainWindow):
         from .plot_settings import default_config
         raw = self.project.export_configs.get("plt") if self.project else None
         return PlotterConfig(**raw) if raw else default_config(self.settings_store)
+
+    def print_marker(self):
+        """Print on A4 / A3: the whole marker or the selected pieces, one page or real size (1:1)."""
+        if not self.marker or self._busy():
+            return
+        from .print_dialog import PrintMarkerDialog
+        st = self.marker.stats or marker_stats(self.project, self.marker)
+        placed = [pl for pl in self.marker.placements if pl.placed]
+        info = (f"L {self._fmt_len(st['length_mm'])}   W {self._fmt_len(self.marker.fabric.width)}   "
+                f"E {st['efficiency_total_width_pct']:.1f} %   {len(placed)} pcs")
+        sel = [pl for pl in self.view.selected_placements() if pl.placed]
+        PrintMarkerDialog(self, self.project, self.marker, sel, self.marker.name or self.project.name, info).exec()
 
     def plotter_settings(self):
         import json

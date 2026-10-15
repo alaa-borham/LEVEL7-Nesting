@@ -14,7 +14,8 @@ elif os.environ.get("CI"):
     raise SystemExit("build-licenses missing: run tools/collect_licenses.py before PyInstaller")
 if os.environ.get("CI") and not os.path.isfile(os.path.join(ROOT, "engines", "sparrow.exe" if os.name == "nt" else "sparrow")):
     raise SystemExit("engines/sparrow.exe missing: the release build must bundle the sparrow engine")
-hidden = ["shapely", "pyclipper", "ezdxf", "level7.nesting.parallel", "PySide6.QtNetwork", "openpyxl"]
+hidden = ["shapely", "pyclipper", "ezdxf", "level7.nesting.parallel", "PySide6.QtNetwork", "PySide6.QtPrintSupport",
+          "openpyxl"]
 excl = ["PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.Qt3DCore", "PySide6.QtQuick",
         "PySide6.QtQml", "PySide6.QtMultimedia", "PySide6.QtPdf", "tkinter", "matplotlib"]
 
