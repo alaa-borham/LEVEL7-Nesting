@@ -2218,8 +2218,10 @@ class MainWindow(QMainWindow):
         v = info["validation"]
         msg = tr("done", v=self.issues_summary(v, one_line=True))
         if info.get("attempts"):
+            # one unit for every length in the status bar (metres, or mm when chosen in the display options)
             msg = tr("best_done", n=len(info["attempts"]),
-                     l=" / ".join(f"{L:.0f}" for _s, L, _ok in info["attempts"]), b=marker.length) + " | " + msg
+                     l=" / ".join(self._fmt_len(L) for _s, L, _ok in info["attempts"]),
+                     b=self._fmt_len(marker.length)) + " | " + msg
         if info.get("warnings"):
             msg += " | " + "; ".join(info["warnings"])
         if info.get("cut_short"):

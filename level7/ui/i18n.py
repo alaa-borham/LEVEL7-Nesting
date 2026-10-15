@@ -270,7 +270,7 @@ T = {
                    "كاملًا)، ويُحفظ أقصر ماركر صحيح. الوقت الكلي = المحاولات × زمن البحث."),
     "best_result": ("Best result (several attempts, shortest wins)", "أفضل نتيجة (عدة محاولات، يُحفظ الأقصر)"),
     "attempt_of": ("Attempt {k}/{n}:", "محاولة {k}/{n}:"),
-    "best_done": ("Best of {n} attempts ({l} mm) -> {b:.1f} mm", "أفضل {n} محاولات ({l} مم): الأقصر {b:.1f} مم"),
+    "best_done": ("Best of {n} attempts ({l}) -> {b}", "أفضل {n} محاولات ({l}): الأقصر {b}"),
     "eng_builtin_only": ("built-in engine only (slow on big jobs): {why}", "المحرك الداخلي فقط (بطيء مع الشغلات الكبيرة): {why}"),
     "eng_why_chosen": ("chosen in the nesting settings", "مختار في إعدادات التعشيق"),
     "eng_why_missing": ("sparrow is not installed", "محرك sparrow غير موجود"),
