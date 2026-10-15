@@ -340,7 +340,7 @@ class MainWindow(QMainWindow):
         self.form_spacing.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
         self.form_spacing.setHorizontalSpacing(6)
         self.form_spacing.setVerticalSpacing(3)
-        for key, wid in (("spacing", self.f_sp), ("margin_l", self.f_ml), ("margin_r", self.f_mr), ("margin_s", self.f_ms),
+        for key, wid in (("margin_l", self.f_ml), ("margin_r", self.f_mr), ("margin_s", self.f_ms),
                          ("margin_e", self.f_me), ("buffer_x", self.f_bx),
                          ("buffer_y", self.f_by), ("shrink_x", self.f_shx), ("shrink_y", self.f_shy)):
             lab = QLabel()
@@ -350,7 +350,7 @@ class MainWindow(QMainWindow):
             self.form_rows.append((lab, key))
         from PySide6.QtCore import QSize as _QSize
         from .table_popup import TablePopup
-        self.spacing_popup = TablePopup(self, mw, _QSize(320, 330))
+        self.spacing_popup = TablePopup(self, mw, _QSize(320, 275))
         self.table_popups = self.table_popups + (self.spacing_popup,)
         # plaid / stripe matching: fabric repeat + match point per piece
         from .plaid_panel import PlaidPanel
@@ -361,7 +361,7 @@ class MainWindow(QMainWindow):
         self.plaid.pick_toggled.connect(self._plaid_pick)
         self.view.match_picked.connect(self._match_picked)
         self.view.pick_finished.connect(lambda: self.plaid.b_pick.setChecked(False))
-        for key, wid in (("width", self.f_width), ("lay", self.f_lay),
+        for key, wid in (("width", self.f_width), ("spacing", self.f_sp), ("lay", self.f_lay),
                          ("max_len", self.f_maxlen), ("material", self.f_material), ("mode", self.f_mode), ("engine", self.f_engine),
                          ("time", self.f_time), ("seed", self.f_seed), ("rot180", self.f_rot180),
                          ("rot90", self.f_rot90), ("tolerance", self.f_tol), ("best_of", self.f_best),
@@ -384,7 +384,7 @@ class MainWindow(QMainWindow):
         btns.addWidget(self.btn_stop)
         self.form.addRow(btns)
         # nesting properties: drop-down panel under the toolbar icon "Properties" (more room for the marker)
-        self.props_popup = TablePopup(self, w, _QSize(330, 420))
+        self.props_popup = TablePopup(self, w, _QSize(330, 448))
         self.table_popups = self.table_popups + (self.props_popup, self.plaid_popup)
         self.btn_run.clicked.connect(self.props_popup.hide)
 
@@ -949,7 +949,7 @@ class MainWindow(QMainWindow):
         self.plaid_popup.title.setText(tr("tab_plaid"))
         self.plaid.retranslate()
         self._measure_icon()
-        self.props_popup.title.setText(tr("fabric"))
+        self.props_popup.title.setText(tr("tb_tab_props"))
         self.results_popup.title.setText(tr("results"))
         self.pieces_table.setHorizontalHeaderLabels([tr(k) for k in ("col_use", "col_name", "col_mat", "col_sizes",
                                                                      "col_count", "col_mirror", "col_grain")])
