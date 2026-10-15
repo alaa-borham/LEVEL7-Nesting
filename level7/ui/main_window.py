@@ -639,7 +639,7 @@ class MainWindow(QMainWindow):
     # -- toolbar wrapping ----------------------------------------------------------------------
     def _entry_width(self, e) -> int:
         if e[0] == "sep":
-            return 9
+            return 14                                   # 2 px line + 6 px each side (themes.py)
         if e[0] == "theme":
             return 48
         a = e[1]

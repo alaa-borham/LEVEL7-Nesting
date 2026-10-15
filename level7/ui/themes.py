@@ -50,7 +50,7 @@ QMenu::separator {{ height: 1px; background: {_rgb(c['border'])}; margin: 5px 8p
 
 QToolBar {{ background: {_rgb(c['panel'])}; border: none; border-bottom: 1px solid {_rgb(c['border'])};
            padding: 2px 4px; spacing: 1px; }}
-QToolBar::separator {{ background: {_rgb(c['border'])}; width: 1px; margin: 8px 3px; }}
+QToolBar::separator {{ background: {_rgb(acc, 0.55)}; width: 2px; margin: 6px 6px; }}
 QToolButton {{ background: transparent; border: 1px solid transparent; border-radius: 9px; padding: 3px 2px;
               color: {_rgb(txt)}; }}
 QToolButton:hover {{ background: {_rgb(acc, 0.13)}; border-color: {_rgb(acc, 0.35)}; }}
