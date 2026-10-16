@@ -53,6 +53,29 @@ class UpdateManager(QObject):
             QTimer.singleShot(FIRST_CHECK_DELAY_MS, lambda: self.check(False))
         self.timer.start(CHECK_INTERVAL_MS)
 
+    def move_to(self, window):
+        """The window that owned the update checks closes: another open session window takes them over."""
+        self.setParent(window)
+        self.w, self.before_install = window, window._before_update
+        window.updates = self
+        window.act_auto_upd.setEnabled(True)
+        window.act_auto_upd.setChecked(self.auto_enabled())
+
+    def release(self):
+        """The last window closes: a check / download still running must not be destroyed while it runs (the
+        application would abort) - it is waited for briefly, else kept until the application exits."""
+        from .main_window import ORPHAN_WORKERS
+        self.timer.stop()
+        for t in (self.thread, self.dl):
+            if t is not None and t.isRunning():
+                try:
+                    t.done.disconnect()
+                except (RuntimeError, TypeError):
+                    pass
+                if not t.wait(1500):
+                    t.setParent(None)
+                    ORPHAN_WORKERS.append(t)
+
     def auto_enabled(self) -> bool:
         return str(self.settings.value("updates/auto", "true")).lower() in ("true", "1")
 

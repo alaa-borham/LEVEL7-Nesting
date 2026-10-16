@@ -169,13 +169,14 @@ def parse_svg(path, groups, fabric, seed=0, elapsed=0.0, stopped=False) -> NestR
 
 
 def parse_json(path, groups, fabric, seed=0, elapsed=0.0) -> NestResult | None:
-    try:
+    try:                                   # a file cut off while sparrow was killed: no result, not an error
         sol = json.loads(Path(path).read_text(encoding="utf-8"))["solution"]
-    except (OSError, ValueError, KeyError):
+        entries = [(p["item_id"], p["transformation"]["translation"][0], p["transformation"]["translation"][1],
+                    p["transformation"]["rotation"]) for p in sol["layout"]["placed_items"]]
+        width = float(sol["strip_width"])
+    except (OSError, ValueError, KeyError, TypeError, IndexError):
         return None
-    entries = [(p["item_id"], p["transformation"]["translation"][0], p["transformation"]["translation"][1],
-                p["transformation"]["rotation"]) for p in sol["layout"]["placed_items"]]
-    return _to_result(entries, groups, fabric, float(sol["strip_width"]), seed, elapsed, False)
+    return _to_result(entries, groups, fabric, width, seed, elapsed, False)
 
 
 def run(items: list[NestItem], fabric, settings, time_limit: float, progress=None, stop_event=None,
@@ -186,6 +187,7 @@ def run(items: list[NestItem], fabric, settings, time_limit: float, progress=Non
         return None
     work = tempfile.mkdtemp(prefix="level7_sparrow_")
     t0 = time.monotonic()
+    proc = None
     try:
         inst, groups = build_instance(items, fabric)
         src = warm_solution(inst, groups, warm, fabric) if warm is not None else None
@@ -255,4 +257,10 @@ def run(items: list[NestItem], fabric, settings, time_limit: float, progress=Non
     except Exception:
         return None
     finally:
+        if proc is not None and proc.poll() is None:      # never leave sparrow running after an error
+            try:
+                proc.kill()
+                proc.wait(timeout=5)
+            except Exception:
+                pass
         shutil.rmtree(work, ignore_errors=True)

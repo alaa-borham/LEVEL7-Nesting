@@ -175,14 +175,21 @@ def _collect(procs, workers, items, fabric, settings, progress, stop_event, stop
         p.join(timeout=2)
         if p.is_alive():
             p.terminate()
+    if errors:
+        import logging
+        logging.getLogger("level7").warning("nesting worker errors: %s", "; ".join(map(str, errors))[:2000])
     if best is None:
-        if stop.is_set():                # stopped before any worker reported: nothing placed (at once)
+        if stop_event is not None and stop_event.is_set():   # the user stopped before any result: nothing placed
             ev = threading.Event()
             ev.set()
             return NestEngine(items, fabric, settings, stop_event=ev).run()
-        # worker processes could not run (e.g. restricted environment): fall back to in-process search
-        best = NestEngine(items, fabric, settings, progress=progress, stop_event=stop_event).run()
-        return best
+        # worker processes could not run, or came up too late (slow start, antivirus): search in-process in
+        # the time that is left instead of returning an empty marker
+        st = settings
+        if getattr(settings, "hard_time", False):
+            from dataclasses import replace
+            st = replace(settings, time_limit=max(2.0, settings.time_limit - (time.monotonic() - t0)))
+        return NestEngine(items, fabric, st, progress=progress, stop_event=stop_event).run()
     best.evaluations = sum(evals.values())
     best.elapsed = time.monotonic() - t0
     best.stopped = stop.is_set() and (stop_event is not None and stop_event.is_set())

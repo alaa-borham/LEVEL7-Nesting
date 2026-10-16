@@ -511,9 +511,15 @@ class MarkerView(QGraphicsView):
         items = [self.items_by_uid[u] for u in uids if u in self.items_by_uid]
         if not items:
             return
-        self.scene().clearSelection()
-        for it in items:
-            it.setSelected(True)
+        sc = self.scene()
+        sc.blockSignals(True)                  # one selection change for all of them, not one per piece
+        try:
+            sc.clearSelection()
+            for it in items:
+                it.setSelected(True)
+        finally:
+            sc.blockSignals(False)
+        sc.selectionChanged.emit()
         r = items[0].sceneBoundingRect()
         for it in items[1:]:
             r = r.united(it.sceneBoundingRect())

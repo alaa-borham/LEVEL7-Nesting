@@ -27,6 +27,18 @@ T = {
                 "المقاس الحقيقي 1:1 على عدة صفحات (تُلصق عند الخطوط الحمراء)"),
     "pr_names": ("Piece names and sizes", "أسماء القطع والمقاسات"),
     "pr_fill": ("Light fill of the pieces", "تعبئة خفيفة للقطع"),
+    "export_unplaced": ("{n} piece(s) are not placed in this marker - they will be MISSING from the cut file.\n"
+                        "Export anyway?",
+                        "يوجد {n} قطعة غير موضوعة في هذا الماركر - لن تكون موجودة في ملف القص.\nهل تريد التصدير رغم ذلك؟"),
+    "about_text": ("Reads GRAFIS MDL / SCB natively (no GRAFIS installation needed), AAMA / DXF and PLT markers. "
+                   "Saves GRAFIS SCB markers and the parts' material / copies in the MDL (check new files in GRAFIS "
+                   "before production). Exports PLT, DXF and ISO (Bullmer / IECHO profiles - test-cut first).\n"
+                   "Updates: GitHub Releases, SHA-256 verified. Nesting results are heuristic: no global optimum "
+                   "is claimed.",
+                   "يقرأ ملفات جرافس MDL / SCB مباشرة (بدون تثبيت جرافس)، وملفات AAMA / DXF وماركرات PLT. "
+                   "يحفظ ماركرات جرافس SCB وخامة القطع وعددها في ملف MDL (افتح الملفات الجديدة في جرافس للتأكد قبل "
+                   "الإنتاج). يصدّر PLT و DXF و ISO (ملفات Bullmer / IECHO - جرّب قصًا تجريبيًا أولًا).\n"
+                   "التحديثات: من GitHub مع تحقق SHA-256. نتائج التعشيق تقريبية: لا يُدّعى أنها أفضل حل ممكن."),
     "plt_chars_lost": ("Saved. The plotter text cannot draw these characters, so they are missing in the PLT "
                        "(rename the pieces in Latin letters to plot their names): {c}",
                        "تم الحفظ. خط البلوتر لا يرسم هذه الحروف فلن تظهر في ملف PLT (اكتب أسماء القطع بحروف لاتينية "

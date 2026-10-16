@@ -172,6 +172,7 @@ class BatchDialog(QDialog):
                                   float(self.time.value()), int(self.attempts.value()))
         self.worker.order_changed.connect(lambda k: self.fill())
         self.worker.finished_all.connect(self._finished)
+        self.worker.finished.connect(self._update_buttons)      # (the thread has really ended now)
         self.worker.start()
         self._update_buttons()
 

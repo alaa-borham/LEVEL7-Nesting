@@ -517,6 +517,8 @@ class NestEngine:
             if isinstance(sol[0], str):
                 return (len(free) + 1, sol[1])
             if best is None or fitness(sol) < fitness(best[0]):
+                if best is None and self._deadline is None and not any(r == HALT_REASON for r in sol[1].values()):
+                    self._deadline = t0 + limit    # a first layout exists: later ones stop at the time limit
                 best = (sol, ind)
                 history.append((time.monotonic() - t0, sol[2]))
                 if not any(r == HALT_REASON for r in sol[1].values()):
@@ -529,6 +531,8 @@ class NestEngine:
         seeds = self.initial_orders()
         pop: list[tuple[tuple, tuple]] = []
         for k, order in enumerate(seeds):
+            if best is not None and time.monotonic() - t0 >= limit:
+                break                          # the first layout took the whole time: no further seed orders
             ind = (order, {i: 0 for i in free})
             f = evaluate(ind)                  # Stop works at once, even before a first complete layout
             if f is None:

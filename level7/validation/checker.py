@@ -13,7 +13,7 @@ from shapely.geometry import Polygon, box
 from shapely.strtree import STRtree
 
 from ..geometry import grain_angle, grow_rect, placement_points
-from ..model import Marker, Project
+from ..model import LayType, Marker, Project
 
 AREA_TOL = 0.01     # mm^2 overlap area tolerated (numerical noise)
 DIST_TOL = 0.02     # mm tolerance on spacing / borders
@@ -133,6 +133,11 @@ def validate_marker(project: Project, marker: Marker, required: dict | None = No
         g = project.piece(pl.piece_uid).sizes[pl.size]
         if g.grain is not None:
             ang = grain_angle(placement_points(g.grain.points, pl))
+            turned = allowed_rotations is not None and any(           # a rotation this nesting was allowed (90 deg)
+                min(abs(r - pl.rotation) % 360, 360 - abs(r - pl.rotation) % 360) < 1e-6
+                for r in allowed_rotations.get((pl.piece_uid, pl.mirrored), ()))
+            if turned and ang is not None and abs(ang - 90) <= 0.01:
+                continue
             if ang is not None and min(ang, 180 - ang) > 0.01:
                 issues.append(Issue("grain", f"{pl.uid} grain at {ang:.2f} deg to marker length", [pl.uid]))
     # copies
@@ -159,10 +164,14 @@ def marker_stats(project: Project, marker: Marker) -> dict:
     f = marker.fabric
     u = unary_union(polys) if polys else Polygon()
     area = u.area
+    if f.lay_type == LayType.FOLDED:          # nested on the half width, every piece cut twice (both halves)
+        area *= 2.0
     length = (max((p.bounds[2] for p in polys), default=0.0) + f.margin_end) if polys else 0.0
     tot = f.width * length
     usable = f.usable_width * length
     eff_total = 100 * area / tot if tot else 0.0
+    if f.lay_type == LayType.FOLDED:
+        usable *= 2.0
     eff_usable = 100 * area / usable if usable else 0.0
     by_size = Counter(pl.size for pl in marker.placements if pl.placed)
     garments = len({(pl.size, pl.bundle) for pl in marker.placements if pl.placed})

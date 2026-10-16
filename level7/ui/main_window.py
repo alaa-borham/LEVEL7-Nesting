@@ -58,23 +58,44 @@ def _nest_log(msg: str) -> None:
 
 
 class OrderSyncCommand(QUndoCommand):
-    """The marker's copies changed with the order (MainWindow._sync_marker): undo brings the old list back."""
+    """The marker's copies changed with the order (MainWindow._sync_marker): undo brings the old copies AND the
+    old order (sizes / quantities / parts) back; steps of one spin box in a row are one undo step."""
 
-    def __init__(self, window, marker, old, new):
+    def __init__(self, window, marker, old, new, old_order=None, new_order=None):
         super().__init__("order")
         self.window, self.marker, self.old, self.new = window, marker, old, new
+        self.old_order, self.new_order = old_order, new_order
+        self._first = True
 
-    def _set(self, pls):
+    def id(self):
+        return 7001
+
+    def mergeWith(self, other):
+        if not isinstance(other, OrderSyncCommand) or other.marker is not self.marker:
+            return False
+        self.new, self.new_order = other.new, other.new_order
+        return True
+
+    def _set(self, pls, order):
         self.marker.placements = list(pls)
-        if self.window.marker is self.marker:
-            self.window._redraw_marker()
-            self.window._refresh_strip()
+        w = self.window
+        if order is not None and w.project is not None:
+            w.project.cut_order.size_quantities = dict(order[0])
+            w.project.cut_order.piece_counts = dict(order[1])
+            w.load_tables()
+        if w.marker is self.marker:
+            w._redraw_marker()
+            w._refresh_strip()
 
     def redo(self):
-        self._set(self.new)
+        if self._first:                       # pushed right after the user's change: tables already show it
+            self._first = False
+            self._set(self.new, None)
+            return
+        self._set(self.new, self.new_order)
 
     def undo(self):
-        self._set(self.old)
+        self._set(self.old, self.old_order)
 
 
 class PlacementStateCommand(QUndoCommand):
@@ -1036,6 +1057,8 @@ class MainWindow(QMainWindow):
         if self.project is None:
             self.open_dialog()
             return
+        if self._busy():
+            return
         ps, _ = QFileDialog.getOpenFileNames(self, tr("add_model"), self.settings_store.value("last_dir", ""),
                                              "Patterns / markers (*.mdl *.MDL *.scb *.SCB *.dxf *.DXF *.plt *.PLT *.l7n);;All (*)")
         if not ps:
@@ -1105,7 +1128,7 @@ class MainWindow(QMainWindow):
         self.project = proj
         self.project_path = path if path.lower().endswith(".l7n") else None
         self.scb_template_path = path if path.lower().endswith(".scb") else None
-        self.undo.clear()
+        self._clear_undo()
         self.load_tables()
         if proj.markers:
             self.form_from_fabric(proj.markers[0].fabric)
@@ -1198,12 +1221,35 @@ class MainWindow(QMainWindow):
         self._synced_order = self._order_signature() if self.project is not None else None
 
     def _table_edited(self, *_):
+        """A table value changed: the marker and the strip follow once the typing pauses (typing "12" or holding
+        an arrow is one update, not one per step - each took ~0.8 s with 600 pieces)."""
         if not getattr(self, "_loading_tables", False):
             self.mark_dirty()
-            if self.project is not None:          # the strip follows the chosen sizes / quantities at once
-                self.read_tables()
-                self._sync_marker()
-                self._refresh_strip()
+            if self.project is not None:
+                t = getattr(self, "_edit_timer", None)
+                if t is None:
+                    t = self._edit_timer = QTimer(self)
+                    t.setSingleShot(True)
+                    t.setInterval(250)
+                    t.timeout.connect(self._table_edit_apply)
+                t.start()
+
+    def _table_edit_apply(self):
+        if self.project is None or getattr(self, "_loading_tables", False):
+            return
+        try:
+            self.read_tables()
+        except RuntimeError:                 # window being destroyed
+            return
+        self._sync_marker()
+        self._refresh_strip()
+
+    def flush_table_edits(self):
+        """An edit still waiting (timer): apply it now (before nesting, saving, exporting)."""
+        t = getattr(self, "_edit_timer", None)
+        if t is not None and t.isActive():
+            t.stop()
+            self._table_edit_apply()
 
     def _order_signature(self):
         co = self.project.cut_order
@@ -1217,14 +1263,15 @@ class MainWindow(QMainWindow):
         if self.marker is None or (self.worker is not None and self.worker.isRunning()):
             return
         sig = self._order_signature()
-        if sig == getattr(self, "_synced_order", None):
+        before = getattr(self, "_synced_order", None)
+        if sig == before:
             return
         self._synced_order = sig
         spare = self._sync_spare.setdefault(id(self.marker), [])
         old = list(self.marker.placements)
         removed, added = sync_marker_to_order(self.project, self.marker, spare)
         if removed or added:
-            self.undo.push(OrderSyncCommand(self, self.marker, old, list(self.marker.placements)))
+            self.undo.push(OrderSyncCommand(self, self.marker, old, list(self.marker.placements), before, sig))
             self.statusBar().showMessage(tr("order_synced", r=removed, a=added))
 
     def _load_tables(self):
@@ -1377,8 +1424,12 @@ class MainWindow(QMainWindow):
             return
         from .watermark_dialog import WatermarkDialog
         old = dict(self.project.watermark or {})
-        if WatermarkDialog(self).exec() == QDialog.Accepted and self.project.watermark != old:
-            self.mark_dirty()
+        from .. import watermark as W
+        if WatermarkDialog(self).exec() == QDialog.Accepted:
+            if W.settings(self.project) != W.settings(type("P", (), {"watermark": old})()):
+                self.mark_dirty()
+            elif not old:
+                self.project.watermark = old       # OK without a change: the project stays as it was
 
     def _watermark_pieces(self, uids, on):
         """Pieces table right-click: these parts with / without the watermark."""
@@ -1461,6 +1512,14 @@ class MainWindow(QMainWindow):
                             allow_rotation_180=self.f_rot180.isChecked(), allow_rotation_90=self.f_rot90.isChecked(),
                             curve_tolerance=self.f_tol.value(), best_of=self.f_best.value())
 
+    def _clear_undo(self):
+        """Forget the undo history (another marker / file shown) - that is no change to save."""
+        self.undo.blockSignals(True)
+        self.undo.clear()
+        self.undo.blockSignals(False)
+        for a in self.undo_actions:            # (their texts / enabled state follow the stack's signals)
+            a.setEnabled(False)
+
     def mark_dirty(self, on: bool = True):
         try:
             if self.project is None:
@@ -1485,6 +1544,7 @@ class MainWindow(QMainWindow):
         return getattr(self, "scb_template_path", None) or scb_template(self.project)
 
     def save(self) -> bool:
+        self.flush_table_edits()
         if not self.project:
             return True
         if not self.project_path:
@@ -1530,6 +1590,7 @@ class MainWindow(QMainWindow):
     def _save_mdl(self, path):
         """GRAFIS MDL: the model file this session was read from, with the parts' material / production /
         copies from the pieces table (geometry copied unchanged). The original is kept once as .bak."""
+        self.flush_table_edits()
         import shutil
         import tempfile
 
@@ -1587,6 +1648,7 @@ class MainWindow(QMainWindow):
 
     def save_as(self) -> bool:
         """Default: GRAFIS SCB when the session allows it (like GRAFIS), else the LEVEL7 project format."""
+        self.flush_table_edits()
         if not self.project:
             return True
         from ..service import mdl_template
@@ -1646,7 +1708,7 @@ class MainWindow(QMainWindow):
             self.view.last_result = (prev.stats["length_mm"], prev.stats["efficiency_total_width_pct"])
         self.marker = self.project.markers[i]
         self.form_from_fabric(self.marker.fabric)
-        self.undo.clear()
+        self._clear_undo()
         if "efficiency_total_width_pct" not in (self.marker.stats or {}):
             self.marker.stats = {**(self.marker.stats or {}), **marker_stats(self.project, self.marker)}
         self.view.efficiency = self.marker.stats["efficiency_total_width_pct"]
@@ -1688,6 +1750,16 @@ class MainWindow(QMainWindow):
             self.view.zoom_fit()
 
     def _marker_selection_changed(self):
+        """Coalesced: selecting hundreds of pieces fires this per piece (8.5 s for 840 pieces before)."""
+        t = getattr(self, "_sel_timer", None)
+        if t is None:
+            t = self._sel_timer = QTimer(self)
+            t.setSingleShot(True)
+            t.setInterval(0)
+            t.timeout.connect(self._marker_selection_apply)
+        t.start()
+
+    def _marker_selection_apply(self):
         try:
             uids = {pl.piece_uid for pl in self.view.selected_placements()}
         except RuntimeError:                 # window being destroyed
@@ -1970,6 +2042,7 @@ class MainWindow(QMainWindow):
     # -- nesting ---------------------------------------------------------------------------
     def run_nesting(self, inside_only=None, best_of=None):
         """inside_only: True = re-nest only the pieces still in the marker; None = ask when pieces were taken out."""
+        self.flush_table_edits()
         if not self.project or (self.worker and self.worker.isRunning()):
             return
         self.read_tables()
@@ -2134,6 +2207,12 @@ class MainWindow(QMainWindow):
         self._preview_cost = 0.0
         self.btn_run.setEnabled(not running)
         self.btn_stop.setEnabled(running)
+        # the run reads the order and the pieces: no undo / table edits underneath it (they were invisible and
+        # changed the old marker)
+        self.undo_actions[0].setEnabled(not running and self.undo.canUndo())
+        self.undo_actions[1].setEnabled(not running and self.undo.canRedo())
+        for t in (self.pieces_table, self.sizes_table):
+            t.setEnabled(not running)
         self.progress_bar.setVisible(running)
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
@@ -2307,11 +2386,17 @@ class MainWindow(QMainWindow):
 
     # -- export ----------------------------------------------------------------------------
     def export(self, fmt):
+        self.flush_table_edits()
         if not self.marker:
             return
         v = self.validate_current()
         if v is not None and not v.ok and not self._confirm_invalid(v, tr("export").replace("&", "")):
             return
+        left = sum(1 for pl in self.marker.placements if not pl.placed)
+        if left and fmt in ("plt", "dxf", "iso") and QMessageBox.question(
+                self, tr("export").replace("&", ""), tr("export_unplaced", n=left),
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
+            return                             # a cut file without some pieces: only when the user wants it
         from ..exporters.iso import MachineProfile
         from ..service import export_marker
         diagnostic = False
@@ -2374,6 +2459,7 @@ class MainWindow(QMainWindow):
 
     def print_marker(self):
         """Print on A4 / A3: the whole marker or the selected pieces, one page or real size (1:1)."""
+        self.flush_table_edits()
         if not self.marker or self._busy():
             return
         from .print_dialog import PrintMarkerDialog
@@ -2394,6 +2480,7 @@ class MainWindow(QMainWindow):
             self.settings_store.setValue(SETTINGS_KEY, json.dumps(cfg))     # default for every project
             if self.project:
                 self.project.export_configs["plt"] = cfg
+                self.mark_dirty()
 
     def open_logs(self):
         from PySide6.QtCore import QUrl
@@ -2402,14 +2489,7 @@ class MainWindow(QMainWindow):
         QDesktopServices.openUrl(QUrl.fromLocalFile(log_dir()))
 
     def about(self):
-        QMessageBox.information(self, tr("about"), (
-            f"LEVEL7 Nesting {__version__}\n\n"
-            "GRAFIS MDL/SCB: native reading of block structure, part list, sizes, evaluated geometry per size "
-            "and SCB placements (no GRAFIS installation required). See docs/SUPPORT_STATUS.md.\n"
-            "Not supported: writing MDL/SCB; spline definitions.\n"
-            "ISO: Bullmer / IECHO profile matched to GRAFIS' Bullmer output; test-cut before production.\n"
-            "Updates: GitHub Releases (alaa-borham/LEVEL7-Nesting), SHA-256 verified.\n"
-            "Nesting results are heuristic; no global optimum is claimed."))
+        QMessageBox.information(self, tr("about"), f"LEVEL7 Nesting {__version__}\n\n" + tr("about_text"))
 
     def closeEvent(self, ev):
         _nest_log("window close requested" + (" (nesting running)" if self.worker and self.worker.isRunning() else ""))
@@ -2435,6 +2515,14 @@ class MainWindow(QMainWindow):
             pass
         if self.sessions is not None:
             self.sessions.remove(self)
+        if self.updates is not None:            # update checks go on in another open window, else end safely
+            heir = next((w for w in (self.sessions.windows if self.sessions is not None else [])
+                         if w is not self and getattr(w, "updates", None) is None), None)
+            if heir is not None:
+                self.updates.move_to(heir)
+            else:
+                self.updates.release()
+            self.updates = None
         super().closeEvent(ev)
 
 

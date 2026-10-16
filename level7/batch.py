@@ -140,6 +140,8 @@ def parse_orders(path: str) -> list[MarkerOrder]:
         size = get("size")
         if not size or not qty:
             continue
+        if qty < 0:
+            raise OrderError(f"row {n}: quantity {qty} is negative")
         o = orders.setdefault(name, MarkerOrder(name))
         path_f = f if os.path.isabs(f) else os.path.join(base, f)
         o.lines.append(OrderLine(os.path.normpath(path_f), size, qty))
@@ -159,8 +161,14 @@ def parse_orders(path: str) -> list[MarkerOrder]:
         bad = [x for x in o.formats if x not in FORMATS]
         if bad:
             raise OrderError(f"marker {o.name}: unknown format(s) {', '.join(bad)} (use plt, dxf, iso, scb)")
-        if not o.width:
-            raise OrderError(f"marker {o.name}: fabric width is missing")
+        if not o.width or o.width <= 0:
+            raise OrderError(f"marker {o.name}: fabric width is missing or not positive")
+        for k in ("spacing", "buffer_x", "buffer_y"):
+            if (getattr(o, k) or 0) < 0:
+                raise OrderError(f"marker {o.name}: {k} is negative")
+        for k in ("shrink_x", "shrink_y"):
+            if abs(getattr(o, k) or 0) > 20:
+                raise OrderError(f"marker {o.name}: {k} {getattr(o, k)} % is outside -20 .. +20 %")
     return list(orders.values())
 
 

@@ -231,7 +231,7 @@ def _nest_with_sparrow(proj, items, fabric, settings, workers, progress, stop_ev
     if stop_event is not None and stop_event.is_set():
         start.stopped = True
         return start, "builtin"
-    remaining = max(5.0, total - (time.monotonic() - t0))
+    remaining = max(2.0, total - (time.monotonic() - t0))
 
     def fallback():
         """sparrow gave nothing usable: a start cut short by its time limit is not a result - continue it with
@@ -242,7 +242,7 @@ def _nest_with_sparrow(proj, items, fabric, settings, workers, progress, stop_ev
             return start, "builtin"
         # within the user's timer (a complete first layout could take minutes: 207 s seen for 60 s); pieces it
         # cannot place in time are reported (cut_short warning) instead
-        left = max(10.0, total - (time.monotonic() - t0))
+        left = max(3.0, total - (time.monotonic() - t0))
         res2 = run_parallel(items, fabric, replace(settings, time_limit=left, hard_time=True), workers=workers,
                             progress=progress, stop_event=stop_event)
         return res2, "builtin"
@@ -364,6 +364,10 @@ def run_nesting(proj: Project, fabric: FabricSettings, settings: NestSettings, c
     ``settings.best_of`` > 1 ("best result"): that many attempts one after the other with different seeds (each
     with the full time limit); the valid marker with the fewest unplaced pieces and the shortest length wins."""
     from dataclasses import replace
+    if not -50.0 < fabric.shrink_x < 50.0 or not -50.0 < fabric.shrink_y < 50.0:
+        raise ValueError(f"shrinkage {fabric.shrink_x:g} % / {fabric.shrink_y:g} % is outside -50 .. +50 %")
+    if fabric.width <= 0:
+        raise ValueError("the fabric width must be more than 0 mm")
     n = max(1, int(getattr(settings, "best_of", 1) or 1))
     if n == 1:
         return _run_once(proj, fabric, settings, cut_order, pinned, progress, stop_event, workers, name,
@@ -419,8 +423,16 @@ def _run_once(proj, fabric, settings, cut_order, pinned, progress, stop_event, w
     marker = Marker(name=name or f"{proj.name} {fabric.width:g}mm", fabric=fabric, placements=res.placements,
                     origin="nested", seed=settings.seed, compute_time=time.monotonic() - t0)
     from .model import Placement
+    taken = {pl.uid for pl in marker.placements} | {pl.uid for pl in keep_out or []}
     for u in list(res.unplaced) + list(unplaced):
-        marker.placements.append(Placement(uid=u.item_uid or f"u{len(marker.placements)}", piece_uid=u.piece_uid,
+        uid = u.item_uid
+        if not uid or uid in taken:                # never the uid of another copy (taken-out ones included)
+            k = len(marker.placements)
+            while f"u{k}" in taken:
+                k += 1
+            uid = f"u{k}"
+        taken.add(uid)
+        marker.placements.append(Placement(uid=uid, piece_uid=u.piece_uid,
                                            size=u.size, mirrored=u.mirrored, placed=False, reason=u.reason))
     from dataclasses import replace as _replace
     for pl in keep_out or []:                    # taken out by the user: still to place (strip), not nested
