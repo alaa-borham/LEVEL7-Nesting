@@ -23,7 +23,7 @@ def default_config(settings) -> PlotterConfig:
     raw = settings.value(SETTINGS_KEY, "")
     if raw:
         try:
-            return PlotterConfig(**json.loads(raw))
+            return PlotterConfig.from_dict(json.loads(raw))
         except Exception:
             pass
     return PRESETS["algotex_grafis"]()

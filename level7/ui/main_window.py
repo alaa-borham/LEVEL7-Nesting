@@ -2354,12 +2354,15 @@ class MainWindow(QMainWindow):
         if not p:
             return
         try:
-            export_marker(self.project, self.marker, fmt, p, cfg, diagnostic_iso=diagnostic)
+            res = export_marker(self.project, self.marker, fmt, p, cfg, diagnostic_iso=diagnostic)
         except Exception as e:
             QMessageBox.critical(self, tr("export").replace("&", ""), str(e))
             return
         self.settings_store.setValue("export_dir", os.path.dirname(p))
         self.statusBar().showMessage(tr("exported", p=p))
+        lost = (res or {}).get("skipped_chars") if isinstance(res, dict) else None
+        if lost:                               # Arabic etc.: the plotter's text cannot draw them
+            QMessageBox.warning(self, tr("export").replace("&", ""), tr("plt_chars_lost", c=" ".join(lost)[:120]))
         if fmt == "scb":
             QMessageBox.information(self, tr("save_scb"), tr("scb_saved", p=p))
 
@@ -2367,7 +2370,7 @@ class MainWindow(QMainWindow):
         from ..exporters.plt import PlotterConfig
         from .plot_settings import default_config
         raw = self.project.export_configs.get("plt") if self.project else None
-        return PlotterConfig(**raw) if raw else default_config(self.settings_store)
+        return PlotterConfig.from_dict(raw) if raw else default_config(self.settings_store)
 
     def print_marker(self):
         """Print on A4 / A3: the whole marker or the selected pieces, one page or real size (1:1)."""

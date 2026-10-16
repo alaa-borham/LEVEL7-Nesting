@@ -20,6 +20,7 @@ import os
 import re
 from collections import Counter
 
+from shapely import STRtree
 from shapely.geometry import LineString, Point, Polygon
 
 from ..formats.grafis.container import sha256_bytes
@@ -102,28 +103,47 @@ def read_strokes(data: bytes, labels: list | None = None) -> list[list[tuple[flo
 
 
 def chain(strokes, tol=JOIN_TOL):
-    """Join strokes end to end; returns (closed contours without the repeated end point, open polylines)."""
-    pool = [list(s) for s in strokes]
+    """Join strokes end to end; returns (closed contours without the repeated end point, open polylines).
+    Stroke ends are found through a grid of ``tol`` cells (thousands of strokes in a big marker)."""
+    pool = {i: list(st) for i, st in enumerate(strokes)}
+    grid: dict = {}
+
+    def cell(p):
+        return int(math.floor(p[0] / tol)), int(math.floor(p[1] / tol))
+
+    for i, st in pool.items():
+        for e in (0, -1):
+            grid.setdefault(cell(st[e]), []).append(i)
+
+    def near(p, skip):
+        cx, cy = cell(p)
+        best = None
+        for gx in (cx - 1, cx, cx + 1):
+            for gy in (cy - 1, cy, cy + 1):
+                for j in grid.get((gx, gy), ()):
+                    if j != skip and j in pool and (best is None or j < best):
+                        o = pool[j]
+                        if math.dist(p, o[0]) <= tol or math.dist(p, o[-1]) <= tol:
+                            best = j
+        return best
+
     closed, opens = [], []
-    while pool:
-        c = pool.pop(0)
-        grown = True
-        while grown and math.dist(c[0], c[-1]) > tol:
-            grown = False
-            for k, o in enumerate(pool):
-                if math.dist(c[-1], o[0]) <= tol:
-                    c = c + o[1:]
-                elif math.dist(c[-1], o[-1]) <= tol:
-                    c = c + o[::-1][1:]
-                elif math.dist(c[0], o[-1]) <= tol:
-                    c = o[:-1] + c
-                elif math.dist(c[0], o[0]) <= tol:
-                    c = o[::-1][:-1] + c
-                else:
-                    continue
-                pool.pop(k)
-                grown = True
-                break
+    for i in sorted(pool):
+        if i not in pool:
+            continue
+        c = pool.pop(i)
+        while math.dist(c[0], c[-1]) > tol:
+            j = near(c[-1], i)
+            if j is not None:
+                o = pool.pop(j)
+                c = c + (o[1:] if math.dist(c[-1], o[0]) <= tol else o[::-1][1:])
+                continue
+            j = near(c[0], i)
+            if j is not None:
+                o = pool.pop(j)
+                c = (o[:-1] if math.dist(c[0], o[-1]) <= tol else o[::-1][:-1]) + c
+                continue
+            break
         if len(c) > 3 and math.dist(c[0], c[-1]) <= tol:
             closed.append(c[:-1])
         else:
@@ -194,17 +214,23 @@ def read_plt(path: str):
         shapes.append((raw, pts, spikes, poly))
     # contours inside a larger one are inner lines of that piece
     shapes.sort(key=lambda s: -s[3].area)
+    grown = [s[3].buffer(0.5) for s in shapes]
+    tree = STRtree(grown)
     pieces_, inner = [], []
-    for s in shapes:
-        host = next((h for h in pieces_ if h[3].buffer(0.5).contains(s[3])), None)
-        if host is None:
-            pieces_.append(s)
-        else:
+    for i, s in enumerate(shapes):
+        if any(j < i and grown[j].contains(s[3]) for j in tree.query(s[3])):
             inner.append(s[0] + s[0][:1])
+        else:
+            pieces_.append(s)
     if not pieces_:
         raise PltError("no closed piece outlines found in this PLT / HP-GL file")
     pieces_.sort(key=lambda s: (round(s[3].bounds[0], 1), round(s[3].bounds[1], 1)))   # drawing order along x
     with_inner = opens + inner
+    ptree = STRtree([s[3] for s in pieces_])
+
+    def piece_at(pt):
+        hits = [int(i) for i in ptree.query(pt, predicate="intersects")]
+        return min(hits) if hits else None
     # texts plotted inside the pieces (GRAFIS: the size, drawn with a single-stroke font) and HP-GL labels
     texts: dict[int, list] = {}                          # piece index -> [(text, strokes)]
     glyphs = [o for o in opens if is_glyph_stroke(o)]
@@ -212,7 +238,7 @@ def read_plt(path: str):
     for cl in clusters(glyphs):
         c = Point(sum(p[0] for s in cl for p in s) / sum(len(s) for s in cl),
                   sum(p[1] for s in cl for p in s) / sum(len(s) for s in cl))
-        k = next((i for i, s in enumerate(pieces_) if s[3].contains(c)), None)
+        k = piece_at(c)
         if k is not None:
             found_.append((k, cl, candidates(cl)))
     # a text that also reads turned 180 deg (6 / 9) takes the direction of the clear texts of its piece, else of
@@ -225,7 +251,7 @@ def read_plt(path: str):
         if t and _plausible(t):
             texts.setdefault(k, []).append((t, cl))
     for pos, t in lb:
-        k = next((i for i, s in enumerate(pieces_) if s[3].contains(Point(pos))), None)
+        k = piece_at(Point(pos))
         if k is not None:
             texts.setdefault(k, []).append((t, []))
     for v in texts.values():                              # "FRONT 44": the size is the last word
@@ -237,7 +263,8 @@ def read_plt(path: str):
                 v[i] = (words[-1], cl)
                 v.append((" ".join(words[:-1]), []))
     used = {id(st) for v in texts.values() for _, cl in v for st in cl}
-    with_inner = [o for o in with_inner if id(o) not in used]          # read texts are not inner lines
+    with_inner = [o for o in with_inner if id(o) not in used and len(o) > 1]   # read texts are not inner lines
+    ltree = STRtree([LineString(o) for o in with_inner])
     proj = Project(name=os.path.splitext(os.path.basename(path))[0], size_names=[])
     proj.sources.append(SourceInfo(os.path.abspath(path), "plt", sha256_bytes(data), len(data),
                                    notes=["HP-GL / PLT import: pieces rebuilt from the plotted outlines"]))
@@ -273,9 +300,8 @@ def read_plt(path: str):
                 g.notches.append(Notch((base[0] - x0, base[1] - y0),
                                        ((tip[0] - base[0]) / ln, (tip[1] - base[1]) / ln), ln))
             area = poly.buffer(0.5)
-            for op in with_inner:
-                if len(op) > 1 and area.contains(LineString(op)):
-                    g.internal.append(Polyline([(x - x0, y - y0) for x, y in op]))
+            for j in sorted(int(j) for j in ltree.query(area, predicate="contains")):
+                g.internal.append(Polyline([(x - x0, y - y0) for x, y in with_inner[j]]))
             part = Piece(uid=Piece.new_uid(), source_id=f"plt:{k}", number=k,
                          name=f"PLT {k:02d}" + (f" {extra}" if extra else ""), sizes={size: g}, grain_angle=0.0,
                          notes=["from a PLT: name, material and grain direction are not in the file - check them"])

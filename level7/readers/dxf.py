@@ -44,11 +44,11 @@ def strip_spikes(pts, tol=1e-3):
     return out, spikes
 
 
-def _entities(msp):
+def _entities(msp, depth=0):
     for e in msp:
         if e.dxftype() == "INSERT":
-            for v in e.virtual_entities():
-                yield v
+            if depth < 8:                  # blocks inside blocks too (a guard against self-referencing blocks)
+                yield from _entities(e.virtual_entities(), depth + 1)
         else:
             yield e
 
@@ -65,6 +65,7 @@ def read_dxf(path: str, cut_layers=CUT_LAYERS, seam_layers=SEAM_LAYERS, grain_la
     seam_l = {c.upper() for c in seam_layers}
     grain_l = {c.upper() for c in grain_layers}
     closed, opens = [], []
+    skipped = 0
     for e in _entities(doc.modelspace()):
         layer = e.dxf.layer.upper()
         t = e.dxftype()
@@ -82,9 +83,14 @@ def read_dxf(path: str, cut_layers=CUT_LAYERS, seam_layers=SEAM_LAYERS, grain_la
         if is_closed and layer in cut_l:
             if math.dist(pts[0], pts[-1]) < 1e-6:
                 pts = pts[:-1]
+            if len(pts) < 3 or abs(ring_area(pts)) < 1e-6:
+                skipped += 1                # a stray closed line with no area: not a piece
+                continue
             closed.append(pts)
-        else:
+        elif len(pts) >= 2:
             opens.append((layer, pts))
+        else:
+            skipped += 1
     with open(path, "rb") as fh:
         sha = sha256_bytes(fh.read())
     proj = Project(name=os.path.splitext(os.path.basename(path))[0], size_names=["base"])
@@ -119,6 +125,8 @@ def read_dxf(path: str, cut_layers=CUT_LAYERS, seam_layers=SEAM_LAYERS, grain_la
             piece.notes.append("grain direction unknown - define it before nesting")
         proj.pieces.append(piece)
     proj.cut_order = CutOrder(size_quantities={"base": 1}, piece_counts={p.uid: (1, 0) for p in proj.pieces})
+    if skipped:
+        issues.append(f"{skipped} degenerate polylines (fewer than 3 points / no area) were skipped")
     if not closed:
         issues.append("no closed polylines found on cut layers " + ",".join(cut_layers))
     elif not any(p.grain_angle is not None for p in proj.pieces):

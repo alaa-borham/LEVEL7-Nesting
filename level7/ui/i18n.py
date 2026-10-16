@@ -27,6 +27,10 @@ T = {
                 "المقاس الحقيقي 1:1 على عدة صفحات (تُلصق عند الخطوط الحمراء)"),
     "pr_names": ("Piece names and sizes", "أسماء القطع والمقاسات"),
     "pr_fill": ("Light fill of the pieces", "تعبئة خفيفة للقطع"),
+    "plt_chars_lost": ("Saved. The plotter text cannot draw these characters, so they are missing in the PLT "
+                       "(rename the pieces in Latin letters to plot their names): {c}",
+                       "تم الحفظ. خط البلوتر لا يرسم هذه الحروف فلن تظهر في ملف PLT (اكتب أسماء القطع بحروف لاتينية "
+                       "لتُطبع): {c}"),
     "pr_watermark": ("Watermark on the pieces", "العلامة المائية على القطع"),
     "watermark": ("Watermark…", "العلامة المائية…"),
     "wm_title": ("Watermark", "العلامة المائية"),

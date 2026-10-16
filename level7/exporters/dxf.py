@@ -7,6 +7,8 @@ labelled AAMA/ASTM (those rule sets are not implemented).
 """
 from __future__ import annotations
 
+import os
+
 import ezdxf
 
 from .scene import LAYERS, Scene
@@ -34,7 +36,15 @@ def write_dxf(scene: Scene, path: str, dxfversion: str = "R2000") -> dict:
                      dxfattribs={"layer": t.layer, "insert": t.position})
     for pt in scene.points:
         msp.add_point(pt.position, dxfattribs={"layer": pt.layer})
-    doc.saveas(path, encoding="utf-8")
+    # R2000 text is in the drawing's code page (ANSI_1252): ezdxf writes other characters (Arabic) as \U+XXXX,
+    # which CAD programs show correctly. Written to a temporary file first: never a half cut file.
+    tmp = path + ".part"
+    try:
+        doc.saveas(tmp)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
     return {"polylines": n, "texts": len(scene.texts), "points": len(scene.points)}
 
 

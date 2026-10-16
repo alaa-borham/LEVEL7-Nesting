@@ -31,9 +31,13 @@ def save_project(project: Project, path: str) -> None:
     doc = {"format": FORMAT, "format_version": FORMAT_VERSION, "project": d}
     data = json.dumps(doc, ensure_ascii=False, indent=1)
     tmp = path + ".part"                     # never leave a half-written project behind
-    with zipfile.ZipFile(tmp, "w", compression=zipfile.ZIP_DEFLATED) as z:
-        z.writestr("project.json", data)
-    os.replace(tmp, path)
+    try:
+        with zipfile.ZipFile(tmp, "w", compression=zipfile.ZIP_DEFLATED) as z:
+            z.writestr("project.json", data)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
 
 
 def load_project(path: str) -> Project:
@@ -42,13 +46,13 @@ def load_project(path: str) -> Project:
             doc = json.loads(z.read("project.json").decode("utf-8"))
     except (zipfile.BadZipFile, KeyError, json.JSONDecodeError) as e:
         raise ProjectFormatError(f"not a LEVEL7 project: {e}") from e
-    if doc.get("format") != FORMAT:
+    if not isinstance(doc, dict) or doc.get("format") != FORMAT:
         raise ProjectFormatError("unknown project format")
     if doc.get("format_version", 0) > FORMAT_VERSION:
         raise ProjectFormatError(f"project format {doc['format_version']} is newer than supported {FORMAT_VERSION}")
     try:
         return project_from_dict(doc["project"])
-    except (KeyError, TypeError, ValueError) as e:
+    except (KeyError, TypeError, ValueError, AttributeError) as e:
         raise ProjectFormatError(f"damaged or unsupported LEVEL7 project: {e}") from e
 
 

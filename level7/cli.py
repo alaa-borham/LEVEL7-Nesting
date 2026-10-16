@@ -73,7 +73,7 @@ def cmd_nest(a):
     if a.output:
         save_project(proj, a.output)
         print("saved", a.output)
-    return 0 if info["validation"].ok else 2
+    return 0 if info["validation"].ok and all(pl.placed for pl in marker.placements) else 2
 
 
 def cmd_compare(a):
@@ -205,7 +205,16 @@ def main(argv=None):
     s.add_argument("-o", "--output", required=True)
     s.set_defaults(fn=cmd_export)
     a = ap.parse_args(argv)
-    return a.fn(a)
+    try:
+        return a.fn(a)
+    except KeyboardInterrupt:
+        print("stopped", file=sys.stderr)
+        return 130
+    except Exception as e:                 # one clear line instead of a traceback (LEVEL7_DEBUG=1 shows it)
+        if os.environ.get("LEVEL7_DEBUG"):
+            raise
+        print(f"error: {type(e).__name__}: {e}", file=sys.stderr)
+        return 3
 
 
 if __name__ == "__main__":

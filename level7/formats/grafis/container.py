@@ -131,21 +131,23 @@ CHECK_MOD = 1024000000
 def grafis_check(data: bytes) -> int:
     """GRAFIS check value of a block (or of the 80-byte file header), its own check field set to zero.
 
-    Found from the sample files (3150 of 3159 blocks and all 5 file headers reproduced): sum over the data
-    read as signed 16-bit little-endian words, word k (1-based) weighted by k, kept in a 32-bit integer from
-    which 1,024,000,000 is subtracted whenever the running total reaches it. The 9 blocks not reproduced are
-    very large piece-geometry blocks (> 32k words) that LEVEL7 never rewrites.
+    Found from the sample files (all 3159 blocks and 5 file headers reproduced): sum over the data read as
+    signed 16-bit little-endian words, word k (1-based) weighted by k; product and sum both kept in a signed
+    32-bit integer, from which 1,024,000,000 is subtracted whenever the running total reaches it.
     """
     if len(data) % 2:
         data += b"\0"
     words = struct.unpack(f"<{len(data) // 2}h", data)
     acc = 0
     for k, x in enumerate(words, 1):
-        acc += k * x
+        acc = _s32(acc + _s32(k * x))          # GRAFIS multiplies in 32 bits too (blocks > 32k words wrap)
         if acc >= CHECK_MOD:
             acc -= CHECK_MOD
-        acc = ((acc + 0x80000000) & 0xFFFFFFFF) - 0x80000000      # 32-bit signed wrap-around
     return acc & 0xFFFFFFFF
+
+
+def _s32(v: int) -> int:
+    return ((v + 0x80000000) & 0xFFFFFFFF) - 0x80000000
 
 
 def block_check(check_field_zeroed_block: bytes) -> int:

@@ -84,16 +84,18 @@ def find_model_file(scb_path: str, proj: Project) -> str | None:
 
 def supplement_from_model(proj: Project, mdl_path: str) -> int:
     """Copy sizes that are missing in the project's pieces from the model file (matched by GRAFIS part ID,
-    else part number). Returns the number of piece sizes added."""
+    else part number and name). Returns the number of piece sizes added."""
     from .readers.grafis import read_grafis
     model = read_grafis(mdl_path).project
     by_id = {p.source_id: p for p in model.pieces if p.source_id}
     by_num = {p.number: p for p in model.pieces if p.number is not None}
     added = 0
     for p in proj.pieces:
-        src = by_id.get(p.source_id) or by_num.get(p.number)
-        if src is None:
-            continue
+        src = by_id.get(p.source_id)
+        if src is None:                     # by number only when the name agrees too (GRAFIS 26 renumbers SCBs)
+            src = by_num.get(p.number)
+            if src is None or src.name.strip().lower() != p.name.strip().lower():
+                continue
         for s, g in src.sizes.items():
             if s not in p.sizes:
                 p.sizes[s] = g

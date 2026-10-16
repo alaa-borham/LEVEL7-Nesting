@@ -42,7 +42,7 @@ def read_rul(path: str):
                 rules[cur] = vals
             cur = None
         elif cur is not None:
-            nums = [float(x) for x in re.findall(r"-?\d+(?:\.\d+)?", ln)]
+            nums = [float(x) for x in re.findall(r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?", ln)]
             vals += list(zip(nums[0::2], nums[1::2]))
     return sizes, sample, rules
 
@@ -54,6 +54,8 @@ def size_columns(sizes, sample):
     for i, s in enumerate(sizes):
         if i not in dup:
             cols[s] = i
+    if len(dup) == 1:                     # the sample size listed once (usual AAMA): an ordinary column
+        cols[sample] = dup[0]
     return cols, dup
 
 

@@ -51,7 +51,14 @@ class MachineProfile:
     @classmethod
     def load(cls, path):
         with open(path, encoding="utf-8") as fh:
-            return cls(**json.load(fh))
+            return cls.from_dict(json.load(fh))
+
+    @classmethod
+    def from_dict(cls, raw: dict):
+        """Settings saved by another LEVEL7 version: unknown keys are left out (they would refuse to load)."""
+        from dataclasses import fields
+        names = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in (raw or {}).items() if k in names})
 
 
 class NotConfigured(Exception):
@@ -147,9 +154,13 @@ def _band_order(paths, band):
 def _write_atomic(path: str, text: str):
     """Write the whole file or nothing (no half-written job on the cutter after an error)."""
     tmp = path + ".part"
-    with open(tmp, "w", encoding="ascii", newline="") as fh:
-        fh.write(text)
-    os.replace(tmp, path)
+    try:
+        with open(tmp, "w", encoding="ascii", newline="") as fh:
+            fh.write(text)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
 
 
 def _write_bullmer(scene: Scene, path: str, profile: MachineProfile, job_name: str) -> dict:

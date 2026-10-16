@@ -100,3 +100,53 @@ def test_renest_only_pieces_inside_keeps_taken_out_unplaced():
     assert info["validation"].ok, info["validation"].summary()
     assert sum(p.placed for p in m.placements) == len(inside)
     assert sorted(p.uid for p in m.placements if not p.placed) == sorted(p.uid for p in out)
+
+
+def test_grafis_check_reproduces_every_sample_block():
+    """The check value of every block of every sample file (also the big geometry blocks > 32k words, where
+    GRAFIS' 32-bit product wraps): a written SCB with > ~1000 pieces would otherwise be refused by GRAFIS."""
+    import glob
+    import struct
+
+    from conftest import SAMPLES
+
+    from level7.formats.grafis.container import grafis_check, read_container
+    files = [f for f in glob.glob(os.path.join(SAMPLES, "**", "*"), recursive=True)
+             if f.lower().endswith((".mdl", ".scb"))]
+    assert files
+    for f in files:
+        data = open(f, "rb").read()
+        assert grafis_check(b"\0\0\0\0" + data[4:80]) == struct.unpack_from("<I", data, 0)[0]
+        for b in read_container(f).blocks:
+            assert grafis_check(b"\0\0\0\0" + data[b.offset + 4:b.offset + b.size]) == b.check, (f, b.bid)
+
+
+def test_dxf_degenerate_and_nested_blocks(tmp_path):
+    import ezdxf
+
+    from level7.readers.dxf import read_dxf
+    doc = ezdxf.new()
+    inner = doc.blocks.new("INNER")
+    inner.add_lwpolyline([(0, 0), (100, 0), (100, 50), (0, 50)], close=True, dxfattribs={"layer": "1"})
+    outer = doc.blocks.new("OUTER")
+    outer.add_blockref("INNER", (10, 10))
+    msp = doc.modelspace()
+    msp.add_blockref("OUTER", (0, 0))
+    msp.add_lwpolyline([(0, 0), (5, 5)], close=True, dxfattribs={"layer": "0"})     # closed, no area
+    msp.add_lwpolyline([(1, 1)], dxfattribs={"layer": "8"})                         # one point
+    p = str(tmp_path / "x.dxf")
+    doc.saveas(p)
+    proj, issues = read_dxf(p)
+    assert len(proj.pieces) == 1
+    assert any("degenerate" in i for i in issues)
+
+
+def test_aama_numbers_without_leading_digit():
+    import re
+
+    from level7.readers import aama
+    src = open(aama.__file__, encoding="utf-8").read()
+    pat = re.search(r're\.findall\(r"([^"]+)", ln\)', src).group(1)
+    assert [float(x) for x in re.findall(pat, "-.25, .5 12 -3.75")] == [-0.25, 0.5, 12.0, -3.75]
+    cols, dup = aama.size_columns(["38", "40", "42"], "40")
+    assert cols == {"38": 0, "40": 1, "42": 2}

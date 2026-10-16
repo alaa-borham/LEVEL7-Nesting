@@ -243,6 +243,10 @@ def run_order(order: MarkerOrder, outdir: str, plt_config=None, iso_config=None,
         raise OrderError(f"time limit too short: {info['cut_short']} piece(s) not placed - give this marker more time")
     if not info["validation"].ok:
         raise OrderError("nested marker failed validation: " + info["validation"].summary())
+    if unplaced:                           # never write cutting files with pieces missing
+        why = sorted({p.reason for p in unplaced if p.reason})
+        raise OrderError(f"{len(unplaced)} piece(s) not placed" + (f" ({'; '.join(why)[:200]})" if why else "")
+                         + " - marker not exported; check the fabric width / margins")
     proj.markers.append(marker)
     os.makedirs(outdir, exist_ok=True)
     safe = order.file_stem or _stem(order.name)
@@ -263,7 +267,7 @@ def run_order(order: MarkerOrder, outdir: str, plt_config=None, iso_config=None,
     order.length_mm = marker.stats.get("length_mm")
     order.efficiency = marker.stats.get("efficiency_total_width_pct")
     order.status = "done"
-    order.message = (f"{len(unplaced)} piece(s) not placed" if unplaced else "ok") + f" · engine {info.get('engine')}"
+    order.message = f"ok · engine {info.get('engine')}"
     return proj, marker
 
 

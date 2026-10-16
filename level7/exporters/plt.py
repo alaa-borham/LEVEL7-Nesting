@@ -12,6 +12,7 @@ so it can never become a cut path.
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -48,7 +49,14 @@ class PlotterConfig:
     @classmethod
     def load(cls, path):
         with open(path, encoding="utf-8") as fh:
-            return cls(**json.load(fh))
+            return cls.from_dict(json.load(fh))
+
+    @classmethod
+    def from_dict(cls, raw: dict):
+        """Settings saved by another LEVEL7 version: unknown keys are left out (they would refuse to load)."""
+        from dataclasses import fields
+        names = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in (raw or {}).items() if k in names})
 
 
 class ExportError(Exception):
@@ -163,7 +171,7 @@ def write_plt(scene: Scene, path: str, cfg: PlotterConfig | None = None) -> dict
                 p = SPath(p.layer, pts, True, p.owner)
             merged.append(p)
         paths = merged
-    if cfg.text_mode == "strokes":
+    if cfg.include_text and cfg.text_mode == "strokes":
         from .scene import Path as SPath
         tpen = cfg.pens.get("TEXT", 0)
         for t in scene.texts:
@@ -211,6 +219,7 @@ def write_plt(scene: Scene, path: str, cfg: PlotterConfig | None = None) -> dict
             out.append(f"SI{h_cm * 0.7:.3f},{h_cm:.3f};")
             for t in texts:
                 x, y = _dev(cfg, t.position[0], t.position[1], ext)
+                stats["skipped_chars"] |= {ch for ch in t.text if ord(ch) > 126}
                 safe = t.text.encode("ascii", "replace").decode("ascii").replace(cfg.terminator, "?")
                 out.append(f"PU{x},{y};LB{safe}{cfg.terminator}")
                 stats["labels"] += 1
@@ -220,8 +229,14 @@ def write_plt(scene: Scene, path: str, cfg: PlotterConfig | None = None) -> dict
     else:
         out.append("PU;SP0;")
         newline = "\n"
-    with open(path, "w", encoding="ascii", newline="") as fh:
-        fh.write(newline.join(out) + newline)
+    tmp = path + ".part"                   # the whole file or nothing (no half job on the plotter)
+    try:
+        with open(tmp, "w", encoding="ascii", newline="") as fh:
+            fh.write(newline.join(out) + newline)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
     stats["units_per_mm"] = cfg.units_per_mm
     stats["skipped_chars"] = sorted(stats["skipped_chars"])
     return stats

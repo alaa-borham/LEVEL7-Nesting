@@ -64,8 +64,17 @@ def clusters(strokes):
             parent[i] = parent[parent[i]]
             i = parent[i]
         return i
+    if not strokes:
+        return []
+    from shapely import STRtree, box
+    reach = 0.9 * max(max(b[2] - b[0], b[3] - b[1]) for b in boxes)
+    tree = STRtree([box(*b) for b in boxes])
     for i in range(len(strokes)):
-        for j in range(i + 1, len(strokes)):
+        bi = boxes[i]
+        for j in tree.query(box(bi[0] - reach, bi[1] - reach, bi[2] + reach, bi[3] + reach)):
+            j = int(j)
+            if j <= i:
+                continue
             a, b = boxes[i], boxes[j]
             gap = max(a[0] - b[2], b[0] - a[2], a[1] - b[3], b[1] - a[3], 0.0)
             size = max(a[2] - a[0], a[3] - a[1], b[2] - b[0], b[3] - b[1])
