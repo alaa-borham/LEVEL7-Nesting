@@ -277,7 +277,8 @@ class MainWindow(QMainWindow):
         self.pieces_table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.pieces_table.customContextMenuRequested.connect(self._pieces_menu)
         self.pieces_table.itemChanged.connect(
-            lambda it: (self._refresh_material_groups(), self._table_edited()) if it.column() == 0 else None)
+            lambda it: (self._refresh_material_groups(), self._table_edited())
+            if it.column() == 0 and not getattr(self, "_loading_tables", False) else None)
         self.sizes_table = QTableWidget(0, 2)
         self.sizes_table.verticalHeader().hide()
         self.sizes_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
@@ -842,6 +843,12 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(0, self.view.zoom_fit)
 
     def eventFilter(self, obj, ev):
+        t = ev.type()
+        if t != QEvent.Show and t != QEvent.MouseButtonPress:      # every event of the application passes here
+            return False
+        return self._panel_events(obj, ev)
+
+    def _panel_events(self, obj, ev):
         """A click outside an open panel closes it (the pieces table stays open for clicks on the marker / strip,
         so selected pieces are highlighted in it); clicks in the panel's own lists, its toolbar icon or a dialog
         do not count."""
@@ -1214,10 +1221,26 @@ class MainWindow(QMainWindow):
 
     def load_tables(self):
         self._loading_tables = True
+        tabs = (self.pieces_table, self.sizes_table)
+        for t in tabs:                         # one repaint at the end, not one per cell (600 pieces: 4.3 s)
+            t.setUpdatesEnabled(False)
+        # the application-wide filters (panels, mouse wheel) see every event of the thousands of cell widgets
+        # being built: they only matter for clicks / the wheel, so they rest meanwhile
+        from . import wheel_guard
+        app = QApplication.instance()
+        filters = [f for f in (self, wheel_guard._GUARD) if f is not None]
+        for f in filters:
+            app.removeEventFilter(f)
         try:
             self._load_tables()
         finally:
+            for f in filters:
+                app.installEventFilter(f)
             self._loading_tables = False
+            for t in tabs:
+                t.setUpdatesEnabled(True)
+        if self.project is not None:
+            self._refresh_material_groups()
         self._synced_order = self._order_signature() if self.project is not None else None
 
     def _table_edited(self, *_):
@@ -1530,7 +1553,22 @@ class MainWindow(QMainWindow):
         except RuntimeError:          # window already being destroyed (undo stack signals on shutdown)
             pass
 
+    NEED_PROJECT = {"save", "save_as", "save_scb", "save_mdl", "run", "best_result", "watermark"}
+    NEED_MARKER = {"export_plt", "export_dxf", "export_iso", "export_scb", "export_menu", "print_marker", "rotate180",
+                   "pin", "take_out", "renest_inside", "measure", "measure_curve", "measure_tool"}
+
+    def _update_actions(self):
+        """Menu items / icons that can do nothing now are greyed out (no file: no save, no marker: no export)."""
+        has_p, has_m = self.project is not None, self.marker is not None
+        running = self._busy() if hasattr(self, "worker") else False
+        for a, k in getattr(self, "actions_tr", ()):
+            if k in self.NEED_MARKER:
+                a.setEnabled(has_m and not (running and k in ("rotate180", "pin", "take_out", "renest_inside")))
+            elif k in self.NEED_PROJECT:
+                a.setEnabled(has_p and not (running and k in ("run", "best_result", "save_mdl")))
+
     def _update_title(self):
+        self._update_actions()
         self.setWindowTitle(f"{tr('app_title')} {__version__}" +
                             (f" — {self.project.name}{' *' if self.dirty else ''}" if self.project else ""))
 
@@ -1699,6 +1737,7 @@ class MainWindow(QMainWindow):
         elif not (self.project and self.project.markers):
             self.marker = None
             self.view.show_marker(self.project, None)
+        self._update_actions()
 
     def select_marker(self, i):
         if not self.project or i < 0 or i >= len(self.project.markers):
@@ -1714,6 +1753,7 @@ class MainWindow(QMainWindow):
         self.view.efficiency = self.marker.stats["efficiency_total_width_pct"]
         self.view.show_marker(self.project, self.marker)
         self.after_edit(fit=True)
+        self._update_actions()
 
     def validate_current(self):
         if not self.marker:
@@ -2213,6 +2253,7 @@ class MainWindow(QMainWindow):
         self.undo_actions[1].setEnabled(not running and self.undo.canRedo())
         for t in (self.pieces_table, self.sizes_table):
             t.setEnabled(not running)
+        self._update_actions()
         self.progress_bar.setVisible(running)
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)

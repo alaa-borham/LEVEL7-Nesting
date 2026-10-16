@@ -362,7 +362,7 @@ class NestEngine:
 
     def _best_position(self, it, rot, placed, length, best, halt=True):
         if it.match is not None:
-            return self._best_matched(it, rot, placed, length, best)
+            return self._best_matched(it, rot, placed, length, best, halt)
         ip, bx0, by0, w, h = self.oriented(it, rot)
         if h > (self.y1 - self.y0) + 1e-6:
             return best
@@ -386,7 +386,7 @@ class NestEngine:
                     best = (key, rot, (x, y), w)
         return best
 
-    def _best_matched(self, it, rot, placed, length, best):
+    def _best_matched(self, it, rot, placed, length, best, halt=True):
         """Plaid matching: only positions where the anchor lies on its pattern line(s)."""
         from shapely.geometry import LineString, Point, Polygon
         from shapely.ops import unary_union
@@ -400,7 +400,9 @@ class NestEngine:
             return best
         rect = [(xa, ya), (xb, ya), (xb, yb), (xa, yb)]
         forb = []
-        for (pit, prot, pt) in placed:
+        for k, (pit, prot, pt) in enumerate(placed):
+            if halt and k % 16 == 15 and self._halted():      # Stop answers at once with plaid matching too
+                raise _Halt()
             forb.extend(translate(self.nfp_rel(pit, prot, it, rot), pt[0], pt[1]))
         paths = feasible_region(rect, forb)
         outer = [Polygon(p) for p in paths if len(p) >= 3 and pyclipper.Orientation(p)]

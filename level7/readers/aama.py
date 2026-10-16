@@ -77,6 +77,38 @@ def _rule_points(ents, layer, pts, tol=0.01):
     return out
 
 
+def _unit_factor(rul_path, doc) -> float:
+    """AAMA files state their units ("UNITS:METRIC" / "UNITS:ENGLISH" in the RUL, "Units:..." text in the DXF);
+    ENGLISH = inches."""
+    txt = ""
+    if rul_path:
+        try:
+            txt = Path(rul_path).read_text(encoding="latin-1")
+        except OSError:
+            txt = ""
+    m = re.search(r"UNITS\s*:\s*(\w+)", txt, re.I)
+    if m is None:
+        for e in doc.modelspace().query("TEXT"):
+            m = re.match(r"\s*UNITS\s*:\s*(\w+)", e.dxf.text, re.I)
+            if m:
+                break
+    return 25.4 if m and m.group(1).upper() in ("ENGLISH", "INCH", "INCHES", "IMPERIAL") else 1.0
+
+
+def _scale(g, f: float):
+    def sc(pts):
+        return [(x * f, y * f) for x, y in pts]
+    g.cut = sc(g.cut)
+    for n in g.notches:
+        n.position = (n.position[0] * f, n.position[1] * f)
+        n.length *= f
+    for pl in g.seam:
+        pl.points = sc(pl.points)
+    if g.grain is not None:
+        g.grain.points = sc(g.grain.points)
+    g.source_unit, g.unit_factor = "inch", f
+
+
 def read_aama(dxf_path: str, rul_path: str | None = None, encoding: str = "cp1256"):
     issues: list[str] = []
     if rul_path is None:
@@ -86,6 +118,9 @@ def read_aama(dxf_path: str, rul_path: str | None = None, encoding: str = "cp125
     cols, dup = size_columns(sizes, sample) if sizes else ({}, [])
     size_names = sorted(set(sizes), key=lambda s: (len(s), s)) if sizes else ["base"]
     doc = ezdxf.readfile(dxf_path, encoding=encoding)   # GRAFIS writes Arabic names in Windows-1256
+    f = _unit_factor(rul_path, doc)
+    if f != 1.0:
+        issues.append(f"AAMA units ENGLISH (inches): converted to millimetres (x {f:g})")
     with open(dxf_path, "rb") as fh:
         sha = sha256_bytes(fh.read())
     proj = Project(name=os.path.splitext(os.path.basename(dxf_path))[0], size_names=size_names)
@@ -147,6 +182,8 @@ def read_aama(dxf_path: str, rul_path: str | None = None, encoding: str = "cp125
                 g.grain = Polyline(grain)
             g.completeness = {"cut": Status.CONFIRMED.value if s == sample or not rules else Status.PROBABLE.value,
                               "grain": Status.CONFIRMED.value if grain else Status.UNKNOWN.value}
+            if f != 1.0:
+                _scale(g, f)
             piece.sizes[s] = g
         if grain:
             piece.grain_angle = grain_angle(grain)

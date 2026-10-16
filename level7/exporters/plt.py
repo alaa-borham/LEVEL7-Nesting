@@ -12,6 +12,7 @@ so it can never become a cut path.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 from dataclasses import asdict, dataclass, field
@@ -221,7 +222,17 @@ def write_plt(scene: Scene, path: str, cfg: PlotterConfig | None = None) -> dict
                 x, y = _dev(cfg, t.position[0], t.position[1], ext)
                 stats["skipped_chars"] |= {ch for ch in t.text if ord(ch) > 126}
                 safe = t.text.encode("ascii", "replace").decode("ascii").replace(cfg.terminator, "?")
+                # label direction on the device (axes swapped / flipped by the profile): DI run, rise
+                a = math.radians(t.rotation or 0.0)
+                x2, y2 = _dev(cfg, t.position[0] + 100.0 * math.cos(a), t.position[1] + 100.0 * math.sin(a), ext)
+                run, rise = x2 - x, y2 - y
+                turned = abs(rise) > 1e-9 or run < 0
+                if turned:
+                    n = math.hypot(run, rise)
+                    out.append(f"DI{run / n:.4f},{rise / n:.4f};")
                 out.append(f"PU{x},{y};LB{safe}{cfg.terminator}")
+                if turned:
+                    out.append("DI1,0;")
                 stats["labels"] += 1
     if grafis:
         out.append("PG")

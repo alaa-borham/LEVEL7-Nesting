@@ -30,7 +30,7 @@ def inspect_file(path: str, encoding: str = "cp1256") -> dict:
     rep["findings"] = findings
     try:
         cont = read_container(path)
-    except GrafisFormatError as e:
+    except (GrafisFormatError, OSError) as e:
         rep["error"] = str(e)
         findings["unsupported"].append(f"not a GRAFIS container: {e}")
         return rep

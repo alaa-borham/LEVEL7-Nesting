@@ -57,3 +57,61 @@ def test_batch_rejects_bad_rows(tmp_path):
     p.write_text("marker,file,size,qty,width\nM1,x.mdl,44,-2,1500\n", encoding="utf-8")
     with pytest.raises(OrderError, match="negative"):
         parse_orders(str(p))
+
+
+def test_aama_in_inches_is_converted(tmp_path):
+    import os
+    import shutil
+
+    from conftest import SAMPLES
+
+    from level7.readers.aama import read_aama
+    src = os.path.join(SAMPLES, "reference", "aama", "Neay_blue_pants")
+    shutil.copy(src + ".dxf", tmp_path / "x.dxf")
+    rul = open(src + ".rul", encoding="latin-1").read()
+    (tmp_path / "x.rul").write_text(rul.replace("UNITS:METRIC", "UNITS:ENGLISH"), encoding="latin-1")
+    a, _ = read_aama(src + ".dxf")
+    b, issues = read_aama(str(tmp_path / "x.dxf"))
+    s = next(iter(a.pieces[0].sizes))
+    pa, pb = a.pieces[0].sizes[s].cut[1], b.pieces[0].sizes[s].cut[1]
+    assert abs(pb[0] - 25.4 * pa[0]) < 1e-6 and abs(pb[1] - 25.4 * pa[1]) < 1e-6
+    assert any("inch" in i for i in issues)
+
+
+def test_iso_cuts_a_hole_before_its_piece():
+    from level7.exporters.iso import _band_order
+
+    class P:
+        def __init__(self, pts):
+            self.points = pts
+    outer = P([(0, 0), (100, 0), (100, 100), (0, 100)])
+    hole = P([(40, 40), (60, 40), (60, 60), (40, 60)])
+    other = P([(200, 0), (300, 0), (300, 50), (200, 50)])
+    assert _band_order([outer, other, hole], 400) == [hole, outer, other]
+
+
+def test_update_redirects_stay_on_https_and_github():
+    from level7.updater import _redirect_ok
+    hosts = ("github.com", "api.github.com")
+    assert _redirect_ok("https://objects.githubusercontent.com/a", hosts)
+    assert not _redirect_ok("http://objects.githubusercontent.com/a", hosts)
+    assert not _redirect_ok("https://githubusercontent.com.evil.example/a", hosts)
+
+
+def test_marker_area_matches_a_full_union():
+    from shapely.ops import unary_union
+
+    from level7.validation.checker import placed_polygons
+    proj, _ = open_any(SCB)
+    m = proj.markers[0]
+    u = unary_union(list(placed_polygons(proj, m).values())).area
+    assert abs(marker_stats(proj, m)["pieces_area_m2"] * 1e6 - u) < 1e-3
+
+
+def test_rotated_labels_get_a_direction(tmp_path):
+    from level7.service import export_marker
+    proj, _ = open_any(SCB)
+    p = tmp_path / "l.plt"
+    export_marker(proj, proj.markers[0], "plt", str(p))
+    t = p.read_text()
+    assert t.count("DI") % 2 == 0 and "LB" in t

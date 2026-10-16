@@ -148,7 +148,28 @@ def _band_order(paths, band):
         xs = [q[0] for q in p.points]
         ys = [q[1] for q in p.points]
         return (int(min(xs) // band), min(ys))
-    return sorted(paths, key=key)
+    order = sorted(paths, key=key)
+    # a contour inside another (a hole / cut-out) is cut BEFORE its piece: once the outline is cut the piece is
+    # loose and the hole would be cut in a moving part
+    from shapely import STRtree
+    from shapely.geometry import Polygon
+    polys = [Polygon(p.points).buffer(0) for p in order]
+    tree = STRtree(polys)
+    host = {}
+    for i, pg in enumerate(polys):
+        outer = [int(j) for j in tree.query(pg, predicate="within") if int(j) != i and polys[int(j)].area > pg.area]
+        if outer:
+            host[i] = min(outer, key=lambda j: polys[j].area)       # the closest piece around it
+    if not host:
+        return order
+    out = []
+    for i, p in enumerate(order):
+        if i in host:
+            continue
+        out.extend(order[k] for k in range(len(order)) if host.get(k) == i)
+        out.append(p)
+    out.extend(order[k] for k in host if host[k] in host)          # (a contour inside a hole: after it)
+    return out
 
 
 def _write_atomic(path: str, text: str):

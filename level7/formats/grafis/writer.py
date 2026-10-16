@@ -321,6 +321,14 @@ def rebuild_container(data: bytes, cont, new_payloads: dict, error=ScbWriteError
 
 def write_atomic(path: str, data: bytes) -> None:
     tmp = path + ".part"                 # the GRAFIS file is replaced only once the new one is complete
-    with open(tmp, "wb") as fh:
-        fh.write(data)
-    os.replace(tmp, path)
+    try:
+        with open(tmp, "wb") as fh:
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    except PermissionError as e:         # Windows: the file is open in GRAFIS (or read-only)
+        raise PermissionError(f"{path}: cannot be replaced - is it open in GRAFIS or read-only? ({e})") from e
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)

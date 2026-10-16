@@ -547,6 +547,9 @@ def find_scb_for_model(proj: Project, folder: str, limit: int = 200) -> str | No
             continue
         if ts is None:
             continue
+        names = {e.name.strip().lower() for e in ts.tlist}
+        if not {n.lower() for _num, n in want} <= names:
+            continue                     # cheap test first: a part this session nests is not in that marker
         try:   # names, then the shapes (an SCB of another model / an older state of this one is skipped)
             tp = template_pieces(f)
             pmap = part_map(proj, ts.tlist, uids, tp)

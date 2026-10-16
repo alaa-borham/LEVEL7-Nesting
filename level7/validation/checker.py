@@ -40,17 +40,48 @@ class ValidationReport:
         return "INVALID: " + ", ".join(f"{k}={v}" for k, v in c.items())
 
 
+_POLY_CACHE: dict = {}
+
+
 def placed_polygons(project: Project, marker: Marker) -> dict[str, Polygon]:
+    """Cut regions of the placed copies. Kept per geometry + position: after moving one piece of 700 only that
+    one is computed again (each check rebuilt all of them)."""
     out = {}
+    pcs = {p.uid: p for p in project.pieces}
+    if len(_POLY_CACHE) > 20000:
+        _POLY_CACHE.clear()
     for pl in marker.placements:
         if not pl.placed:
             continue
-        g = project.piece(pl.piece_uid).sizes[pl.size]
+        g = pcs[pl.piece_uid].sizes[pl.size]
+        key = (id(g), len(g.cut), pl.x, pl.y, pl.rotation, pl.mirrored, pl.sx, pl.sy)
+        hit = _POLY_CACHE.get(key)
+        if hit is not None and hit[0] is g:            # (the geometry itself is kept: its id is not reused)
+            out[pl.uid] = hit[1]
+            continue
         poly = Polygon(placement_points(g.cut, pl))
         if not poly.is_valid:
             poly = poly.buffer(0)
+        _POLY_CACHE[key] = (g, poly)
         out[pl.uid] = poly
     return out
+
+
+def _union_area(polys) -> float:
+    """Area covered by the pieces: their areas less what overlapping pairs share (a full union of 700 pieces
+    took 0.3 s on every edit; pieces of a marker only touch, so the pairs are few)."""
+    import shapely
+    if not polys:
+        return 0.0
+    arr = list(polys)
+    total = sum(p.area for p in arr)
+    tree = shapely.STRtree(arr)
+    a, b = tree.query(arr, predicate="intersects")
+    shared = 0.0
+    for i, j in zip(a.tolist(), b.tolist()):
+        if i < j:
+            shared += arr[i].intersection(arr[j]).area
+    return total - shared
 
 
 def validate_marker(project: Project, marker: Marker, required: dict | None = None,
@@ -159,11 +190,9 @@ def marker_stats(project: Project, marker: Marker) -> dict:
     Holes in pieces are subtracted (cut-outs are waste). Length is measured from the
     marker origin (x = 0) to the right-most piece plus the end margin.
     """
-    from shapely.ops import unary_union
     polys = list(placed_polygons(project, marker).values())
     f = marker.fabric
-    u = unary_union(polys) if polys else Polygon()
-    area = u.area
+    area = _union_area(polys)
     if f.lay_type == LayType.FOLDED:          # nested on the half width, every piece cut twice (both halves)
         area *= 2.0
     length = (max((p.bounds[2] for p in polys), default=0.0) + f.margin_end) if polys else 0.0

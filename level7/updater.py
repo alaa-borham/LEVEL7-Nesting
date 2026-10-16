@@ -72,10 +72,36 @@ def _check_url(url: str, hosts=ALLOWED_HOSTS):
         raise UpdateError(f"refusing update URL outside the update host: {url}")
 
 
+REDIRECT_DOMAINS = ("github.com", "githubusercontent.com")   # GitHub's asset storage behind its redirects
+
+
+def _redirect_ok(url: str, hosts) -> bool:
+    u = urlparse(url)
+    h = (u.hostname or "").lower()
+    return u.scheme == "https" and (h in hosts or any(h == d or h.endswith("." + d) for d in REDIRECT_DOMAINS))
+
+
+class _SafeRedirects(urllib.request.HTTPRedirectHandler):
+    """Redirects are followed only over https and only to the update host / GitHub's storage."""
+
+    def __init__(self, hosts):
+        super().__init__()
+        self.hosts = tuple(hosts)
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not _redirect_ok(newurl, self.hosts):
+            raise UpdateError(f"refusing redirect outside the update host: {newurl}")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 def _get(url: str, timeout: float, accept: str = "application/octet-stream", hosts=ALLOWED_HOSTS):
     _check_url(url, hosts)
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": accept})
-    return urllib.request.urlopen(req, timeout=timeout)       # follows the redirect to GitHub's asset storage
+    return _urlopen(req, timeout, hosts)                       # follows the redirect to GitHub's asset storage
+
+
+def _urlopen(req, timeout, hosts=ALLOWED_HOSTS):
+    return urllib.request.build_opener(_SafeRedirects(hosts)).open(req, timeout=timeout)
 
 
 def parse_release(data: dict) -> UpdateInfo | None:
@@ -170,13 +196,30 @@ def download(info: UpdateInfo, dest_dir: str | None = None, progress=None, cance
     dest_dir = dest_dir or os.path.join(tempfile.gettempdir(), "LEVEL7Nesting-update")
     os.makedirs(dest_dir, exist_ok=True)
     path = os.path.join(dest_dir, os.path.basename(info.setup_name))
-    h, done = hashlib.sha256(), 0
+    h = hashlib.sha256()
+    try:
+        _fetch_to(info, timeout, hosts, path, h, progress, cancelled)
+    except BaseException:
+        if os.path.exists(path + ".part"):            # a broken connection leaves no half file behind
+            os.remove(path + ".part")
+        raise
+    if h.hexdigest() != want:
+        os.remove(path + ".part")
+        raise UpdateError("checksum mismatch: downloaded installer rejected")
+    os.replace(path + ".part", path)
+    _VERIFIED[os.path.abspath(path)] = want
+    return path
+
+
+_VERIFIED: dict = {}        # installer path -> SHA-256 it was verified with (checked again just before it runs)
+
+
+def _fetch_to(info, timeout, hosts, path, h, progress, cancelled):
+    done = 0
     with _get(info.setup_url, timeout, hosts=hosts) as r, open(path + ".part", "wb") as fh:
         total = int(r.headers.get("Content-Length") or info.setup_size or 0)
         while True:
             if cancelled and cancelled():
-                fh.close()
-                os.remove(path + ".part")
                 raise UpdateError("cancelled")
             chunk = r.read(1 << 16)
             if not chunk:
@@ -186,11 +229,6 @@ def download(info: UpdateInfo, dest_dir: str | None = None, progress=None, cance
             done += len(chunk)
             if progress:
                 progress(done, total)
-    if h.hexdigest() != want:
-        os.remove(path + ".part")
-        raise UpdateError("checksum mismatch: downloaded installer rejected")
-    os.replace(path + ".part", path)
-    return path
 
 
 def installer_arguments() -> list[str]:
@@ -202,5 +240,12 @@ def start_installer(path: str):
     """Start the verified installer (Windows only); the caller quits the application afterwards."""
     if os.name != "nt":
         raise UpdateError("installing updates is only supported on Windows")
+    want = _VERIFIED.get(os.path.abspath(path))
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:                       # the file run is the file that was verified
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    if not want or h.hexdigest() != want:
+        raise UpdateError("the installer changed after it was verified - not started")
     args = " ".join(installer_arguments())
     os.startfile(path, "open", args)        # ShellExecute: lets the installer request elevation (UAC) itself

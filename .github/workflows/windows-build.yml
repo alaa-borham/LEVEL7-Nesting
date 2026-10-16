@@ -99,7 +99,9 @@ jobs:
           & $sp --help | Out-Null
           if ($LASTEXITCODE -ne 0) { throw "bundled sparrow engine does not start" }
           & $exe export frozen.l7n --format dxf -o frozen.dxf
+          if ($LASTEXITCODE -ne 0) { throw "dxf export failed" }
           & $exe export frozen.l7n --format plt -o frozen.plt
+          if ($LASTEXITCODE -ne 0) { throw "plt export failed" }
           if (!(Test-Path frozen.dxf) -or !(Test-Path frozen.plt)) { throw "export failed" }
           $env:QT_QPA_PLATFORM = "offscreen"
           $env:LEVEL7_NO_UPDATE_CHECK = "1"

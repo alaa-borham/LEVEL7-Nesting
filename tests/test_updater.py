@@ -39,7 +39,7 @@ def fake_net(monkeypatch, rel, setup=SETUP, sums_name=None):
             name = sums_name or rel["assets"][0]["name"]
             return Resp(f"{SUM}  {name}\n".encode())
         return Resp(setup)
-    monkeypatch.setattr(updater.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(updater, "_urlopen", lambda req, timeout=None, hosts=None: urlopen(req, timeout))
     monkeypatch.setattr(updater, "MANIFEST_URL", "")
     return seen
 
@@ -68,7 +68,7 @@ def test_prerelease_draft_and_no_installer_are_ignored(monkeypatch):
 def test_offline_raises_update_error(monkeypatch):
     def urlopen(req, timeout=None):
         raise OSError("no network")
-    monkeypatch.setattr(updater.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(updater, "_urlopen", lambda req, timeout=None, hosts=None: urlopen(req, timeout))
     monkeypatch.setattr(updater, "MANIFEST_URL", "https://dl.example.com/latest.json")
     with pytest.raises(updater.UpdateError):
         updater.check_latest()
@@ -138,7 +138,7 @@ def fake_host(monkeypatch, man, setup=SETUP, down=False):
         if req.full_url.endswith("/s"):
             return Resp(f"{SUM}  LEVEL7Nesting-0.2.50-Setup.exe\n".encode())
         return Resp(setup)
-    monkeypatch.setattr(updater.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(updater, "_urlopen", lambda req, timeout=None, hosts=None: urlopen(req, timeout))
     monkeypatch.setattr(updater, "MANIFEST_URL", MANIFEST)
     return seen
 
