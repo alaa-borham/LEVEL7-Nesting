@@ -111,7 +111,10 @@ def project_from_dict(d: dict) -> Project:
                          piece_counts={k: tuple(v) for k, v in co.get("piece_counts", {}).items()},
                          material=co.get("material"),
                          excluded=[tuple(x) for x in co.get("excluded", [])])
-    return Project(name=d.get("name", "untitled"), pieces=pieces, size_names=d.get("size_names", []),
+    size_names = d.get("size_names", [])
+    if not size_names:                 # saved before one-size models listed their base size: take it from the order
+        size_names = [k for k in cut_order.size_quantities if k.startswith("base:")]
+    return Project(name=d.get("name", "untitled"), pieces=pieces, size_names=size_names,
                    sources=[SourceInfo(**_known(SourceInfo, s)) for s in d.get("sources", [])], cut_order=cut_order,
                    nest_settings=NestSettings(**_known(NestSettings, d.get("nest_settings", {}))), markers=markers,
                    export_configs=d.get("export_configs", {}), reports=d.get("reports", {}),

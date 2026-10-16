@@ -203,6 +203,10 @@ def read_grafis(path: str, encoding: str = DEFAULT_ENCODING, include_constructio
     proj.size_names = [sizes[i] for i in sorted(sizes) if i != base_idx]
     if not any(e.ref for e in ts.sizes):            # newer SCB: alphabetical GRDTAB -> garment order
         proj.size_names.sort(key=size_order_key)
+    if not proj.size_names and base_idx is not None:
+        # a model with only its base (sample) size, e.g. an order model written by LEVEL7 MTM: the base is the
+        # one size that can be cut, under the key its pieces use ("base:__HN40_0")
+        proj.size_names = [f"base:{sizes[base_idx]}"]
     info = SourceInfo(path=os.path.abspath(path), kind=kind, sha256=cont.sha256, size=cont.size)
     if kind == "scb":
         info.internal_model_name = ts.sbinfo.get("MODEL")
