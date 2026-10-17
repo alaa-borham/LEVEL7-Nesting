@@ -161,6 +161,8 @@ class NestSettings:
     best_of: int = 1               # "best result": this many attempts (different seeds), the shortest valid one wins
     hard_time: bool = False        # True: the time limit also ends the first layout (pieces not placed by then are
                                    # reported) - used for the built-in start before sparrow; Stop always does
+    remnant: bool = False          # after nesting pack the small pieces together, so the fabric left over is one
+                                   # large piece (same length; nesting/remnant.py)
 
 
 @dataclass
