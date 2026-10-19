@@ -1,7 +1,7 @@
 """Command line interface.
 
-    level7 info  FILE
-    level7 nest  FILE --width 1430 [--sizes 44=2] [--time 30] [--seed 1] [--spacing 0] [-o out.l7n]
+    level7 info  FILE [--json]
+    level7 nest  FILE --width 1430 [--sizes 44=2] [--time 30] [--seed 1] [--spacing 0] [--remnant] [-o out.l7n]
     level7 export PROJECT.l7n --marker -1 --format plt|dxf|iso|scb [--diagnostic] [--template SCB] -o FILE
     level7 compare FILE.scb --width 1500 [--time 30]
 """
@@ -24,6 +24,17 @@ def _parse_sizes(spec: list[str] | None) -> dict[str, int]:
 def cmd_info(a):
     from .service import open_any
     proj, issues = open_any(a.file)
+    if getattr(a, "json", False):                  # machine-readable (used by LEVEL7 MTM)
+        from . import __version__
+        print(json.dumps({"format": "level7-info", "format_version": 1, "level7_version": __version__,
+                          "features": ["remnant"],
+                          "name": proj.name, "size_names": proj.size_names,
+                          "pieces": [{"number": p.number, "name": p.name, "production": p.production,
+                                      "material": p.material, "count": p.default_count,
+                                      "mirrored": p.default_mirrored, "sizes": list(p.sizes)}
+                                     for p in proj.pieces],
+                          "issues": issues}, ensure_ascii=False))
+        return 0
     print(f"{proj.name}: {len(proj.pieces)} pieces, sizes {proj.size_names}")
     for p in proj.pieces:
         print(f"  {p.number!s:>3} {p.name:<28} prod={p.production!s:<5} mat={p.material or '-'} "
@@ -43,7 +54,8 @@ def _nest(a, proj):
         proj.cut_order.size_quantities = sizes
     fab = FabricSettings(width=a.width, spacing=a.spacing, margin_left=a.margin, margin_right=a.margin,
                          buffer_x=a.buffer_x, buffer_y=a.buffer_y, shrink_x=a.shrink_x, shrink_y=a.shrink_y)
-    st = NestSettings(time_limit=a.time, seed=a.seed, mode=a.mode, engine=getattr(a, "engine", "auto"))
+    st = NestSettings(time_limit=a.time, seed=a.seed, mode=a.mode, engine=getattr(a, "engine", "auto"),
+                      remnant=bool(getattr(a, "remnant", False)))
 
     def prog(d):
         if d.get("final"):
@@ -65,6 +77,9 @@ def cmd_nest(a):
     print(json.dumps({k: v for k, v in marker.stats.items() if k != "by_size"}, indent=1, default=str))
     print(info["validation"].summary())
     print("engine:", info.get("engine", "builtin"))
+    if info.get("remnant"):
+        r = info["remnant"]
+        print("remnant:", json.dumps({k: r[k] for k in ("done", "before_m2", "after_m2", "why") if k in r}))
     for w in info["warnings"]:
         print("warning:", w)
     for pl in marker.placements:
@@ -164,6 +179,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog="level7")
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("info")
+    s.add_argument("--json", action="store_true", help="machine-readable output (format level7-info v1)")
     s.add_argument("file")
     s.set_defaults(fn=cmd_info)
     for name, fn in (("nest", cmd_nest), ("compare", cmd_compare)):
@@ -183,6 +199,8 @@ def main(argv=None):
         s.add_argument("--shrink-x", type=float, default=0.0, help="shrinkage along the length (%%)")
         s.add_argument("--shrink-y", type=float, default=0.0, help="shrinkage across the width (%%)")
         s.add_argument("--workers", type=int, default=None)
+        s.add_argument("--remnant", action="store_true",
+                       help="pack the small pieces together so the fabric left over is one large piece")
         s.add_argument("-o", "--output")
         s.set_defaults(fn=fn)
     s = sub.add_parser("batch", help="nest, save and export a list of markers (Excel / CSV)")

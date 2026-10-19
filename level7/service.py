@@ -453,13 +453,21 @@ def _run_once(proj, fabric, settings, cut_order, pinned, progress, stop_event, w
         key = (u.piece_uid, u.size, u.mirrored)
         req[key] = req.get(key, 0) + 1
     v = validate_marker(proj, marker, required={k: n for k, n in req.items()}, allowed_rotations=allowed)
+    remnant = None
+    if getattr(settings, "remnant", False) and v.ok and not res.unplaced and not unplaced:
+        from .nesting.remnant import consolidate
+        out, remnant = consolidate(proj, marker, settings, validate=lambda mk: validate_marker(
+            proj, mk, required={k: n for k, n in req.items()}, allowed_rotations=allowed).ok)
+        if out is not None:
+            marker.placements = out.placements
+            v = validate_marker(proj, marker, required={k: n for k, n in req.items()}, allowed_rotations=allowed)
     st = marker_stats(proj, marker)
     marker.length = st["length_mm"]
     marker.stats = st
     info = {"validation": v, "warnings": warnings, "evaluations": res.evaluations, "elapsed": res.elapsed,
             "stopped": res.stopped, "history": res.history, "max_search_deviation": None, "engine": engine_used,
             # pieces left out because Stop / the time limit came before the first layout was complete
-            "cut_short": sum(1 for u in res.unplaced if u.reason == HALT_REASON)}
+            "cut_short": sum(1 for u in res.unplaced if u.reason == HALT_REASON), "remnant": remnant}
     return marker, info
 
 
