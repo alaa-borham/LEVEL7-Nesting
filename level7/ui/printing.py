@@ -182,7 +182,8 @@ def _page(p, job, window, scale, mm, aw, ah, k, n, col, row, cols, rows):
             if max(xs) < wx0 or min(xs) > wx1 or max(ys) < wy0 or min(ys) > wy1:
                 continue
             a, b, c = (to_px(*q) for q in (tl, tr, bl))
-            job.art.draw(p, (a.x(), a.y()), (b.x(), b.y()), (c.x(), c.y()))
+            job.art.draw(p, (a.x(), a.y()), (b.x(), b.y()), (c.x(), c.y()),
+                         background=QColor(235, 235, 235) if job.fill else QColor(255, 255, 255))
     font = QFont("Segoe UI")
     for b, label in shown if job.names else ():
         w_px, h_px = (b[2] - b[0]) * s, (b[3] - b[1]) * s

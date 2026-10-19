@@ -84,9 +84,12 @@ class PrintMarkerDialog(QDialog):
         return pr
 
     def _update(self, *_):
+        """Page count for the options chosen - one printer object for this (each new one opens the driver)."""
         job = self.job()
-        n = printing.page_count(self._printer(job, QPrinter.ScreenResolution), job)
-        self.pages.setText(tr("pr_pages", n=n))
+        if getattr(self, "_count_printer", None) is None:
+            self._count_printer = QPrinter(QPrinter.ScreenResolution)
+        printing.setup_printer(self._count_printer, job)
+        self.pages.setText(tr("pr_pages", n=printing.page_count(self._count_printer, job)))
 
     def _remember(self):
         self.settings.setValue("print/paper", self.paper.currentText())

@@ -11,6 +11,7 @@ COLORS = {"dark": QColor(30, 30, 30), "light": QColor(255, 255, 255)}
 TEXT_ORIGINAL = QColor(40, 40, 40)
 RASTER_W = 1600                  # SVG drawn at this width (print quality for a logo up to ~200 mm)
 SCREEN_W = 480                   # smaller copy for the screen (hundreds of pieces)
+PRINT_W = 1000                   # printed logo: ~125 dpi on a 200 mm logo, small enough for any printer driver
 
 
 def load_image(data: bytes) -> QImage:
@@ -86,26 +87,54 @@ class Art:
     def ok(self) -> bool:
         return self.aspect > 0
 
-    def draw(self, p: QPainter, tl, tr, bl, screen: bool = False):
-        """Draw into the parallelogram tl / tr / bl (painter coordinates)."""
+    def _opaque(self, bg: QColor) -> QImage:
+        """The logo already blended onto the piece colour, without transparency, at print size (~1000 px): a
+        printer driver cannot blend, so Qt turned every transparent logo into a page-resolution bitmap - with dozens
+        of pieces the Windows print host ran out of memory (splwow64 0x8007000e)."""
+        key = bg.rgb()
+        img = self._opaque_cache.get(key) if hasattr(self, "_opaque_cache") else None
+        if img is None:
+            src = self.image.scaledToWidth(min(PRINT_W, self.image.width()), Qt.SmoothTransformation)
+            img = QImage(src.size(), QImage.Format_RGB32)
+            img.fill(bg)
+            q = QPainter(img)
+            q.setOpacity(self.opacity)
+            q.drawImage(0, 0, src)
+            q.end()
+            self._opaque_cache = getattr(self, "_opaque_cache", {})
+            self._opaque_cache[key] = img
+        return img
+
+    def draw(self, p: QPainter, tl, tr, bl, screen: bool = False, background: QColor | None = None):
+        """Draw into the parallelogram tl / tr / bl (painter coordinates). ``background``: printing - the colour
+        under the logo (piece fill); drawn without any transparency (see _opaque)."""
         if not self.ok:
             return
         if self.path is not None:
             br = self.path.boundingRect()
             W, H = br.width(), br.height()
+        elif background is not None:
+            src = self._opaque(background)
+            W, H = src.width(), src.height()
         else:
             src = self.screen if screen else self.image
             W, H = src.width(), src.height()
         t = QTransform((tr[0] - tl[0]) / W, (tr[1] - tl[1]) / W, (bl[0] - tl[0]) / H, (bl[1] - tl[1]) / H,
                        tl[0], tl[1])
         p.save()
-        p.setOpacity(p.opacity() * self.opacity)
+        if background is None:
+            p.setOpacity(p.opacity() * self.opacity)
         p.setRenderHint(QPainter.SmoothPixmapTransform, True)
-        p.setRenderHint(QPainter.Antialiasing, True)
+        p.setRenderHint(QPainter.Antialiasing, background is None)   # (a printer driver cannot antialias either)
         p.setTransform(t, True)
         if self.path is not None:
             p.setPen(Qt.NoPen)
-            p.setBrush(self.colour)
+            if background is not None:           # the text colour mixed with the piece colour: no transparency
+                a, c, g = self.opacity, self.colour, background
+                p.setBrush(QColor(round(g.red() + (c.red() - g.red()) * a), round(g.green() + (c.green() - g.green()) * a),
+                                  round(g.blue() + (c.blue() - g.blue()) * a)))
+            else:
+                p.setBrush(self.colour)
             p.drawPath(self.path)
         else:
             p.drawImage(QPointF(0, 0), src)
