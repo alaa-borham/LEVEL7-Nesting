@@ -45,7 +45,7 @@ def test_several_order_models_in_one_marker(tmp_path):
     out = tmp_path / "both.l7n"
     r = subprocess.run([sys.executable, "-m", "level7.cli", "nest", str(a), "--width", "1500", "--time", "3",
                         "--engine", "builtin", "--sizes", "44=1", "--with", str(b), "44=2", "-o", str(out)],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
     assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-2000:]
     m = load_project(str(out)).markers[-1]
     by = Counter(pl.size for pl in m.placements if pl.placed)
@@ -54,7 +54,7 @@ def test_several_order_models_in_one_marker(tmp_path):
     texts = {lb.text for p in proj.pieces for g in p.sizes.values() for lb in g.labels}
     assert {"9-53-1/2", "9-53-2/2"} <= texts                # the order on each piece (no "_" in the plotter font)
     info = subprocess.run([sys.executable, "-m", "level7.cli", "info", "--json", str(a)], capture_output=True,
-                          text=True)
+                          text=True, encoding="utf-8", errors="replace")
     assert "with" in json.loads(info.stdout)["features"]
     plt = tmp_path / "both.plt"
     assert subprocess.run([sys.executable, "-m", "level7.cli", "export", str(out), "--format", "plt",
