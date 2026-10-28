@@ -113,6 +113,12 @@ MAX_MODELS = 15
 MODEL_SEP = ":"
 
 
+def of_model(piece, size: str) -> bool:
+    """A size of a session of several models belongs to its own model only ("tag:44", a base size "base:tag:…")."""
+    return not piece.model or size.startswith(piece.model + MODEL_SEP) or \
+        size.startswith("base:" + piece.model + MODEL_SEP)
+
+
 def model_tags(proj: Project) -> list[str]:
     seen = []
     for p in proj.pieces:
@@ -162,7 +168,7 @@ def namespace_project(proj: Project, tag: str) -> None:
             m.stats["by_size"] = {ren(k): v for k, v in m.stats["by_size"].items()}
 
 
-def add_model(proj: Project, path: str) -> tuple[Project, list[str]]:
+def add_model(proj: Project, path: str, name: str | None = None, same_ok: bool = False) -> tuple[Project, list[str]]:
     """Add another model file (MDL / SCB / DXF / AAMA / project) to a session: its pieces, sizes (prefixed with
     the model tag), cut order and markers. Pieces of all models can then be nested into one marker."""
     tags = model_tags(proj)
@@ -170,8 +176,11 @@ def add_model(proj: Project, path: str) -> tuple[Project, list[str]]:
     if first:
         tags = [_make_tag(proj.name, [])]
     other, issues = open_any(path)
+    if name:
+        other.name = name                          # its tag (e.g. the order it is for)
     have = {src.sha256 for src in proj.sources if src.sha256}
-    if any(src.sha256 in have for src in other.sources if src.sha256):
+    if not same_ok and any(src.sha256 in have for src in other.sources if src.sha256):   # (two orders of the
+                                                   # same measurements are two jobs: same_ok)
         raise ValueError(f"model already in this session: {os.path.basename(path)}")
     if any(p.model for p in other.pieces):         # a saved multi-model project: keep its tags, avoid clashes
         new_tags = model_tags(other)
@@ -306,7 +315,7 @@ def sync_marker_to_order(proj: Project, marker: Marker, spare: list | None = Non
         if marker.fabric.lay_type in (LayType.FACE_TO_FACE, LayType.FOLDED):
             n, m = max(n, m), 0
         for size, qty in co.size_quantities.items():
-            if (qty or 0) <= 0 or size not in piece.sizes or (piece.model and not size.startswith(piece.model + ":")):
+            if (qty or 0) <= 0 or size not in piece.sizes or not of_model(piece, size):
                 continue
             for b in range(1, qty + 1):
                 if (size, b) in excluded:

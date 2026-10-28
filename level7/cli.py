@@ -2,6 +2,7 @@
 
     level7 info  FILE [--json]
     level7 nest  FILE --width 1430 [--sizes 44=2] [--time 30] [--seed 1] [--spacing 0] [--remnant] [-o out.l7n]
+                 [--with OTHER.mdl SIZE=QTY ...]    (several models in one marker)
     level7 export PROJECT.l7n --marker -1 --format plt|dxf|iso|scb [--diagnostic] [--template SCB] -o FILE
     level7 compare FILE.scb --width 1500 [--time 30]
 """
@@ -27,7 +28,7 @@ def cmd_info(a):
     if getattr(a, "json", False):                  # machine-readable (used by LEVEL7 MTM)
         from . import __version__
         print(json.dumps({"format": "level7-info", "format_version": 1, "level7_version": __version__,
-                          "features": ["remnant"],
+                          "features": ["remnant", "with"],
                           "name": proj.name, "size_names": proj.size_names,
                           "pieces": [{"number": p.number, "name": p.name, "production": p.production,
                                       "material": p.material, "count": p.default_count,
@@ -68,10 +69,63 @@ def _nest(a, proj):
     return run_nesting(proj, fab, st, progress=prog, workers=a.workers)
 
 
+def _with_models(a, proj) -> dict[str, int]:
+    """``--with FILE SIZE=QTY`` (LEVEL7 MTM: orders of one customer on the same fabric in one marker): each other
+    model joins the session, its sizes tagged with its order ("9-53-2_2:…"); the sizes asked are tagged the same way,
+    so every piece label on the marker and the cutting files says which order it belongs to."""
+    from .service import MODEL_SEP, add_model, model_tags
+
+    def tag_of(path):                                # LEVEL7 MTM names: Order-<file>__<order line>
+        return os.path.splitext(os.path.basename(path))[0].split("__")[-1]
+
+    def tagged(tag, k):
+        return f"base:{tag}{MODEL_SEP}{k[5:]}" if k.startswith("base:") else f"{tag}{MODEL_SEP}{k}"
+    proj.name = tag_of(a.file)
+    sizes = {}
+    for path, spec in a.with_:
+        before = set(model_tags(proj))
+        add_model(proj, path, name=tag_of(path), same_ok=True)
+        tag = next(t for t in model_tags(proj) if t not in before and t != model_tags(proj)[0])
+        sizes.update({tagged(tag, k): v for k, v in _parse_sizes([spec]).items()})
+    first = model_tags(proj)[0]
+    sizes.update({tagged(first, k): v for k, v in _parse_sizes(a.sizes).items()})
+    _order_labels(proj)
+    return sizes
+
+
+def _order_labels(proj) -> None:
+    """Every piece of a marker of several orders carries its order (the cutting files print the GRAFIS texts of
+    each piece, which name the size only): a text with the order, under the piece's first text."""
+    import math
+
+    from .exporters.scene import _inner_point
+    from .exporters.strokefont import unsupported_chars
+    from .model import Label
+    for pc in proj.pieces:
+        if not pc.model:
+            continue
+        text = "".join("/" if ch in unsupported_chars(ch) | {"_"} else ch for ch in pc.model)  # 9-53-1_2 -> 9-53-1/2
+        for g in pc.sizes.values():
+            if any(lb.text == text for lb in g.labels):
+                continue
+            if g.labels:
+                lb = g.labels[0]
+                t = math.radians(lb.angle or 0.0)
+                h = min(lb.height or 10.0, 12.0)         # 12 mm at most: inside even a narrow piece
+                big = lb.height or 10.0
+                pos = (lb.position[0] + (big * 0.4 + h * 1.4) * math.sin(t),
+                       lb.position[1] - (big * 0.4 + h * 1.4) * math.cos(t))
+                g.labels.append(Label(text, pos, h, angle=lb.angle or 0.0))
+            elif g.cut:
+                g.labels.append(Label(text, _inner_point(g.cut), 10.0))
+
+
 def cmd_nest(a):
     from .project_storage.store import save_project
     from .service import open_any
     proj, issues = open_any(a.file)
+    if getattr(a, "with_", None):
+        a.sizes = [f"{k}={v}" for k, v in _with_models(a, proj).items()]
     marker, info = _nest(a, proj)
     proj.markers.append(marker)
     print(json.dumps({k: v for k, v in marker.stats.items() if k != "by_size"}, indent=1, default=str))
@@ -201,6 +255,8 @@ def main(argv=None):
         s.add_argument("--workers", type=int, default=None)
         s.add_argument("--remnant", action="store_true",
                        help="pack the small pieces together so the fabric left over is one large piece")
+        s.add_argument("--with", dest="with_", nargs=2, action="append", metavar=("FILE", "SIZE=QTY"),
+                       help="another model nested in the same marker (repeatable), e.g. --with B.mdl base:M=2")
         s.add_argument("-o", "--output")
         s.set_defaults(fn=fn)
     s = sub.add_parser("batch", help="nest, save and export a list of markers (Excel / CSV)")

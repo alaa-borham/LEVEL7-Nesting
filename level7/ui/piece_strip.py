@@ -82,7 +82,7 @@ class PieceStrip(QWidget):
                     pc[0] += sum(1 for pl in pls if pl.placed)
                     pc[1] += len(pls)
                 elif (size, b) in marker_rows or n + m == 0 or size not in p.sizes \
-                        or (p.model and not size.startswith(p.model + ":")):
+                        or (p.model and not size.startswith((p.model + ":", "base:" + p.model + ":"))):
                     continue
                 else:
                     rn, rm, has_m = n, m, m > 0

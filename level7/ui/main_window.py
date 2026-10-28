@@ -2215,7 +2215,8 @@ class MainWindow(QMainWindow):
         sizes = [s for s, q in co.size_quantities.items() if q > 0]
         used = {u for u, (n, m) in co.piece_counts.items() if n + m > 0}
         def wanted(p, s):          # several models in one session: a size belongs to its own model only
-            return p.uid in used and (not p.model or s.startswith(p.model + ":"))
+            from ..service import of_model
+            return p.uid in used and of_model(p, s)
         miss = {s: [p.name for p in self.project.pieces if wanted(p, s) and s not in p.sizes] for s in sizes}
         miss = {s: v for s, v in miss.items() if v}
         if not miss:
